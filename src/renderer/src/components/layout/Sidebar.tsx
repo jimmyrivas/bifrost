@@ -17,6 +17,7 @@ import type { ViewSection } from './AppShell'
 
 interface SidebarProps {
   onConnectSSH: (connectionId: string) => void
+  onEditConnection: (connectionId: string) => void
   onQuickConnect: (host: string, port: number, username: string) => void
   activeNav: ViewSection
   onNavChange: (section: ViewSection) => void
@@ -33,6 +34,7 @@ const NAV_ITEMS: Array<{ id: ViewSection; label: string; icon: typeof Network }>
 
 export function Sidebar({
   onConnectSSH,
+  onEditConnection,
   onQuickConnect,
   activeNav,
   onNavChange,
@@ -80,7 +82,9 @@ export function Sidebar({
       </div>
 
       {/* Connection tree (only when in connections view) */}
-      {activeNav === 'connections' && <ConnectionTree onConnect={onConnectSSH} />}
+      {activeNav === 'connections' && (
+        <ConnectionTree onConnect={onConnectSSH} onEdit={onEditConnection} />
+      )}
 
       {/* Placeholder content for non-connections views */}
       {activeNav !== 'connections' && (

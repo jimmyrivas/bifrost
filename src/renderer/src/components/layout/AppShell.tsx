@@ -36,6 +36,7 @@ export function AppShell(): JSX.Element {
   const activeTab = tabs.find((t) => t.id === activeTabId)
   const createTab = useSessionsStore((s) => s.createTab)
   const [activeView, setActiveView] = useState<ViewSection>('connections')
+  const [editingConnectionId, setEditingConnectionId] = useState<string | null>(null)
 
   const handleConnectSSH = useCallback(
     async (connectionId: string) => {
@@ -64,10 +65,17 @@ export function AppShell(): JSX.Element {
   )
 
   const handleNewConnection = useCallback(() => {
+    setEditingConnectionId(null)
+    setActiveView('new-connection')
+  }, [])
+
+  const handleEditConnection = useCallback((connectionId: string) => {
+    setEditingConnectionId(connectionId)
     setActiveView('new-connection')
   }, [])
 
   const handleConnectionSaved = useCallback(() => {
+    setEditingConnectionId(null)
     setActiveView('connections')
   }, [])
 
@@ -114,7 +122,10 @@ export function AppShell(): JSX.Element {
       case 'new-connection':
         return (
           <div className="p-6 h-full overflow-y-auto">
-            <ConnectionForm onClose={handleConnectionSaved} />
+            <ConnectionForm
+              connectionId={editingConnectionId ?? undefined}
+              onClose={handleConnectionSaved}
+            />
           </div>
         )
       default:
@@ -170,6 +181,7 @@ export function AppShell(): JSX.Element {
         <Panel defaultSize={18} minSize={12} maxSize={30} collapsible>
           <Sidebar
             onConnectSSH={handleConnectSSH}
+            onEditConnection={handleEditConnection}
             onQuickConnect={handleQuickConnect}
             activeNav={activeView}
             onNavChange={setActiveView}

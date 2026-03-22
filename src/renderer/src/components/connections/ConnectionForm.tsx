@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { FolderOpen, Eye, EyeOff } from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
@@ -75,6 +75,37 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
   const [form, setForm] = useState<FormState>({ ...defaultForm, ...initialData })
   const [showPassword, setShowPassword] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(false)
+
+  // Load existing connection data when editing
+  useEffect(() => {
+    if (!connectionId) return
+    setLoading(true)
+    window.bifrost.connections.get(connectionId).then((conn) => {
+      if (conn) {
+        setForm((prev) => ({
+          ...prev,
+          name: conn.name ?? prev.name,
+          method: (conn.method as Method) ?? prev.method,
+          host: conn.host ?? '',
+          port: conn.port ?? 22,
+          authType: (conn.authType as AuthType) ?? prev.authType,
+          username: conn.username ?? '',
+          privateKeyPath: conn.privateKeyPath ?? '',
+          launchOnStartup: conn.launchOnStartup ?? false,
+          reconnectOnDisconnect: conn.reconnectOnDisconnect ?? false,
+          runWithSudo: conn.runWithSudo ?? false,
+          tabTitle: conn.tabTitle ?? '',
+          autoSaveLog: conn.autoSaveLog ?? false,
+          logPattern: conn.logPattern ?? '',
+          sendString: conn.sendString ?? '',
+          sendIntervalSeconds: conn.sendIntervalSeconds ?? 60,
+          sendIdleOnly: conn.sendIdleOnly ?? true
+        }))
+      }
+      setLoading(false)
+    })
+  }, [connectionId])
 
   const set = useCallback(<K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }))
