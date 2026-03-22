@@ -267,7 +267,7 @@ export interface BifrostApi {
   window: {
     toggleFullscreen: () => Promise<void>
     showConfirmDialog: (message: string) => Promise<boolean>
-    detachTab: (tabId: string, title: string) => Promise<void>
+    detachTab: (tabId: string, title: string, connectionId?: string) => Promise<void>
     reattachTab: (tabId: string) => Promise<void>
     onTabReattached: (callback: (tabId: string) => void) => () => void
   }
@@ -543,7 +543,7 @@ const api: BifrostApi = {
   window: {
     toggleFullscreen: () => ipcRenderer.invoke('window:toggleFullscreen'),
     showConfirmDialog: (message: string) => ipcRenderer.invoke('window:confirmDialog', message),
-    detachTab: (tabId: string, title: string) => ipcRenderer.invoke('window:detachTab', tabId, title),
+    detachTab: (tabId: string, title: string, connectionId?: string) => ipcRenderer.invoke('window:detachTab', tabId, title, connectionId),
     reattachTab: (tabId: string) => ipcRenderer.invoke('window:reattachTab', tabId),
     onTabReattached: (callback: (tabId: string) => void) => {
       const handler = (_e: IpcRendererEvent, tabId: string): void => callback(tabId)

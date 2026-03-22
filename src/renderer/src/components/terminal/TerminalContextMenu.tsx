@@ -172,15 +172,15 @@ export function TerminalContextMenu({
     }
   }, [paneId])
 
-  // #72 Detach to Window — opens a new Electron window with just the terminal
+  // #72 Detach to Window — opens a new Electron window with the same connection
   const handleDetach = useCallback(async () => {
     try {
       const { tabs } = useSessionsStore.getState()
       const tab = tabs.find((t) => t.id === tabId)
       const title = tab?.title ?? 'Terminal'
+      const connId = tab?.connectionId ?? ''
       if (window.bifrost?.window?.detachTab) {
-        await window.bifrost.window.detachTab(tabId, title)
-        // Hide the tab from main window (it's now in a separate window)
+        await window.bifrost.window.detachTab(tabId, title, connId)
         closeTab(tabId)
       }
     } catch (err) {
