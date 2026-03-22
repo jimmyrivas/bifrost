@@ -1,0 +1,38 @@
+{
+  "app": {
+    "name": "Bifrost",
+    "tagline": "Modern Connection Manager"
+  },
+  "tabs": {
+    "newTab": "New Tab",
+    "closeTab": "Close Tab",
+    "closeOthers": "Close Others",
+    "closeAll": "Close All"
+  },
+  "terminal": {
+    "title": "Terminal",
+    "splitHorizontal": "Split Horizontal",
+    "splitVertical": "Split Vertical",
+    "closeSplit": "Close Split"
+  },
+  "sidebar": {
+    "connections": "Connections",
+    "clusters": "Clusters",
+    "settings": "Settings"
+  },
+  "actions": {
+    "connect": "Connect",
+    "disconnect": "Disconnect",
+    "rename": "Rename",
+    "delete": "Delete",
+    "edit": "Edit",
+    "save": "Save",
+    "cancel": "Cancel"
+  },
+  "status": {
+    "ready": "Ready",
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "connecting": "Connecting..."
+  }
+}

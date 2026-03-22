@@ -1,0 +1,24 @@
+appId: com.bifrost.app
+productName: Bifrost
+directories:
+  buildResources: resources
+  output: dist
+files:
+  - "!**/.vscode/*"
+  - "!src/*"
+  - "!tests/*"
+  - "!electron.vite.config.*"
+  - "!{.eslintrc,.prettierrc,tsconfig*.json}"
+  - "!{CLAUDE.md,README.md}"
+asarUnpack:
+  - node_modules/better-sqlite3/**
+  - node_modules/node-pty/**
+  - resources/**
+linux:
+  target:
+    - AppImage
+    - deb
+    - rpm
+  maintainer: Jimmy Rivas
+  category: Utility
+  icon: resources/icon.png

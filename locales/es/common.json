@@ -1,0 +1,38 @@
+{
+  "app": {
+    "name": "Bifrost",
+    "tagline": "Gestor de Conexiones Moderno"
+  },
+  "tabs": {
+    "newTab": "Nueva Pestaña",
+    "closeTab": "Cerrar Pestaña",
+    "closeOthers": "Cerrar Otras",
+    "closeAll": "Cerrar Todas"
+  },
+  "terminal": {
+    "title": "Terminal",
+    "splitHorizontal": "Dividir Horizontal",
+    "splitVertical": "Dividir Vertical",
+    "closeSplit": "Cerrar División"
+  },
+  "sidebar": {
+    "connections": "Conexiones",
+    "clusters": "Clusters",
+    "settings": "Configuración"
+  },
+  "actions": {
+    "connect": "Conectar",
+    "disconnect": "Desconectar",
+    "rename": "Renombrar",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "save": "Guardar",
+    "cancel": "Cancelar"
+  },
+  "status": {
+    "ready": "Listo",
+    "connected": "Conectado",
+    "disconnected": "Desconectado",
+    "connecting": "Conectando..."
+  }
+}
