@@ -483,8 +483,11 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
             </div>
           </section>
 
-          {/* Terminal Appearance — full width two-column layout */}
-          <section>
+        </div>
+      </div>
+
+      {/* Terminal Appearance — OUTSIDE the grid for full width */}
+      <section>
             <h3 className={sectionLabel}>TERMINAL APPEARANCE</h3>
             <div className={cn(sectionCard, 'flex flex-col gap-4')}>
               <div className="grid grid-cols-2 gap-4">
@@ -568,9 +571,7 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
                 </div>
               </div>
             </div>
-          </section>
-        </div>
-      </div>
+      </section>
 
       {/* Bottom action bar */}
       <div className="flex items-center justify-end gap-3 pt-4">
