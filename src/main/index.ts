@@ -7,6 +7,8 @@ import { registerCredentialsIpc } from './ipc/credentials.ipc'
 import { registerSshIpc } from './ipc/ssh.ipc'
 import { registerExpectIpc } from './ipc/expect.ipc'
 import { registerClusterIpc } from './ipc/cluster.ipc'
+import { registerSystemIpc } from './ipc/system.ipc'
+import { sessionLogger } from './services/session-logger'
 import { runMigrations } from './db/migrate'
 import { closeDatabase } from './db'
 import { sshManager } from './services/ssh-manager'
@@ -58,6 +60,7 @@ app.whenReady().then(() => {
   registerConnectionsIpc()
   registerCredentialsIpc()
   registerClusterIpc()
+  registerSystemIpc()
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
@@ -88,5 +91,6 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   destroyAllSessions()
   sshManager.disconnectAll()
+  sessionLogger.stopAll()
   closeDatabase()
 })
