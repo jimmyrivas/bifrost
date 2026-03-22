@@ -6,6 +6,7 @@ import { Input } from '@renderer/components/ui/input'
 import { Switch } from '@renderer/components/ui/switch'
 import { cn } from '@renderer/lib/utils'
 import { usePreferencesStore, type TerminalPreferences } from '@renderer/stores/preferences.store'
+import { ColorSchemeSelector } from './ColorSchemeSelector'
 
 type PrefsTab = 'terminal' | 'language' | 'network' | 'keepass'
 
@@ -106,7 +107,18 @@ export function Preferences(): JSX.Element {
                   <span className="text-xs text-[var(--on-surface-variant)]">{t('prefs.cursorBlink', 'Cursor Blink')}</span>
                   <Switch checked={terminal.cursorBlink} onCheckedChange={(v) => setTermPref('cursorBlink', v)} />
                 </label>
+                <label className="flex items-center justify-between col-span-2 cursor-pointer">
+                  <span className="text-xs text-[var(--on-surface-variant)]">Multiline Paste Warning</span>
+                  <Switch checked={terminal.pasteWarningEnabled} onCheckedChange={(v) => setTermPref('pasteWarningEnabled', v)} />
+                </label>
+                <label className="flex items-center justify-between col-span-2 cursor-pointer">
+                  <span className="text-xs text-[var(--on-surface-variant)]">Auto-reconnect SSH</span>
+                  <Switch checked={terminal.autoReconnect} onCheckedChange={(v) => setTermPref('autoReconnect', v)} />
+                </label>
               </div>
+            </div>
+            <div className={sectionCard}>
+              <ColorSchemeSelector />
             </div>
           </div>
         )}

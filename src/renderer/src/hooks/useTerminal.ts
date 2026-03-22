@@ -144,6 +144,23 @@ export function useTerminal({ paneId, connectionId, onTerminalCreated }: UseTerm
     terminal.options.theme = theme
   }, [prefs.colorScheme])
 
+  // Listen for zoom custom events dispatched from global keybindings
+  useEffect(() => {
+    const handleZoomIn = (): void => zoomIn()
+    const handleZoomOut = (): void => zoomOut()
+    const handleZoomReset = (): void => resetZoom()
+
+    document.addEventListener('terminal:zoom-in', handleZoomIn)
+    document.addEventListener('terminal:zoom-out', handleZoomOut)
+    document.addEventListener('terminal:zoom-reset', handleZoomReset)
+
+    return () => {
+      document.removeEventListener('terminal:zoom-in', handleZoomIn)
+      document.removeEventListener('terminal:zoom-out', handleZoomOut)
+      document.removeEventListener('terminal:zoom-reset', handleZoomReset)
+    }
+  }, [zoomIn, zoomOut, resetZoom])
+
   useEffect(() => {
     if (!containerRef.current) return
 

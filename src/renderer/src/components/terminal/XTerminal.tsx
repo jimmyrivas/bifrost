@@ -1,6 +1,10 @@
 import { useState, useCallback } from 'react'
+import { Radio } from 'lucide-react'
 import { useTerminal } from '@renderer/hooks/useTerminal'
+import { useSessionsStore } from '@renderer/stores/sessions.store'
 import { TerminalContextMenu } from './TerminalContextMenu'
+import { PasteWarning } from './PasteWarning'
+import { cn } from '@renderer/lib/utils'
 import '@xterm/xterm/css/xterm.css'
 
 interface XTerminalProps {
@@ -11,7 +15,12 @@ interface XTerminalProps {
 }
 
 export function XTerminal({ paneId, tabId, connectionId, onTerminalCreated }: XTerminalProps): JSX.Element {
-  const { containerRef } = useTerminal({ paneId, connectionId, onTerminalCreated })
+  const { containerRef, pendingPaste, confirmPaste, cancelPaste } = useTerminal({
+    paneId,
+    connectionId,
+    onTerminalCreated
+  })
+  const broadcastMode = useSessionsStore((s) => s.broadcastMode)
   const [showSearch, setShowSearch] = useState(false)
 
   const handleFindToggle = useCallback(() => {
@@ -25,6 +34,27 @@ export function XTerminal({ paneId, tabId, connectionId, onTerminalCreated }: XT
 
   const content = (
     <div className="relative w-full h-full">
+      {/* Broadcast banner */}
+      {broadcastMode !== 'off' && (
+        <div
+          className={cn(
+            'absolute top-0 left-0 right-0 z-10 flex items-center justify-center gap-2',
+            'py-1 px-3 text-[10px] font-semibold uppercase tracking-[0.1em]',
+            'select-none pointer-events-none',
+            broadcastMode === 'panes'
+              ? 'bg-[#eab308]/15 text-[#eab308]'
+              : 'bg-[#ef4444]/15 text-[#ef4444]'
+          )}
+          role="status"
+          aria-live="polite"
+        >
+          <Radio size={12} strokeWidth={2} />
+          {broadcastMode === 'panes'
+            ? 'Broadcasting to all panes'
+            : 'Broadcasting to all tabs'}
+        </div>
+      )}
+
       <div
         ref={containerRef}
         className="xterm-container w-full h-full"
@@ -32,6 +62,15 @@ export function XTerminal({ paneId, tabId, connectionId, onTerminalCreated }: XT
       />
       {showSearch && (
         <TerminalSearchBar paneId={paneId} onClose={() => setShowSearch(false)} />
+      )}
+
+      {/* Paste warning dialog */}
+      {pendingPaste && (
+        <PasteWarning
+          text={pendingPaste.text}
+          onConfirm={confirmPaste}
+          onCancel={cancelPaste}
+        />
       )}
     </div>
   )

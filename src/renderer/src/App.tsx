@@ -9,6 +9,7 @@ export function App(): JSX.Element {
   const tabs = useSessionsStore((s) => s.tabs)
   const setActiveTab = useSessionsStore((s) => s.setActiveTab)
   const splitPane = useSessionsStore((s) => s.splitPane)
+  const cycleBroadcastMode = useSessionsStore((s) => s.cycleBroadcastMode)
 
   // Create initial tab on mount
   useEffect(() => {
@@ -57,8 +58,28 @@ export function App(): JSX.Element {
         const tab = tabs.find((t) => t.id === activeTabId)
         if (tab) splitPane(tab.id, tab.rootPane.id, 'vertical')
       }
+      // Ctrl+Shift+B: Toggle broadcast mode (off -> panes -> all-tabs -> off)
+      if (e.ctrlKey && e.shiftKey && e.key === 'B') {
+        e.preventDefault()
+        cycleBroadcastMode()
+      }
+      // Ctrl+=: Zoom in
+      if (e.ctrlKey && (e.key === '=' || e.key === '+')) {
+        e.preventDefault()
+        document.dispatchEvent(new CustomEvent('terminal:zoom-in'))
+      }
+      // Ctrl+-: Zoom out
+      if (e.ctrlKey && e.key === '-') {
+        e.preventDefault()
+        document.dispatchEvent(new CustomEvent('terminal:zoom-out'))
+      }
+      // Ctrl+0: Reset zoom
+      if (e.ctrlKey && e.key === '0') {
+        e.preventDefault()
+        document.dispatchEvent(new CustomEvent('terminal:zoom-reset'))
+      }
     },
-    [activeTabId, tabs, createTab, closeTab, setActiveTab, splitPane]
+    [activeTabId, tabs, createTab, closeTab, setActiveTab, splitPane, cycleBroadcastMode]
   )
 
   useEffect(() => {

@@ -1,5 +1,4 @@
 import { Client, type ConnectConfig, type ClientChannel } from 'ssh2'
-import type { ParsedKey } from 'ssh2-streams'
 import { credentialStore } from './credential-store'
 import { auditLogger } from './audit-log'
 import { readFileSync, writeFileSync, existsSync } from 'fs'

@@ -6,6 +6,7 @@ export function StatusBar(): JSX.Element {
   const tabs = useSessionsStore((s) => s.tabs)
   const activeTabId = useSessionsStore((s) => s.activeTabId)
   const activeTab = tabs.find((t) => t.id === activeTabId)
+  const broadcastMode = useSessionsStore((s) => s.broadcastMode)
 
   return (
     <div
@@ -35,6 +36,19 @@ export function StatusBar(): JSX.Element {
         <span>
           {tabs.length} {tabs.length === 1 ? 'tab' : 'tabs'}
         </span>
+
+        {/* Broadcast indicator */}
+        {broadcastMode !== 'off' && (
+          <span
+            className={cn(
+              'flex items-center gap-1.5 uppercase tracking-wide text-[10px] font-semibold',
+              broadcastMode === 'panes' ? 'text-[#eab308]' : 'text-[#ef4444]'
+            )}
+          >
+            <Radio size={11} strokeWidth={2} />
+            {broadcastMode === 'panes' ? 'Broadcast: Panes' : 'Broadcast: All'}
+          </span>
+        )}
       </div>
 
       {/* Center section */}
