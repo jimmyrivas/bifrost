@@ -2,6 +2,13 @@ import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerTerminalIpc } from './ipc/terminal.ipc'
+import { registerConnectionsIpc } from './ipc/connections.ipc'
+import { registerCredentialsIpc } from './ipc/credentials.ipc'
+import { registerSshIpc } from './ipc/ssh.ipc'
+import { runMigrations } from './db/migrate'
+import { closeDatabase } from './db'
+import { sshManager } from './services/ssh-manager'
+import { destroyAllSessions } from './ipc/terminal.ipc'
 
 function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
@@ -42,17 +49,28 @@ function createWindow(): BrowserWindow {
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.bifrost.app')
 
+  // Run database migrations
+  runMigrations()
+
+  // Register IPC handlers (non-window-dependent)
+  registerConnectionsIpc()
+  registerCredentialsIpc()
+
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
 
   const mainWindow = createWindow()
+
+  // Register window-dependent IPC handlers
   registerTerminalIpc(mainWindow)
+  registerSshIpc(mainWindow)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       const win = createWindow()
       registerTerminalIpc(win)
+      registerSshIpc(win)
     }
   })
 })
@@ -61,4 +79,10 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+app.on('before-quit', () => {
+  destroyAllSessions()
+  sshManager.disconnectAll()
+  closeDatabase()
 })

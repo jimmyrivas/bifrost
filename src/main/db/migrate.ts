@@ -1,0 +1,164 @@
+import { getSqlite } from './index'
+
+/**
+ * Run migrations using SQLite user_version pragma.
+ * Each migration is a function that receives the raw sqlite instance.
+ */
+
+type Migration = (db: import('better-sqlite3').Database) => void
+
+const migrations: Migration[] = [
+  // Migration 1: Create all initial tables
+  (db) => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS groups (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        parent_id TEXT REFERENCES groups(id),
+        sort_order INTEGER DEFAULT 0,
+        icon TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS connection_templates (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        config TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS connections (
+        id TEXT PRIMARY KEY,
+        group_id TEXT REFERENCES groups(id),
+        name TEXT NOT NULL,
+        method TEXT NOT NULL CHECK(method IN ('ssh','rdp','vnc','telnet','local','ftp')),
+        host TEXT,
+        port INTEGER,
+        auth_type TEXT CHECK(auth_type IN ('userpass','key','key_pass','manual')),
+        username TEXT,
+        encrypted_password BLOB,
+        private_key_path TEXT,
+        encrypted_passphrase BLOB,
+        launch_on_startup BOOLEAN DEFAULT 0,
+        reconnect_on_disconnect BOOLEAN DEFAULT 0,
+        run_with_sudo BOOLEAN DEFAULT 0,
+        use_autossh BOOLEAN DEFAULT 0,
+        tab_title TEXT,
+        auto_save_log BOOLEAN DEFAULT 0,
+        log_pattern TEXT,
+        send_string TEXT,
+        send_interval_seconds INTEGER,
+        send_idle_only BOOLEAN DEFAULT 0,
+        network_mode TEXT DEFAULT 'global' CHECK(network_mode IN ('global','direct','socks','jump')),
+        proxy_config TEXT,
+        jump_server_config TEXT,
+        terminal_override BOOLEAN DEFAULT 0,
+        terminal_config TEXT,
+        ssh_config TEXT,
+        sort_order INTEGER DEFAULT 0,
+        template_id TEXT REFERENCES connection_templates(id),
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS expect_rules (
+        id TEXT PRIMARY KEY,
+        connection_id TEXT REFERENCES connections(id) ON DELETE CASCADE,
+        sort_order INTEGER NOT NULL,
+        pattern TEXT NOT NULL,
+        send_text TEXT NOT NULL,
+        send_return BOOLEAN DEFAULT 1,
+        hide_from_log BOOLEAN DEFAULT 0,
+        timeout_ms INTEGER DEFAULT 10000,
+        on_match_rule_id TEXT,
+        on_fail_rule_id TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS macros (
+        id TEXT PRIMARY KEY,
+        connection_id TEXT REFERENCES connections(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        command TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN ('remote','local')),
+        sort_order INTEGER DEFAULT 0,
+        confirm_before_exec BOOLEAN DEFAULT 0
+      );
+
+      CREATE TABLE IF NOT EXISTS exec_commands (
+        id TEXT PRIMARY KEY,
+        connection_id TEXT NOT NULL REFERENCES connections(id) ON DELETE CASCADE,
+        phase TEXT NOT NULL CHECK(phase IN ('pre','post')),
+        command TEXT NOT NULL,
+        ask BOOLEAN DEFAULT 0,
+        is_default BOOLEAN DEFAULT 1,
+        sort_order INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS global_variables (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        value TEXT NOT NULL,
+        is_password BOOLEAN DEFAULT 0
+      );
+
+      CREATE TABLE IF NOT EXISTS connection_variables (
+        id TEXT PRIMARY KEY,
+        connection_id TEXT NOT NULL REFERENCES connections(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        value TEXT NOT NULL,
+        is_password BOOLEAN DEFAULT 0,
+        UNIQUE(connection_id, name)
+      );
+
+      CREATE TABLE IF NOT EXISTS clusters (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS cluster_members (
+        cluster_id TEXT NOT NULL REFERENCES clusters(id) ON DELETE CASCADE,
+        connection_id TEXT NOT NULL REFERENCES connections(id) ON DELETE CASCADE,
+        PRIMARY KEY (cluster_id, connection_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS preferences (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS global_expect_patterns (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        pattern TEXT NOT NULL,
+        enabled BOOLEAN DEFAULT 1
+      );
+    `)
+
+    // Seed global expect patterns
+    db.exec(`
+      INSERT OR IGNORE INTO global_expect_patterns (id, name, pattern, enabled) VALUES
+        ('gep-password', 'password_prompt', '(?mi)(pass(word|phrase)|contraseña).*?:\\s*$', 1),
+        ('gep-username', 'username_prompt', '([lL]ogin|[uU]suario|([uU]ser-?)*[nN]ame.*|[uU]ser)\\s*:\\s*$', 1),
+        ('gep-prompt', 'command_prompt', '[#%$>]|:\\/ \\s*$', 1),
+        ('gep-hostkey-changed', 'host_key_changed', '.*ffending .*key in (.+?)\\:(\\d+).*', 1),
+        ('gep-hostkey-verify', 'host_key_verification', '^.+ontinue connecting \\(([^/]+)\\/([^/]+)(?:[^)]+)?\\)\\?\\s*$', 1),
+        ('gep-anykey', 'press_any_key', '.*(any key to continue|tecla para continuar).*', 1);
+    `)
+  }
+]
+
+export function runMigrations(): void {
+  const sqlite = getSqlite()
+  const currentVersion = (sqlite.pragma('user_version', { simple: true }) as number) || 0
+
+  if (currentVersion >= migrations.length) return
+
+  const migrate = sqlite.transaction(() => {
+    for (let i = currentVersion; i < migrations.length; i++) {
+      migrations[i](sqlite)
+    }
+    sqlite.pragma(`user_version = ${migrations.length}`)
+  })
+
+  migrate()
+}

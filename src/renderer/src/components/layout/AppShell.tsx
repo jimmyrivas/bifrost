@@ -1,3 +1,4 @@
+import { useCallback } from 'react'
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import { Sidebar } from './Sidebar'
 import { TabBar } from './TabBar'
@@ -9,12 +10,31 @@ export function AppShell(): JSX.Element {
   const tabs = useSessionsStore((s) => s.tabs)
   const activeTabId = useSessionsStore((s) => s.activeTabId)
   const activeTab = tabs.find((t) => t.id === activeTabId)
+  const createTab = useSessionsStore((s) => s.createTab)
+
+  const handleConnectSSH = useCallback(
+    (connectionId: string) => {
+      // Create a new tab for this SSH connection
+      createTab(`SSH: ${connectionId.slice(0, 8)}`)
+      // TODO: In Phase 3+, auto-connect the tab to the SSH session
+    },
+    [createTab]
+  )
+
+  const handleQuickConnect = useCallback(
+    (host: string, _port: number, username: string) => {
+      const label = username ? `${username}@${host}` : host
+      createTab(label)
+      // TODO: In Phase 3+, create ephemeral connection and auto-connect
+    },
+    [createTab]
+  )
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-zinc-950">
       <PanelGroup direction="horizontal" className="flex-1">
         <Panel defaultSize={15} minSize={10} maxSize={30} collapsible>
-          <Sidebar />
+          <Sidebar onConnectSSH={handleConnectSSH} onQuickConnect={handleQuickConnect} />
         </Panel>
         <PanelResizeHandle className="w-[2px] bg-zinc-800 hover:bg-blue-500 transition-colors data-[resize-handle-state=drag]:bg-blue-400" />
         <Panel>

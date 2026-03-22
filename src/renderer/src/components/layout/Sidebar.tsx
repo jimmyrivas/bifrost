@@ -1,6 +1,13 @@
 import { useTranslation } from 'react-i18next'
+import { ConnectionTree } from '@renderer/components/connections/ConnectionTree'
+import { QuickConnect } from '@renderer/components/connections/QuickConnect'
 
-export function Sidebar(): JSX.Element {
+interface SidebarProps {
+  onConnectSSH: (connectionId: string) => void
+  onQuickConnect: (host: string, port: number, username: string) => void
+}
+
+export function Sidebar({ onConnectSSH, onQuickConnect }: SidebarProps): JSX.Element {
   const { t } = useTranslation()
 
   return (
@@ -17,32 +24,11 @@ export function Sidebar(): JSX.Element {
         </span>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 p-2 space-y-1">
-        <button
-          className="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 rounded transition-colors"
-          aria-label={t('sidebar.connections')}
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <circle cx="4" cy="4" r="2" />
-            <circle cx="12" cy="12" r="2" />
-            <path d="M6 4h4l-4 8h4" />
-          </svg>
-          {t('sidebar.connections')}
-        </button>
-        <button
-          className="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-zinc-400 hover:bg-zinc-800 rounded transition-colors"
-          aria-label={t('sidebar.clusters')}
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <rect x="1" y="1" width="5" height="5" rx="1" />
-            <rect x="10" y="1" width="5" height="5" rx="1" />
-            <rect x="1" y="10" width="5" height="5" rx="1" />
-            <rect x="10" y="10" width="5" height="5" rx="1" />
-          </svg>
-          {t('sidebar.clusters')}
-        </button>
-      </nav>
+      {/* Quick connect */}
+      <QuickConnect onConnect={onQuickConnect} />
+
+      {/* Connection tree */}
+      <ConnectionTree onConnect={onConnectSSH} />
 
       {/* Settings at bottom */}
       <div className="p-2 border-t border-zinc-800">
