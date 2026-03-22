@@ -83,9 +83,13 @@ export function useTerminal({ paneId, connectionId, onTerminalCreated }: UseTerm
   const fitAddonRef = useRef<FitAddon | null>(null)
   const terminalIdRef = useRef<string | null>(null)
   const currentFontSizeRef = useRef<number>(0)
-  const prefs = usePreferencesStore((s) => s.terminal)
-  const pasteWarningEnabled = usePreferencesStore((s) => s.terminal.pasteWarningEnabled)
-  const pasteWarningDismissed = usePreferencesStore((s) => s.pasteWarningDismissedForSession)
+  const fontFamily = usePreferencesStore((s) => s.terminal.fontFamily)
+  const fontSize = usePreferencesStore((s) => s.terminal.fontSize)
+  const cursorStyle = usePreferencesStore((s) => s.terminal.cursorStyle)
+  const cursorBlink = usePreferencesStore((s) => s.terminal.cursorBlink)
+  const scrollback = usePreferencesStore((s) => s.terminal.scrollback)
+  const colorScheme = usePreferencesStore((s) => s.terminal.colorScheme)
+  const fontLigatures = usePreferencesStore((s) => s.terminal.fontLigatures)
 
   const [pendingPaste, setPendingPaste] = useState<PasteRequest | null>(null)
   const detectedErrorsRef = useRef<DetectedError[]>([])
@@ -102,34 +106,34 @@ export function useTerminal({ paneId, connectionId, onTerminalCreated }: UseTerm
   const zoomIn = useCallback(() => {
     const terminal = terminalRef.current
     if (!terminal) return
-    const current = terminal.options.fontSize ?? prefs.fontSize
+    const current = terminal.options.fontSize ?? fontSize
     if (current < MAX_FONT_SIZE) {
       const next = current + 1
       terminal.options.fontSize = next
       currentFontSizeRef.current = next
       fitAddonRef.current?.fit()
     }
-  }, [prefs.fontSize])
+  }, [fontSize])
 
   const zoomOut = useCallback(() => {
     const terminal = terminalRef.current
     if (!terminal) return
-    const current = terminal.options.fontSize ?? prefs.fontSize
+    const current = terminal.options.fontSize ?? fontSize
     if (current > MIN_FONT_SIZE) {
       const next = current - 1
       terminal.options.fontSize = next
       currentFontSizeRef.current = next
       fitAddonRef.current?.fit()
     }
-  }, [prefs.fontSize])
+  }, [fontSize])
 
   const resetZoom = useCallback(() => {
     const terminal = terminalRef.current
     if (!terminal) return
-    terminal.options.fontSize = prefs.fontSize
-    currentFontSizeRef.current = prefs.fontSize
+    terminal.options.fontSize = fontSize
+    currentFontSizeRef.current = fontSize
     fitAddonRef.current?.fit()
-  }, [prefs.fontSize])
+  }, [fontSize])
 
   const confirmPaste = useCallback(() => {
     if (pendingPaste) {
@@ -149,9 +153,9 @@ export function useTerminal({ paneId, connectionId, onTerminalCreated }: UseTerm
   useEffect(() => {
     const terminal = terminalRef.current
     if (!terminal) return
-    const theme = getThemeColors(prefs.colorScheme)
+    const theme = getThemeColors(colorScheme)
     terminal.options.theme = theme
-  }, [prefs.colorScheme])
+  }, [colorScheme])
 
   // Listen for zoom custom events dispatched from global keybindings
   useEffect(() => {
@@ -173,17 +177,17 @@ export function useTerminal({ paneId, connectionId, onTerminalCreated }: UseTerm
   useEffect(() => {
     if (!containerRef.current) return
 
-    const theme = getThemeColors(prefs.colorScheme)
-    currentFontSizeRef.current = prefs.fontSize
+    const theme = getThemeColors(colorScheme)
+    currentFontSizeRef.current = fontSize
 
     const terminal = new Terminal({
-      fontFamily: prefs.fontFamily,
-      fontSize: prefs.fontSize,
-      cursorStyle: prefs.cursorStyle,
-      cursorBlink: prefs.cursorBlink,
-      scrollback: prefs.scrollback,
+      fontFamily: fontFamily,
+      fontSize: fontSize,
+      cursorStyle: cursorStyle,
+      cursorBlink: cursorBlink,
+      scrollback: scrollback,
       allowProposedApi: true,
-      fontLigatures: prefs.fontLigatures,
+      fontLigatures: fontLigatures,
       theme
     })
 

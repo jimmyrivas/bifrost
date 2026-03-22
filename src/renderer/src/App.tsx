@@ -5,10 +5,9 @@ import { useSessionsStore } from '@renderer/stores/sessions.store'
 const CHORD_TIMEOUT = 1000
 
 export function App(): JSX.Element {
+  // Use stable selectors — avoid s.tabs which creates new array ref each time
   const createTab = useSessionsStore((s) => s.createTab)
   const closeTab = useSessionsStore((s) => s.closeTab)
-  const activeTabId = useSessionsStore((s) => s.activeTabId)
-  const tabs = useSessionsStore((s) => s.tabs)
   const setActiveTab = useSessionsStore((s) => s.setActiveTab)
   const splitPane = useSessionsStore((s) => s.splitPane)
   const cycleBroadcastMode = useSessionsStore((s) => s.cycleBroadcastMode)
@@ -20,6 +19,7 @@ export function App(): JSX.Element {
 
   // Create initial tab on mount
   useEffect(() => {
+    const { tabs } = useSessionsStore.getState()
     if (tabs.length === 0) {
       createTab()
     }
@@ -83,11 +83,13 @@ export function App(): JSX.Element {
       // Ctrl+W: Close active tab
       if (e.ctrlKey && e.key === 'w') {
         e.preventDefault()
+        const { activeTabId } = useSessionsStore.getState()
         if (activeTabId) closeTab(activeTabId)
       }
       // Ctrl+Tab: Next tab
       if (e.ctrlKey && e.key === 'Tab' && !e.shiftKey) {
         e.preventDefault()
+        const { tabs, activeTabId } = useSessionsStore.getState()
         const idx = tabs.findIndex((t) => t.id === activeTabId)
         const next = tabs[(idx + 1) % tabs.length]
         if (next) setActiveTab(next.id)
@@ -95,6 +97,7 @@ export function App(): JSX.Element {
       // Ctrl+Shift+Tab: Previous tab
       if (e.ctrlKey && e.key === 'Tab' && e.shiftKey) {
         e.preventDefault()
+        const { tabs, activeTabId } = useSessionsStore.getState()
         const idx = tabs.findIndex((t) => t.id === activeTabId)
         const prev = tabs[(idx - 1 + tabs.length) % tabs.length]
         if (prev) setActiveTab(prev.id)
@@ -102,12 +105,14 @@ export function App(): JSX.Element {
       // Ctrl+Shift+H: Split horizontal
       if (e.ctrlKey && e.shiftKey && e.key === 'H') {
         e.preventDefault()
+        const { tabs, activeTabId } = useSessionsStore.getState()
         const tab = tabs.find((t) => t.id === activeTabId)
         if (tab) splitPane(tab.id, tab.rootPane.id, 'horizontal')
       }
       // Ctrl+Shift+V: Split vertical
       if (e.ctrlKey && e.shiftKey && e.key === 'V') {
         e.preventDefault()
+        const { tabs, activeTabId } = useSessionsStore.getState()
         const tab = tabs.find((t) => t.id === activeTabId)
         if (tab) splitPane(tab.id, tab.rootPane.id, 'vertical')
       }
@@ -134,7 +139,8 @@ export function App(): JSX.Element {
       // Ctrl+Shift+M: Maximize pane (#4)
       if (e.ctrlKey && e.shiftKey && e.key === 'M') {
         e.preventDefault()
-        const tab = tabs.find((t) => t.id === activeTabId)
+        const state = useSessionsStore.getState()
+        const tab = state.tabs.find((t) => t.id === state.activeTabId)
         if (tab) toggleMaximizePane(tab.rootPane.id)
       }
       // Ctrl+Shift+Arrow: Pane resize (#5)
@@ -155,7 +161,7 @@ export function App(): JSX.Element {
         setChord('ctrl+k')
       }
     },
-    [activeTabId, tabs, createTab, closeTab, setActiveTab, splitPane, cycleBroadcastMode, toggleMaximizePane, clearChord, setChord]
+    [createTab, closeTab, setActiveTab, splitPane, cycleBroadcastMode, toggleMaximizePane, clearChord, setChord]
   )
 
   useEffect(() => {
