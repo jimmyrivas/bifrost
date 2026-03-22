@@ -29,8 +29,8 @@ const defaultBindings: KeyBinding[] = [
   { action: 'quickConnect', label: 'Quick Connect', keys: 'Ctrl+Shift+N' },
 ]
 
-const headerClass = 'px-4 py-2 text-xs font-medium text-zinc-400 text-left'
-const cellClass = 'px-4 py-2.5 text-sm'
+const headerCell = 'px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--on-surface-variant)] text-left'
+const bodyCell = 'px-4 py-2.5 text-sm'
 
 function formatKeyEvent(e: KeyboardEvent): string {
   const parts: string[] = []
@@ -38,14 +38,12 @@ function formatKeyEvent(e: KeyboardEvent): string {
   if (e.altKey) parts.push('Alt')
   if (e.shiftKey) parts.push('Shift')
   if (e.metaKey) parts.push('Super')
-
   const key = e.key
   if (!['Control', 'Alt', 'Shift', 'Meta'].includes(key)) {
     if (key === ' ') parts.push('Space')
     else if (key.length === 1) parts.push(key.toUpperCase())
     else parts.push(key)
   }
-
   return parts.join('+')
 }
 
@@ -80,94 +78,83 @@ export function KeyBindings({ bindings: externalBindings, onChange }: KeyBinding
       if (!recordingRef.current) return
       e.preventDefault()
       e.stopPropagation()
-
-      if (e.key === 'Escape') {
-        cancelRecording()
-        return
-      }
-
+      if (e.key === 'Escape') { cancelRecording(); return }
       if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return
-
       const combo = formatKeyEvent(e)
       if (!combo) return
-
       const action = recordingRef.current
-      updateBindings(
-        bindings.map((b) => b.action === action ? { ...b, keys: combo } : b)
-      )
+      updateBindings(bindings.map((b) => b.action === action ? { ...b, keys: combo } : b))
       setRecordingAction(null)
       recordingRef.current = null
     }
-
     window.addEventListener('keydown', handler, true)
     return () => window.removeEventListener('keydown', handler, true)
   }, [bindings, cancelRecording, updateBindings])
 
   const resetDefaults = useCallback(() => {
-    const reset = defaultBindings.map((b) => ({ ...b }))
-    updateBindings(reset)
+    updateBindings(defaultBindings.map((b) => ({ ...b })))
     cancelRecording()
   }, [updateBindings, cancelRecording])
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 p-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-[var(--on-surface)] flex items-center gap-2">
           <Keyboard className="h-4 w-4" />
           {t('keybindings.title', 'Key Bindings')}
         </h3>
         <Button variant="outline" size="sm" onClick={resetDefaults}>
-          <RotateCcw className="h-3 w-3" /> {t('keybindings.reset', 'Reset to Defaults')}
+          <RotateCcw className="h-3 w-3" /> {t('keybindings.reset', 'RESET DEFAULTS')}
         </Button>
       </div>
 
-      <p className="text-xs text-zinc-500">
+      <p className="text-xs text-[var(--on-surface-variant)]">
         {t('keybindings.hint', 'Click a key combination to record a new binding. Press Escape to cancel.')}
       </p>
 
-      <div className="border border-zinc-700 rounded-md overflow-hidden">
-        <table className="w-full" role="grid" aria-label={t('keybindings.title', 'Key Bindings')}>
-          <thead className="bg-zinc-800/50">
-            <tr>
-              <th className={headerClass}>{t('keybindings.action', 'Action')}</th>
-              <th className={cn(headerClass, 'w-60')}>{t('keybindings.keyCombination', 'Key Combination')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {bindings.map((binding) => {
-              const isRecording = recordingAction === binding.action
+      <div className="rounded-[var(--radius)] overflow-hidden" role="grid" aria-label={t('keybindings.title', 'Key Bindings')}>
+        {/* Header */}
+        <div className="surface-2 flex" role="row">
+          <div className={cn(headerCell, 'flex-1')} role="columnheader">{t('keybindings.action', 'ACTION')}</div>
+          <div className={cn(headerCell, 'w-60')} role="columnheader">{t('keybindings.keyCombination', 'KEY COMBINATION')}</div>
+        </div>
 
-              return (
-                <tr key={binding.action} className="border-t border-zinc-700/50 hover:bg-zinc-800/30">
-                  <td className={cn(cellClass, 'text-zinc-300')}>
-                    {t(`keybindings.actions.${binding.action}`, binding.label)}
-                  </td>
-                  <td className={cellClass}>
-                    <button
-                      type="button"
-                      onClick={() => isRecording ? cancelRecording() : startRecording(binding.action)}
-                      className={cn(
-                        'inline-flex items-center gap-1 px-3 py-1 rounded text-xs font-mono transition-colors border',
-                        isRecording
-                          ? 'border-blue-500 bg-blue-950/30 text-blue-400 animate-pulse'
-                          : 'border-zinc-600 bg-zinc-800 text-zinc-300 hover:border-zinc-500 hover:text-zinc-100'
-                      )}
-                      aria-label={isRecording
-                        ? t('keybindings.recording', 'Press key combination...')
-                        : t('keybindings.clickToEdit', 'Click to edit {{keys}}', { keys: binding.keys })
-                      }
-                    >
-                      {isRecording
-                        ? t('keybindings.recording', 'Press key combination...')
-                        : binding.keys
-                      }
-                    </button>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+        {/* Rows */}
+        {bindings.map((binding, idx) => {
+          const isRecording = recordingAction === binding.action
+          return (
+            <div
+              key={binding.action} role="row"
+              className={cn(
+                'flex items-center transition-colors',
+                idx % 2 === 0 ? 'bg-[var(--surface-container-low)]' : 'bg-[var(--surface)]',
+                'hover:bg-[var(--surface-container-high)]/50'
+              )}
+            >
+              <div className={cn(bodyCell, 'flex-1 text-[var(--on-surface-variant)]')}>
+                {t(`keybindings.actions.${binding.action}`, binding.label)}
+              </div>
+              <div className={cn(bodyCell, 'w-60')}>
+                <button
+                  type="button"
+                  onClick={() => isRecording ? cancelRecording() : startRecording(binding.action)}
+                  className={cn(
+                    'inline-flex items-center gap-1 px-3 py-1 rounded-[var(--radius)] text-xs transition-colors font-[family-name:var(--font-mono)]',
+                    isRecording
+                      ? 'bg-[#6b6bff]/15 text-[#6b6bff] animate-pulse'
+                      : 'bg-[var(--surface-container-high)] text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] hover:bg-[var(--surface-container-highest)]'
+                  )}
+                  aria-label={isRecording
+                    ? t('keybindings.recording', 'Press key combination...')
+                    : t('keybindings.clickToEdit', 'Click to edit {{keys}}', { keys: binding.keys })
+                  }
+                >
+                  {isRecording ? t('keybindings.recording', 'Press key combination...') : binding.keys}
+                </button>
+              </div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )

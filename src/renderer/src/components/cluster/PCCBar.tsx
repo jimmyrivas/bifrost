@@ -34,45 +34,49 @@ export function PCCBar({ active, onToggle, onSend }: PCCBarProps): JSX.Element {
     }
   }, [handleSend])
 
-  const toggleMode = useCallback(() => {
-    setMode((prev) => prev === 'all' ? 'cluster' : 'all')
-  }, [])
-
   return (
     <div
       className={cn(
-        'flex items-center gap-2 px-3 py-2 border-t transition-colors',
+        'flex items-center gap-2 px-3 py-2 transition-colors',
         active
-          ? 'bg-zinc-800/80 border-blue-600/50'
-          : 'bg-zinc-900/50 border-zinc-800'
+          ? 'bg-[#ffa36b]/5'
+          : 'bg-[var(--surface-container-low)]'
       )}
       role="toolbar"
       aria-label={t('pcc.title', 'Power Cluster Controller')}
     >
+      {/* PCC Toggle */}
       <button
         type="button"
         onClick={() => onToggle(!active)}
         className={cn(
-          'flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-colors shrink-0',
+          'flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius)] text-[10px] font-semibold uppercase tracking-wider transition-colors shrink-0',
           active
-            ? 'bg-blue-600/20 text-blue-400 border border-blue-600/40'
-            : 'bg-zinc-800 text-zinc-500 border border-zinc-700 hover:text-zinc-300'
+            ? 'bg-[#ffa36b]/15 text-[#ffa36b]'
+            : 'bg-[var(--surface-container-high)] text-[var(--on-surface-variant)] hover:text-[var(--on-surface)]'
         )}
         aria-pressed={active}
         aria-label={t('pcc.toggle', 'Toggle PCC')}
       >
         <Radio className={cn('h-3 w-3', active && 'animate-pulse')} />
-        PCC
+        PCC BROADCAST
       </button>
 
+      {/* Status indicators */}
       {active && (
-        <div
-          className="h-2 w-2 rounded-full bg-blue-500 animate-pulse shrink-0"
-          role="status"
-          aria-label={t('pcc.active', 'PCC active')}
-        />
+        <div className="flex items-center gap-1 shrink-0">
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              className="h-1.5 w-6 rounded-full bg-[#ffa36b]/60"
+              style={{ opacity: 0.4 + i * 0.3 }}
+              role="presentation"
+            />
+          ))}
+        </div>
       )}
 
+      {/* Command input */}
       <Input
         ref={inputRef}
         value={text}
@@ -84,20 +88,21 @@ export function PCCBar({ active, onToggle, onSend }: PCCBarProps): JSX.Element {
             : t('pcc.disabled', 'Enable PCC to broadcast')
         }
         disabled={!active}
-        className="flex-1 h-8 text-xs font-mono"
+        className="flex-1 h-8 text-xs"
         aria-label={t('pcc.input', 'Broadcast command')}
       />
 
+      {/* Mode toggle */}
       <button
         type="button"
-        onClick={toggleMode}
+        onClick={() => setMode((prev) => prev === 'all' ? 'cluster' : 'all')}
         disabled={!active}
         className={cn(
-          'flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors shrink-0 border',
-          !active && 'opacity-50 cursor-not-allowed',
+          'flex items-center gap-1 px-3 py-1.5 rounded-[var(--radius)] text-[10px] font-semibold uppercase tracking-wider transition-colors shrink-0',
+          !active && 'opacity-40 cursor-not-allowed',
           mode === 'all'
-            ? 'border-amber-600/40 text-amber-400 bg-amber-950/20'
-            : 'border-cyan-600/40 text-cyan-400 bg-cyan-950/20'
+            ? 'bg-[#ffa36b]/15 text-[#ffa36b]'
+            : 'bg-[#6bd5ff]/15 text-[#6bd5ff]'
         )}
         aria-label={mode === 'all'
           ? t('pcc.sendAll', 'Sending to all terminals')
@@ -105,14 +110,12 @@ export function PCCBar({ active, onToggle, onSend }: PCCBarProps): JSX.Element {
         }
       >
         <Monitor className="h-3 w-3" />
-        {mode === 'all'
-          ? t('pcc.all', 'All')
-          : t('pcc.cluster', 'Cluster')
-        }
+        {mode === 'all' ? t('pcc.all', 'ALL') : t('pcc.cluster', 'CLUSTER')}
       </button>
 
+      {/* Send */}
       <Button
-        variant="outline"
+        variant="spectral"
         size="sm"
         onClick={handleSend}
         disabled={!active || !text.trim()}
@@ -120,7 +123,7 @@ export function PCCBar({ active, onToggle, onSend }: PCCBarProps): JSX.Element {
         aria-label={t('pcc.send', 'Send')}
       >
         <Send className="h-3 w-3" />
-        {t('pcc.send', 'Send')}
+        {t('pcc.send', 'SEND')}
       </Button>
     </div>
   )
