@@ -165,6 +165,29 @@ app.whenReady().then(() => {
     mainWindow.setFullScreen(!mainWindow.isFullScreen())
   })
 
+  // Detach tab to separate window (#72)
+  ipcMain.handle('window:detachTab', (_event, _tabId: string) => {
+    const detachedWindow = new BrowserWindow({
+      width: 900,
+      height: 600,
+      title: 'Bifrost — Detached Terminal',
+      backgroundColor: '#131316',
+      autoHideMenuBar: true,
+      webPreferences: {
+        preload: join(__dirname, '../preload/index.mjs'),
+        sandbox: false,
+        contextIsolation: true,
+        nodeIntegration: false
+      }
+    })
+    if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+      detachedWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+    } else {
+      detachedWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    }
+    registerTerminalIpc(detachedWindow)
+  })
+
   // Confirm dialog for pre/post exec commands (#55)
   ipcMain.handle('window:confirmDialog', async (_event, message: string) => {
     const { dialog } = await import('electron')

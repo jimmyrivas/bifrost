@@ -86,11 +86,11 @@ export function TerminalContextMenu({
   }, [closeTab, tabId])
 
   const handleDuplicate = useCallback(() => {
-    if (connectionId) {
-      const tabs = useSessionsStore.getState().tabs
-      const tab = tabs.find((t) => t.id === tabId)
-      createTab(tab?.title ?? 'Terminal', connectionId)
-    }
+    const { tabs } = useSessionsStore.getState()
+    const tab = tabs.find((t) => t.id === tabId)
+    const title = tab?.title ? `${tab.title} (copy)` : 'Terminal'
+    // Duplicate with same connectionId (null for local, string for SSH)
+    createTab(title, connectionId ?? undefined)
   }, [connectionId, tabId, createTab])
 
   const handleSaveLog = useCallback(async () => {
@@ -172,10 +172,19 @@ export function TerminalContextMenu({
     }
   }, [paneId])
 
-  // #72 Detach to Window
-  const handleDetach = useCallback(() => {
-    const url = window.location.href + (window.location.href.includes('?') ? '&' : '?') + `detach=true&tab=${tabId}`
-    window.open(url, '_blank', 'width=800,height=600')
+  // #72 Detach to Window — use Electron IPC to open a real BrowserWindow
+  const handleDetach = useCallback(async () => {
+    try {
+      if (window.bifrost?.window?.detachTab) {
+        await window.bifrost.window.detachTab(tabId)
+      } else {
+        // Fallback: open new window via window.open
+        const url = `${window.location.origin}?detach=true&tab=${tabId}`
+        window.open(url, '_blank', 'width=900,height=600,nodeIntegration=no')
+      }
+    } catch (err) {
+      console.error('Detach failed:', err)
+    }
   }, [tabId])
 
   return (
@@ -227,12 +236,10 @@ export function TerminalContextMenu({
           <Unplug size={14} strokeWidth={1.5} />
           Disconnect
         </ContextMenuItem>
-        {connectionId && (
-          <ContextMenuItem onClick={handleDuplicate} className="gap-2">
-            <Copy size={14} strokeWidth={1.5} />
-            Duplicate Connection
-          </ContextMenuItem>
-        )}
+        <ContextMenuItem onClick={handleDuplicate} className="gap-2">
+          <Copy size={14} strokeWidth={1.5} />
+          {connectionId ? 'Duplicate Connection' : 'Duplicate Terminal'}
+        </ContextMenuItem>
         <ContextMenuItem onClick={handleSaveLog} className="gap-2">
           <Save size={14} strokeWidth={1.5} />
           Save Session Log

@@ -267,6 +267,7 @@ export interface BifrostApi {
   window: {
     toggleFullscreen: () => Promise<void>
     showConfirmDialog: (message: string) => Promise<boolean>
+    detachTab: (tabId: string) => Promise<void>
   }
 }
 
@@ -539,7 +540,8 @@ const api: BifrostApi = {
   },
   window: {
     toggleFullscreen: () => ipcRenderer.invoke('window:toggleFullscreen'),
-    showConfirmDialog: (message: string) => ipcRenderer.invoke('window:confirmDialog', message)
+    showConfirmDialog: (message: string) => ipcRenderer.invoke('window:confirmDialog', message),
+    detachTab: (tabId: string) => ipcRenderer.invoke('window:detachTab', tabId)
   }
 }
 
