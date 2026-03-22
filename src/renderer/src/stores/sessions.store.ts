@@ -17,13 +17,14 @@ export interface Tab {
   title: string
   rootPane: TerminalPane
   isActive: boolean
+  connectionId: string | null // null = local terminal, string = SSH connection ID
 }
 
 interface SessionsState {
   tabs: Tab[]
   activeTabId: string | null
 
-  createTab: (title?: string) => string
+  createTab: (title?: string, connectionId?: string) => string
   closeTab: (tabId: string) => void
   setActiveTab: (tabId: string) => void
   renameTab: (tabId: string, title: string) => void
@@ -118,14 +119,15 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
   tabs: [],
   activeTabId: null,
 
-  createTab: (title?: string) => {
+  createTab: (title?: string, connectionId?: string) => {
     const tabId = newTabId()
     const label = title ?? `Terminal ${tabIdCounter}`
     const tab: Tab = {
       id: tabId,
       title: label,
       rootPane: createPane(label),
-      isActive: true
+      isActive: true,
+      connectionId: connectionId ?? null
     }
     set((state) => ({
       tabs: state.tabs.map((t) => ({ ...t, isActive: false })).concat(tab),

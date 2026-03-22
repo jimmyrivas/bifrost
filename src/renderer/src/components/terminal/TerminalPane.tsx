@@ -9,9 +9,10 @@ const SPECTRAL_GRADIENT =
 interface TerminalPaneProps {
   pane: TerminalPaneType
   tabId: string
+  connectionId?: string | null
 }
 
-export function TerminalPane({ pane, tabId }: TerminalPaneProps): JSX.Element {
+export function TerminalPane({ pane, tabId, connectionId }: TerminalPaneProps): JSX.Element {
   const setTerminalId = useSessionsStore((s) => s.setTerminalId)
 
   if (pane.split) {
@@ -21,7 +22,7 @@ export function TerminalPane({ pane, tabId }: TerminalPaneProps): JSX.Element {
     return (
       <PanelGroup direction={direction} className="h-full">
         <Panel minSize={10}>
-          <TerminalPane pane={panes[0]} tabId={tabId} />
+          <TerminalPane pane={panes[0]} tabId={tabId} connectionId={connectionId} />
         </Panel>
         <PanelResizeHandle
           className={cn(
@@ -31,11 +32,7 @@ export function TerminalPane({ pane, tabId }: TerminalPaneProps): JSX.Element {
               : 'h-[2px] bg-[#1b1b1e] hover:bg-[#2a2a2d]',
             'data-[resize-handle-state=drag]:bg-transparent'
           )}
-          style={{
-            // Show spectral gradient on drag
-          }}
         >
-          {/* Spectral gradient overlay on hover/drag */}
           <div
             className={cn(
               'w-full h-full opacity-0 group-hover:opacity-60 transition-opacity',
@@ -45,7 +42,7 @@ export function TerminalPane({ pane, tabId }: TerminalPaneProps): JSX.Element {
           />
         </PanelResizeHandle>
         <Panel minSize={10}>
-          <TerminalPane pane={panes[1]} tabId={tabId} />
+          <TerminalPane pane={panes[1]} tabId={tabId} connectionId={connectionId} />
         </Panel>
       </PanelGroup>
     )
@@ -54,6 +51,7 @@ export function TerminalPane({ pane, tabId }: TerminalPaneProps): JSX.Element {
   return (
     <XTerminal
       paneId={pane.id}
+      connectionId={connectionId}
       onTerminalCreated={(terminalId) => setTerminalId(tabId, pane.id, terminalId)}
     />
   )

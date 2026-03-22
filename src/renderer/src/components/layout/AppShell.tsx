@@ -43,11 +43,12 @@ export function AppShell(): JSX.Element {
       try {
         const conn = await window.bifrost.connections.get(connectionId)
         const label = conn?.name ?? `SSH: ${connectionId.slice(0, 8)}`
-        createTab(label)
+        // Pass connectionId so the terminal opens in SSH mode
+        createTab(label, connectionId)
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
         console.error('Failed to get connection:', msg)
-        createTab(`Connection ${connectionId.slice(0, 8)}`)
+        createTab(`Connection ${connectionId.slice(0, 8)}`, connectionId)
       }
     },
     [createTab]
@@ -185,18 +186,16 @@ export function AppShell(): JSX.Element {
         <Panel>
           <div className="relative h-full bg-[#131316]">
             {/*
-              Terminal layer — ALWAYS mounted so terminals persist.
-              Hidden via visibility (not display:none) to keep PTY alive.
+              Terminal layer — ALL tabs always mounted so PTY sessions persist.
+              Only the active tab is visible; others use visibility:hidden.
             */}
             <div
               className="absolute inset-0 flex flex-col"
               style={{ visibility: overlay ? 'hidden' : 'visible' }}
             >
               <TabBar />
-              <div className="flex-1 overflow-hidden">
-                {activeTab ? (
-                  <TerminalPane pane={activeTab.rootPane} tabId={activeTab.id} />
-                ) : (
+              <div className="relative flex-1 overflow-hidden">
+                {tabs.length === 0 && (
                   <div className="flex items-center justify-center h-full">
                     <div className="text-center">
                       <p
@@ -209,6 +208,23 @@ export function AppShell(): JSX.Element {
                     </div>
                   </div>
                 )}
+                {/* Render ALL tabs, show only active */}
+                {tabs.map((tab) => (
+                  <div
+                    key={tab.id}
+                    className="absolute inset-0"
+                    style={{
+                      visibility: tab.id === activeTabId && !overlay ? 'visible' : 'hidden',
+                      zIndex: tab.id === activeTabId ? 1 : 0
+                    }}
+                  >
+                    <TerminalPane
+                      pane={tab.rootPane}
+                      tabId={tab.id}
+                      connectionId={tab.connectionId}
+                    />
+                  </div>
+                ))}
               </div>
             </div>
 
