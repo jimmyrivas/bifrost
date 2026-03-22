@@ -82,8 +82,21 @@ export function AppShell(): JSX.Element {
       try {
         const conn = await window.bifrost.connections.get(connectionId)
         const label = conn?.name ?? `SSH: ${connectionId.slice(0, 8)}`
-        // Pass connectionId so the terminal opens in SSH mode
-        createTab(label, connectionId)
+        // Parse per-connection terminal style overrides from terminalConfig JSON
+        let terminalStyle: import('@renderer/stores/sessions.store').TerminalStyle | undefined
+        if (conn?.terminalConfig) {
+          try {
+            const tc = JSON.parse(conn.terminalConfig)
+            terminalStyle = {
+              colorScheme: tc.colorScheme || undefined,
+              fontFamily: tc.fontFamily || undefined,
+              fontSize: tc.fontSize || undefined,
+              cursorStyle: tc.cursorStyle || undefined,
+              backgroundColor: tc.backgroundColor || undefined
+            }
+          } catch { /* ignore malformed JSON */ }
+        }
+        createTab(label, connectionId, terminalStyle)
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
         console.error('Failed to get connection:', msg)
@@ -279,6 +292,7 @@ export function AppShell(): JSX.Element {
                         pane={tab.rootPane}
                         tabId={tab.id}
                         connectionId={tab.connectionId}
+                        terminalStyle={tab.terminalStyle}
                       />
                     </div>
                   ))}

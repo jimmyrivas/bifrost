@@ -5,7 +5,7 @@ import { SearchAddon } from '@xterm/addon-search'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { usePreferencesStore } from '@renderer/stores/preferences.store'
-import { useSessionsStore } from '@renderer/stores/sessions.store'
+import { useSessionsStore, type TerminalStyle } from '@renderer/stores/sessions.store'
 import { getSchemeByName, getDefaultScheme } from '@renderer/lib/color-schemes'
 import { scanForErrors, type DetectedError } from '@renderer/lib/error-patterns'
 import { detectZmodem, notifyZmodemDetected } from '@renderer/lib/zmodem-handler'
@@ -13,6 +13,7 @@ import { detectZmodem, notifyZmodemDetected } from '@renderer/lib/zmodem-handler
 interface UseTerminalOptions {
   paneId: string
   connectionId?: string | null // null/undefined = local PTY, string = SSH connection
+  terminalStyle?: TerminalStyle
   onTerminalCreated?: (terminalId: string) => void
 }
 
@@ -78,19 +79,25 @@ function broadcastInput(originTerminalId: string, data: string): void {
   }
 }
 
-export function useTerminal({ paneId, connectionId, onTerminalCreated }: UseTerminalOptions): UseTerminalReturn {
+export function useTerminal({ paneId, connectionId, terminalStyle, onTerminalCreated }: UseTerminalOptions): UseTerminalReturn {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const terminalRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
   const terminalIdRef = useRef<string | null>(null)
   const currentFontSizeRef = useRef<number>(0)
-  const fontFamily = usePreferencesStore((s) => s.terminal.fontFamily)
-  const fontSize = usePreferencesStore((s) => s.terminal.fontSize)
-  const cursorStyle = usePreferencesStore((s) => s.terminal.cursorStyle)
+  const globalFontFamily = usePreferencesStore((s) => s.terminal.fontFamily)
+  const globalFontSize = usePreferencesStore((s) => s.terminal.fontSize)
+  const globalCursorStyle = usePreferencesStore((s) => s.terminal.cursorStyle)
   const cursorBlink = usePreferencesStore((s) => s.terminal.cursorBlink)
   const scrollback = usePreferencesStore((s) => s.terminal.scrollback)
-  const colorScheme = usePreferencesStore((s) => s.terminal.colorScheme)
+  const globalColorScheme = usePreferencesStore((s) => s.terminal.colorScheme)
   const fontLigatures = usePreferencesStore((s) => s.terminal.fontLigatures)
+
+  // Per-tab overrides merge with global preferences
+  const fontFamily = terminalStyle?.fontFamily || globalFontFamily
+  const fontSize = terminalStyle?.fontSize || globalFontSize
+  const cursorStyle = terminalStyle?.cursorStyle || globalCursorStyle
+  const colorScheme = terminalStyle?.colorScheme || globalColorScheme
 
   const [pendingPaste, setPendingPaste] = useState<PasteRequest | null>(null)
   const detectedErrorsRef = useRef<DetectedError[]>([])
@@ -178,6 +185,10 @@ export function useTerminal({ paneId, connectionId, onTerminalCreated }: UseTerm
     if (!containerRef.current) return
 
     const theme = getThemeColors(colorScheme)
+    // Apply per-connection background tint if set
+    if (terminalStyle?.backgroundColor) {
+      theme.background = terminalStyle.backgroundColor
+    }
     currentFontSizeRef.current = fontSize
 
     const terminal = new Terminal({

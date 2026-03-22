@@ -1,7 +1,7 @@
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import { cn } from '@renderer/lib/utils'
 import { XTerminal } from './XTerminal'
-import { useSessionsStore, type TerminalPane as TerminalPaneType } from '@renderer/stores/sessions.store'
+import { useSessionsStore, type TerminalPane as TerminalPaneType, type TerminalStyle } from '@renderer/stores/sessions.store'
 
 const SPECTRAL_GRADIENT =
   'linear-gradient(135deg, #ff6b6b, #ffa36b, #ffd56b, #6bff6b, #6bd5ff, #6b6bff, #d56bff)'
@@ -10,6 +10,7 @@ interface TerminalPaneProps {
   pane: TerminalPaneType
   tabId: string
   connectionId?: string | null
+  terminalStyle?: TerminalStyle
 }
 
 function isPaneVisible(pane: TerminalPaneType, targetId: string): boolean {
@@ -20,7 +21,7 @@ function isPaneVisible(pane: TerminalPaneType, targetId: string): boolean {
   return false
 }
 
-export function TerminalPane({ pane, tabId, connectionId }: TerminalPaneProps): JSX.Element {
+export function TerminalPane({ pane, tabId, connectionId, terminalStyle }: TerminalPaneProps): JSX.Element {
   const setTerminalId = useSessionsStore((s) => s.setTerminalId)
   const maximizedPaneId = useSessionsStore((s) => s.maximizedPaneId)
 
@@ -33,17 +34,17 @@ export function TerminalPane({ pane, tabId, connectionId }: TerminalPaneProps): 
       const firstContains = isPaneVisible(panes[0], maximizedPaneId)
       const secondContains = isPaneVisible(panes[1], maximizedPaneId)
       if (firstContains && !secondContains) {
-        return <TerminalPane pane={panes[0]} tabId={tabId} connectionId={connectionId} />
+        return <TerminalPane pane={panes[0]} tabId={tabId} connectionId={connectionId} terminalStyle={terminalStyle} />
       }
       if (secondContains && !firstContains) {
-        return <TerminalPane pane={panes[1]} tabId={tabId} connectionId={connectionId} />
+        return <TerminalPane pane={panes[1]} tabId={tabId} connectionId={connectionId} terminalStyle={terminalStyle} />
       }
     }
 
     return (
       <PanelGroup direction={direction} className="h-full">
         <Panel minSize={10}>
-          <TerminalPane pane={panes[0]} tabId={tabId} connectionId={connectionId} />
+          <TerminalPane pane={panes[0]} tabId={tabId} connectionId={connectionId} terminalStyle={terminalStyle} />
         </Panel>
         <PanelResizeHandle
           className={cn(
@@ -63,7 +64,7 @@ export function TerminalPane({ pane, tabId, connectionId }: TerminalPaneProps): 
           />
         </PanelResizeHandle>
         <Panel minSize={10}>
-          <TerminalPane pane={panes[1]} tabId={tabId} connectionId={connectionId} />
+          <TerminalPane pane={panes[1]} tabId={tabId} connectionId={connectionId} terminalStyle={terminalStyle} />
         </Panel>
       </PanelGroup>
     )
@@ -74,6 +75,7 @@ export function TerminalPane({ pane, tabId, connectionId }: TerminalPaneProps): 
       paneId={pane.id}
       tabId={tabId}
       connectionId={connectionId}
+      terminalStyle={terminalStyle}
       onTerminalCreated={(terminalId) => setTerminalId(tabId, pane.id, terminalId)}
     />
   )

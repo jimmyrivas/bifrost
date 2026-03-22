@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import {
   ClipboardCopy,
   ClipboardPaste,
@@ -15,7 +15,9 @@ import {
   Maximize2,
   Bot,
   Camera,
-  ExternalLink
+  ExternalLink,
+  ScrollText,
+  Play
 } from 'lucide-react'
 import {
   ContextMenu,
@@ -23,9 +25,13 @@ import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
-  ContextMenuShortcut
+  ContextMenuShortcut,
+  ContextMenuSub,
+  ContextMenuSubTrigger,
+  ContextMenuSubContent
 } from '@renderer/components/ui/context-menu'
 import { useSessionsStore } from '@renderer/stores/sessions.store'
+import { executeScript, type ScriptContext } from '@renderer/lib/script-runner'
 
 interface TerminalContextMenuProps {
   children: React.ReactNode
@@ -134,6 +140,50 @@ export function TerminalContextMenu({
   const handleMaximize = useCallback(() => {
     toggleMaximizePane(paneId)
   }, [toggleMaximizePane, paneId])
+
+  // Scripts menu (#3)
+  interface ScriptEntry { id: string; name: string; description?: string; code: string }
+  const [scripts, setScripts] = useState<ScriptEntry[]>([])
+  const [scriptStatus, setScriptStatus] = useState<string | null>(null)
+
+  useEffect(() => {
+    window.bifrost?.scripts?.list()
+      .then((list: ScriptEntry[]) => setScripts(list ?? []))
+      .catch(() => {})
+  }, [])
+
+  const handleRunScript = useCallback(async (script: ScriptEntry) => {
+    const paneEl = document.querySelector(`[data-pane-id="${paneId}"]`)
+    const termId = paneEl?.getAttribute('data-terminal-id') ?? ''
+    if (!termId) return
+
+    const ctx: ScriptContext = {
+      send: (text: string) => {
+        if (termId.startsWith('ssh:')) {
+          const sshSessionId = termId.slice(4)
+          window.bifrost.ssh.write(sshSessionId, text)
+        } else {
+          window.bifrost.terminal.write(termId, text)
+        }
+      },
+      sleep: (ms: number) => new Promise((resolve) => setTimeout(resolve, ms)),
+      log: (msg: string) => {
+        // Write colored log line visible in terminal output
+        ctx.send(`\x1b[36m[bifrost]\x1b[0m ${msg}\r\n`)
+      }
+    }
+
+    try {
+      setScriptStatus(`Running: ${script.name}...`)
+      await executeScript(script.code, ctx)
+      setScriptStatus(`Completed: ${script.name}`)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setScriptStatus(`Failed: ${msg}`)
+      ctx.send(`\r\n\x1b[31m[bifrost] Script error: ${msg}\x1b[0m\r\n`)
+    }
+    setTimeout(() => setScriptStatus(null), 3000)
+  }, [paneId])
 
   // #98 Explain Command
   const [explanation, setExplanation] = useState<string | null>(null)
@@ -262,6 +312,35 @@ export function TerminalContextMenu({
           <Bot size={14} strokeWidth={1.5} />
           Explain Command
         </ContextMenuItem>
+
+        {scripts.length > 0 && (
+          <ContextMenuSub>
+            <ContextMenuSubTrigger className="gap-2">
+              <ScrollText size={14} strokeWidth={1.5} />
+              Scripts
+            </ContextMenuSubTrigger>
+            <ContextMenuSubContent className="w-52">
+              {scripts.map((script) => (
+                <ContextMenuItem
+                  key={script.id}
+                  onClick={() => handleRunScript(script)}
+                  className="gap-2 flex-col items-start"
+                >
+                  <div className="flex items-center gap-2 w-full">
+                    <Play size={12} strokeWidth={1.5} />
+                    <span className="truncate">{script.name}</span>
+                  </div>
+                  {script.description && (
+                    <span className="text-[10px] text-[var(--on-surface-variant)] pl-5 truncate w-full">
+                      {script.description}
+                    </span>
+                  )}
+                </ContextMenuItem>
+              ))}
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+        )}
+
         <ContextMenuItem onClick={handleScreenshot} className="gap-2">
           <Camera size={14} strokeWidth={1.5} />
           Take Screenshot
@@ -282,6 +361,20 @@ export function TerminalContextMenu({
           Reset Terminal
         </ContextMenuItem>
       </ContextMenuContent>
+
+      {/* Script status notification */}
+      {scriptStatus && (
+        <div
+          className="fixed bottom-24 right-4 z-50 max-w-sm p-3 rounded-[var(--radius)] bg-[var(--surface-bright)] text-xs text-[var(--on-surface)] shadow-lg backdrop-blur-[12px]"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex items-center gap-2">
+            <ScrollText size={14} className="text-[#6bd5ff] shrink-0" />
+            <p>{scriptStatus}</p>
+          </div>
+        </div>
+      )}
 
       {/* Explanation tooltip (#98) */}
       {explanation && (

@@ -7,6 +7,7 @@ import { Switch } from '@renderer/components/ui/switch'
 import { cn } from '@renderer/lib/utils'
 import { useConnectionsStore } from '@renderer/stores/connections.store'
 import { SshOptionsPanel } from './SshOptionsPanel'
+import { COLOR_SCHEMES } from '@renderer/lib/color-schemes'
 
 type Method = 'ssh' | 'rdp' | 'vnc' | 'telnet' | 'local' | 'ftp' | 'custom'
 type AuthType = 'userpass' | 'key' | 'key_pass' | 'manual'
@@ -55,6 +56,13 @@ interface FormState {
   tags: string
   // SSH advanced options (#67)
   sshOptions: Record<string, string>
+  // Terminal appearance overrides
+  termColorScheme: string
+  termBackgroundTint: string
+  termBackgroundPreset: 'production' | 'staging' | 'development' | 'custom'
+  termFontSize: string // empty = global default
+  termCursorStyle: string // empty = global default
+  termFontFamily: string // empty = global default
 }
 
 interface ValidationErrors {
@@ -76,7 +84,13 @@ const defaultForm: FormState = {
   rdpAudioPlayback: false, rdpColorDepth: 24, rdpFullscreen: false, rdpResolution: '1280x800',
   customCommand: '',
   tags: '',
-  sshOptions: {}
+  sshOptions: {},
+  termColorScheme: '',
+  termBackgroundTint: '#0d0d0f',
+  termBackgroundPreset: 'development',
+  termFontSize: '',
+  termCursorStyle: '',
+  termFontFamily: ''
 }
 
 const selectClass = cn(
@@ -143,6 +157,22 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
               const cfg = conn.sshConfig ? JSON.parse(conn.sshConfig) : {}
               return cfg.options ?? {}
             } catch { return {} }
+          })(),
+          ...(() => {
+            try {
+              const tc = conn.terminalConfig ? JSON.parse(conn.terminalConfig) : {}
+              return {
+                termColorScheme: tc.colorScheme ?? '',
+                termBackgroundTint: tc.backgroundColor ?? '#0d0d0f',
+                termBackgroundPreset: tc.backgroundColor === '#1a0505' ? 'production' as const
+                  : tc.backgroundColor === '#051a0a' ? 'staging' as const
+                  : tc.backgroundColor && tc.backgroundColor !== '#0d0d0f' ? 'custom' as const
+                  : 'development' as const,
+                termFontSize: tc.fontSize ? String(tc.fontSize) : '',
+                termCursorStyle: tc.cursorStyle ?? '',
+                termFontFamily: tc.fontFamily ?? ''
+              }
+            } catch { return {} }
           })()
         }))
       }
@@ -179,6 +209,15 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
       if (Object.keys(form.sshOptions).length > 0) sshConfigObj.options = form.sshOptions
       const sshConfig = Object.keys(sshConfigObj).length > 0 ? JSON.stringify(sshConfigObj) : undefined
 
+      // Build terminalConfig JSON for per-connection terminal styles
+      const termConfigObj: Record<string, unknown> = {}
+      if (form.termColorScheme) termConfigObj.colorScheme = form.termColorScheme
+      if (form.termBackgroundTint && form.termBackgroundTint !== '#0d0d0f') termConfigObj.backgroundColor = form.termBackgroundTint
+      if (form.termFontSize) termConfigObj.fontSize = Number(form.termFontSize)
+      if (form.termCursorStyle) termConfigObj.cursorStyle = form.termCursorStyle
+      if (form.termFontFamily) termConfigObj.fontFamily = form.termFontFamily
+      const terminalConfig = Object.keys(termConfigObj).length > 0 ? JSON.stringify(termConfigObj) : undefined
+
       const data = {
         name: form.name, method: form.method, host: form.host || undefined,
         port: form.port || undefined, authType: form.authType,
@@ -191,7 +230,8 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
         sendString: form.sendString || undefined,
         sendIntervalSeconds: form.sendIntervalSeconds || undefined,
         sendIdleOnly: form.sendIdleOnly, groupId: null as string | null,
-        sshConfig
+        sshConfig,
+        terminalConfig
       }
       let savedId = connectionId
       if (connectionId) {
@@ -443,35 +483,111 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
             </div>
           </section>
 
-          {/* Personalizing */}
+          {/* Terminal Appearance */}
           <section>
-            <h3 className={sectionLabel}>{t('connections.personalizing', 'PERSONALIZING')}</h3>
+            <h3 className={sectionLabel}>TERMINAL APPEARANCE</h3>
             <div className={cn(sectionCard, 'flex flex-col gap-3')}>
               <div>
-                <label className={fieldLabel}>COLOR SCHEME</label>
-                <div className="flex gap-2 mt-1">
-                  {COLOR_OPTIONS.map((color) => (
+                <label className={fieldLabel} htmlFor="conn-term-scheme">COLOR SCHEME OVERRIDE</label>
+                <select
+                  id="conn-term-scheme"
+                  className={selectClass}
+                  value={form.termColorScheme}
+                  onChange={(e) => set('termColorScheme', e.target.value)}
+                >
+                  <option value="">Global default</option>
+                  {COLOR_SCHEMES.map((s) => (
+                    <option key={s.name} value={s.name}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={fieldLabel}>BACKGROUND TINT</label>
+                <div className="flex gap-2 mt-1 items-center">
+                  {([
+                    { id: 'production', color: '#1a0505', label: 'Prod' },
+                    { id: 'staging', color: '#051a0a', label: 'Stage' },
+                    { id: 'development', color: '#0d0d0f', label: 'Dev' },
+                    { id: 'custom', color: form.termBackgroundTint, label: 'Custom' }
+                  ] as const).map((preset) => (
                     <button
-                      key={color}
-                      className={cn('w-5 h-5 rounded-full transition-transform', form.colorScheme === color && 'ring-2 ring-[var(--on-surface)] scale-110')}
-                      style={{ backgroundColor: color }}
-                      onClick={() => set('colorScheme', color)}
-                      aria-label={`Color ${color}`}
-                    />
+                      key={preset.id}
+                      className={cn(
+                        'flex items-center gap-1.5 px-2 py-1 rounded-[var(--radius)] text-[10px] font-semibold transition-colors',
+                        form.termBackgroundPreset === preset.id
+                          ? 'bg-[var(--surface-container-highest)] text-[var(--on-surface)] ring-1 ring-[var(--outline-variant)]'
+                          : 'text-[var(--on-surface-variant)] hover:text-[var(--on-surface)]'
+                      )}
+                      onClick={() => {
+                        set('termBackgroundPreset', preset.id)
+                        if (preset.id !== 'custom') set('termBackgroundTint', preset.color)
+                      }}
+                      aria-label={`${preset.label} background tint`}
+                    >
+                      <span className="w-3 h-3 rounded-full border border-[var(--outline-variant)]" style={{ backgroundColor: preset.color }} />
+                      {preset.label}
+                    </button>
                   ))}
                 </div>
+                {form.termBackgroundPreset === 'custom' && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={form.termBackgroundTint}
+                      onChange={(e) => set('termBackgroundTint', e.target.value)}
+                      className="w-8 h-8 rounded-[var(--radius)] border-none cursor-pointer bg-transparent"
+                      aria-label="Custom background color"
+                    />
+                    <Input
+                      value={form.termBackgroundTint}
+                      onChange={(e) => set('termBackgroundTint', e.target.value)}
+                      placeholder="#1a0505"
+                      className="w-24 h-7 text-xs"
+                    />
+                  </div>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className={fieldLabel} htmlFor="conn-fontsize">FONT SIZE</label>
-                  <Input id="conn-fontsize" type="number" min={8} max={32} value={form.fontSize} onChange={(e) => set('fontSize', Number(e.target.value))} />
+                  <label className={fieldLabel} htmlFor="conn-term-fontsize">FONT SIZE OVERRIDE</label>
+                  <Input
+                    id="conn-term-fontsize"
+                    type="number"
+                    min={8}
+                    max={32}
+                    value={form.termFontSize}
+                    onChange={(e) => set('termFontSize', e.target.value)}
+                    placeholder="Global default"
+                  />
                 </div>
                 <div>
-                  <label className={fieldLabel} htmlFor="conn-font">FONT</label>
-                  <Input id="conn-font" value={form.fontFamily} onChange={(e) => set('fontFamily', e.target.value)} />
+                  <label className={fieldLabel} htmlFor="conn-term-cursor">CURSOR STYLE</label>
+                  <select
+                    id="conn-term-cursor"
+                    className={selectClass}
+                    value={form.termCursorStyle}
+                    onChange={(e) => set('termCursorStyle', e.target.value)}
+                  >
+                    <option value="">Global default</option>
+                    <option value="block">Block</option>
+                    <option value="underline">Underline</option>
+                    <option value="bar">Bar</option>
+                  </select>
                 </div>
               </div>
-              <div className="rounded-[var(--radius)] bg-[var(--surface-container-lowest)] p-2 font-[family-name:var(--font-mono)] text-xs text-[var(--success)] leading-relaxed">
+              <div>
+                <label className={fieldLabel} htmlFor="conn-term-font">FONT FAMILY OVERRIDE</label>
+                <Input
+                  id="conn-term-font"
+                  value={form.termFontFamily}
+                  onChange={(e) => set('termFontFamily', e.target.value)}
+                  placeholder="Global default"
+                />
+              </div>
+              <div
+                className="rounded-[var(--radius)] p-2 font-[family-name:var(--font-mono)] text-xs text-[var(--success)] leading-relaxed"
+                style={{ backgroundColor: form.termBackgroundTint || '#0d0d0f' }}
+              >
                 <span className="text-[var(--on-surface-variant)]">user@bifrost</span>:~$ tail -f /var/log/sys
               </div>
             </div>

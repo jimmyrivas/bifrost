@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Monitor, Globe, Network, KeyRound, GitBranch, Puzzle } from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
@@ -42,6 +42,11 @@ export function Preferences(): JSX.Element {
   const [activeTab, setActiveTab] = useState<PrefsTab>('terminal')
   const [proxy, setProxy] = useState<ProxyState>({ host: '', port: 1080, enabled: false })
   const [keepass, setKeepass] = useState<KeePassState>({ dbPath: '', keyPath: '' })
+  const [systemFonts, setSystemFonts] = useState<string[]>([])
+
+  useEffect(() => {
+    window.bifrost?.fonts?.listMonospace().then(setSystemFonts).catch(() => {})
+  }, [])
 
   const setTermPref = useCallback(<K extends keyof TerminalPreferences>(key: K, value: TerminalPreferences[K]) => {
     setTerminalPref(key, value)
@@ -82,7 +87,12 @@ export function Preferences(): JSX.Element {
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
                   <label className={fieldLabel} htmlFor="pref-font">{t('prefs.fontFamily', 'FONT FAMILY')}</label>
-                  <Input id="pref-font" value={terminal.fontFamily} onChange={(e) => setTermPref('fontFamily', e.target.value)} />
+                  <FontFamilyPicker
+                    id="pref-font"
+                    value={terminal.fontFamily}
+                    fonts={systemFonts}
+                    onChange={(v) => setTermPref('fontFamily', v)}
+                  />
                 </div>
                 <div>
                   <label className={fieldLabel} htmlFor="pref-font-size">{t('prefs.fontSize', 'FONT SIZE')}</label>
@@ -199,6 +209,92 @@ export function Preferences(): JSX.Element {
           <PluginManager />
         )}
       </div>
+    </div>
+  )
+}
+
+/** Searchable font family dropdown with preview */
+function FontFamilyPicker({
+  id,
+  value,
+  fonts,
+  onChange
+}: {
+  id: string
+  value: string
+  fonts: string[]
+  onChange: (font: string) => void
+}): JSX.Element {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  const filtered = search
+    ? fonts.filter((f) => f.toLowerCase().includes(search.toLowerCase()))
+    : fonts
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent): void => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  return (
+    <div ref={containerRef} className="relative">
+      <Input
+        id={id}
+        value={open ? search : value}
+        onChange={(e) => {
+          setSearch(e.target.value)
+          if (!open) setOpen(true)
+        }}
+        onFocus={() => {
+          setOpen(true)
+          setSearch('')
+        }}
+        placeholder="Search fonts..."
+      />
+      {open && (
+        <div
+          className="absolute z-50 top-full left-0 right-0 mt-1 max-h-56 overflow-y-auto rounded-[var(--radius)] bg-[var(--surface-container-high)] shadow-lg"
+          role="listbox"
+          aria-label="Font families"
+        >
+          {filtered.length === 0 && (
+            <div className="px-3 py-2 text-xs text-[var(--on-surface-variant)]">No fonts found</div>
+          )}
+          {filtered.map((font) => (
+            <button
+              key={font}
+              role="option"
+              aria-selected={value === font}
+              className={cn(
+                'w-full text-left px-3 py-1.5 text-xs hover:bg-[var(--surface-container-highest)] transition-colors flex items-center justify-between gap-2',
+                value === font && 'bg-[var(--surface-container-highest)] text-[var(--on-surface)]'
+              )}
+              onClick={() => {
+                onChange(font)
+                setOpen(false)
+                setSearch('')
+              }}
+            >
+              <span className="truncate">{font}</span>
+              <span
+                className="text-[10px] text-[var(--on-surface-variant)] shrink-0"
+                style={{ fontFamily: `'${font}', monospace` }}
+              >
+                AaBbCc 01234
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

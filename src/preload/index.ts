@@ -260,6 +260,9 @@ export interface BifrostApi {
     delete: (id: string) => Promise<void>
     validate: (code: string) => Promise<string | null>
   }
+  fonts: {
+    listMonospace: () => Promise<string[]>
+  }
   // #29-31: Plugin system
   plugins: {
     list: () => Promise<Array<{ name: string; version: string; description: string; path: string; valid: boolean }>>
@@ -538,6 +541,9 @@ const api: BifrostApi = {
       ipcRenderer.invoke('scripts:update', id, updates),
     delete: (id: string) => ipcRenderer.invoke('scripts:delete', id),
     validate: (code: string) => ipcRenderer.invoke('scripts:validate', code) as Promise<string | null>
+  },
+  fonts: {
+    listMonospace: () => ipcRenderer.invoke('fonts:listMonospace') as Promise<string[]>
   },
   plugins: {
     list: () => ipcRenderer.invoke('plugins:list'),

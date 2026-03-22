@@ -21,6 +21,7 @@ import { registerAiIpc } from './ipc/ai.ipc'
 import { registerConfigSyncIpc } from './ipc/config-sync.ipc'
 import { registerSshCaIpc } from './ipc/ssh-ca.ipc'
 import { registerPluginsIpc } from './ipc/plugins.ipc'
+import { registerFontsIpc } from './ipc/fonts.ipc'
 import { macroExecutor } from './services/macro-executor'
 import { auditLogger } from './services/audit-log'
 import { sessionLogger } from './services/session-logger'
@@ -146,6 +147,7 @@ app.whenReady().then(() => {
   registerConfigSyncIpc()
   registerSshCaIpc()
   registerPluginsIpc()
+  registerFontsIpc()
 
   // Rotate audit log on startup (remove entries older than 30 days)
   try {

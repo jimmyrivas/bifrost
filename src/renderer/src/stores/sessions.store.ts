@@ -12,6 +12,14 @@ export interface TerminalPane {
   }
 }
 
+export interface TerminalStyle {
+  colorScheme?: string
+  fontFamily?: string
+  fontSize?: number
+  cursorStyle?: 'block' | 'underline' | 'bar'
+  backgroundColor?: string // custom tint (e.g. #1a0505 for prod)
+}
+
 export interface Tab {
   id: string
   title: string
@@ -19,6 +27,7 @@ export interface Tab {
   isActive: boolean
   connectionId: string | null // null = local terminal, string = SSH connection ID
   lockTitle: boolean
+  terminalStyle?: TerminalStyle
 }
 
 export type BroadcastMode = 'off' | 'panes' | 'all-tabs'
@@ -31,7 +40,7 @@ interface SessionsState {
   maxReconnectAttempts: number
   maximizedPaneId: string | null
 
-  createTab: (title?: string, connectionId?: string) => string
+  createTab: (title?: string, connectionId?: string, terminalStyle?: TerminalStyle) => string
   closeTab: (tabId: string) => void
   setActiveTab: (tabId: string) => void
   renameTab: (tabId: string, title: string) => void
@@ -166,7 +175,7 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
   maximizedPaneId: null,
   _detachingTabs: new Set<string>(),
 
-  createTab: (title?: string, connectionId?: string) => {
+  createTab: (title?: string, connectionId?: string, terminalStyle?: TerminalStyle) => {
     const tabId = newTabId()
     const label = title ?? `Terminal ${tabIdCounter}`
     const tab: Tab = {
@@ -175,7 +184,8 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
       rootPane: createPane(label),
       isActive: true,
       connectionId: connectionId ?? null,
-      lockTitle: false
+      lockTitle: false,
+      terminalStyle
     }
     set((state) => ({
       tabs: state.tabs.map((t) => ({ ...t, isActive: false })).concat(tab),

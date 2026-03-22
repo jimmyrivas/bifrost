@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { Radio, AlertTriangle } from 'lucide-react'
 import { useTerminal } from '@renderer/hooks/useTerminal'
-import { useSessionsStore } from '@renderer/stores/sessions.store'
+import { useSessionsStore, type TerminalStyle } from '@renderer/stores/sessions.store'
 import { TerminalContextMenu } from './TerminalContextMenu'
 import { PasteWarning } from './PasteWarning'
 import { cn } from '@renderer/lib/utils'
@@ -11,13 +11,15 @@ interface XTerminalProps {
   paneId: string
   tabId?: string
   connectionId?: string | null
+  terminalStyle?: TerminalStyle
   onTerminalCreated?: (terminalId: string) => void
 }
 
-export function XTerminal({ paneId, tabId, connectionId, onTerminalCreated }: XTerminalProps): JSX.Element {
+export function XTerminal({ paneId, tabId, connectionId, terminalStyle, onTerminalCreated }: XTerminalProps): JSX.Element {
   const { containerRef, terminalIdRef, pendingPaste, confirmPaste, cancelPaste, dynamicTitle, detectedErrors } = useTerminal({
     paneId,
     connectionId,
+    terminalStyle,
     onTerminalCreated
   })
 
