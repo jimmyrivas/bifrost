@@ -1,7 +1,7 @@
 import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import { registerTerminalIpc } from './ipc/terminal.ipc'
+import { registerTerminalIpc, destroyAllSessions } from './ipc/terminal.ipc'
 import { registerConnectionsIpc } from './ipc/connections.ipc'
 import { registerCredentialsIpc } from './ipc/credentials.ipc'
 import { registerSshIpc } from './ipc/ssh.ipc'
@@ -17,7 +17,6 @@ import { sshManager } from './services/ssh-manager'
 import { sftpManager } from './services/sftp-manager'
 import { externalProtocolManager } from './services/external-protocol'
 import { trayManager } from './services/tray-manager'
-import { destroyAllSessions } from './ipc/terminal.ipc'
 
 function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
@@ -30,7 +29,7 @@ function createWindow(): BrowserWindow {
     backgroundColor: '#0a0a0b',
     autoHideMenuBar: true,
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
+      preload: join(__dirname, '../preload/index.mjs'),
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false
@@ -59,7 +58,11 @@ app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.bifrost.app')
 
   // Run database migrations
-  runMigrations()
+  try {
+    runMigrations()
+  } catch (err) {
+    console.error('Failed to run migrations:', err)
+  }
 
   // Register IPC handlers (non-window-dependent)
   registerConnectionsIpc()
@@ -80,8 +83,12 @@ app.whenReady().then(() => {
   registerExpectIpc(mainWindow)
   registerProtocolsIpc(mainWindow)
 
-  // Initialize tray
-  trayManager.create()
+  // Initialize tray (may fail on some Linux environments)
+  try {
+    trayManager.create()
+  } catch (err) {
+    console.warn('Tray initialization failed (non-critical):', err)
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

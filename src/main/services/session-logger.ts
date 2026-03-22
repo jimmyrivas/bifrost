@@ -4,23 +4,27 @@ import { createWriteStream, mkdirSync, type WriteStream } from 'fs'
 
 export class SessionLogger {
   private streams = new Map<string, WriteStream>()
-  private logDir: string
+  private logDir: string | null = null
 
-  constructor() {
-    this.logDir = join(app.getPath('userData'), 'session-logs')
-    mkdirSync(this.logDir, { recursive: true })
+  private ensureLogDir(): string {
+    if (!this.logDir) {
+      this.logDir = join(app.getPath('userData'), 'session-logs')
+      mkdirSync(this.logDir, { recursive: true })
+    }
+    return this.logDir
   }
 
   /**
    * Start logging a session. Pattern supports:
    * %Y=year, %M=month, %D=day, %H=hour, %m=minute, %s=second,
-   * %N=connection name, %H=host, %U=user
+   * %N=connection name, %h=host, %U=user
    */
   startLogging(
     sessionId: string,
     pattern: string,
     context: { name?: string; host?: string; user?: string }
   ): string {
+    const logDir = this.ensureLogDir()
     const now = new Date()
     let filename = pattern
       .replace(/%Y/g, now.getFullYear().toString())
@@ -37,7 +41,7 @@ export class SessionLogger {
     filename = filename.replace(/[^a-zA-Z0-9._\-]/g, '_')
     if (!filename.endsWith('.log')) filename += '.log'
 
-    const filePath = join(this.logDir, filename)
+    const filePath = join(logDir, filename)
     const stream = createWriteStream(filePath, { flags: 'a' })
 
     // Write header
@@ -48,9 +52,6 @@ export class SessionLogger {
     return filePath
   }
 
-  /**
-   * Append data to a session log.
-   */
   write(sessionId: string, data: string): void {
     const stream = this.streams.get(sessionId)
     if (stream) {
@@ -58,9 +59,6 @@ export class SessionLogger {
     }
   }
 
-  /**
-   * Stop logging a session.
-   */
   stopLogging(sessionId: string): void {
     const stream = this.streams.get(sessionId)
     if (stream) {
@@ -70,9 +68,6 @@ export class SessionLogger {
     }
   }
 
-  /**
-   * Stop all loggers.
-   */
   stopAll(): void {
     for (const [id] of this.streams) {
       this.stopLogging(id)
@@ -80,7 +75,7 @@ export class SessionLogger {
   }
 
   getLogDir(): string {
-    return this.logDir
+    return this.ensureLogDir()
   }
 }
 
