@@ -5,6 +5,7 @@ import { registerTerminalIpc } from './ipc/terminal.ipc'
 import { registerConnectionsIpc } from './ipc/connections.ipc'
 import { registerCredentialsIpc } from './ipc/credentials.ipc'
 import { registerSshIpc } from './ipc/ssh.ipc'
+import { registerExpectIpc } from './ipc/expect.ipc'
 import { runMigrations } from './db/migrate'
 import { closeDatabase } from './db'
 import { sshManager } from './services/ssh-manager'
@@ -65,6 +66,7 @@ app.whenReady().then(() => {
   // Register window-dependent IPC handlers
   registerTerminalIpc(mainWindow)
   registerSshIpc(mainWindow)
+  registerExpectIpc(mainWindow)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
