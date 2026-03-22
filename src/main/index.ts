@@ -8,10 +8,15 @@ import { registerSshIpc } from './ipc/ssh.ipc'
 import { registerExpectIpc } from './ipc/expect.ipc'
 import { registerClusterIpc } from './ipc/cluster.ipc'
 import { registerSystemIpc } from './ipc/system.ipc'
+import { registerSftpIpc } from './ipc/sftp.ipc'
+import { registerProtocolsIpc } from './ipc/protocols.ipc'
 import { sessionLogger } from './services/session-logger'
 import { runMigrations } from './db/migrate'
 import { closeDatabase } from './db'
 import { sshManager } from './services/ssh-manager'
+import { sftpManager } from './services/sftp-manager'
+import { externalProtocolManager } from './services/external-protocol'
+import { trayManager } from './services/tray-manager'
 import { destroyAllSessions } from './ipc/terminal.ipc'
 
 function createWindow(): BrowserWindow {
@@ -61,6 +66,7 @@ app.whenReady().then(() => {
   registerCredentialsIpc()
   registerClusterIpc()
   registerSystemIpc()
+  registerSftpIpc()
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
@@ -72,6 +78,10 @@ app.whenReady().then(() => {
   registerTerminalIpc(mainWindow)
   registerSshIpc(mainWindow)
   registerExpectIpc(mainWindow)
+  registerProtocolsIpc(mainWindow)
+
+  // Initialize tray
+  trayManager.create()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -90,7 +100,10 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   destroyAllSessions()
+  sftpManager.closeAll()
   sshManager.disconnectAll()
+  externalProtocolManager.disconnectAll()
   sessionLogger.stopAll()
+  trayManager.destroy()
   closeDatabase()
 })
