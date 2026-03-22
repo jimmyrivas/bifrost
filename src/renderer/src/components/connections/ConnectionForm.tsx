@@ -483,112 +483,89 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
             </div>
           </section>
 
-          {/* Terminal Appearance */}
+          {/* Terminal Appearance — full width two-column layout */}
           <section>
             <h3 className={sectionLabel}>TERMINAL APPEARANCE</h3>
-            <div className={cn(sectionCard, 'flex flex-col gap-3')}>
-              <div>
-                <label className={fieldLabel} htmlFor="conn-term-scheme">COLOR SCHEME OVERRIDE</label>
-                <select
-                  id="conn-term-scheme"
-                  className={selectClass}
-                  value={form.termColorScheme}
-                  onChange={(e) => set('termColorScheme', e.target.value)}
-                >
-                  <option value="">Global default</option>
-                  {COLOR_SCHEMES.map((s) => (
-                    <option key={s.name} value={s.name}>{s.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className={fieldLabel}>BACKGROUND TINT</label>
-                <div className="flex gap-2 mt-1 items-center">
-                  {([
-                    { id: 'production', color: '#1a0505', label: 'Prod' },
-                    { id: 'staging', color: '#051a0a', label: 'Stage' },
-                    { id: 'development', color: '#0d0d0f', label: 'Dev' },
-                    { id: 'custom', color: form.termBackgroundTint, label: 'Custom' }
-                  ] as const).map((preset) => (
-                    <button
-                      key={preset.id}
-                      className={cn(
-                        'flex items-center gap-1.5 px-2 py-1 rounded-[var(--radius)] text-[10px] font-semibold transition-colors',
-                        form.termBackgroundPreset === preset.id
-                          ? 'bg-[var(--surface-container-highest)] text-[var(--on-surface)] ring-1 ring-[var(--outline-variant)]'
-                          : 'text-[var(--on-surface-variant)] hover:text-[var(--on-surface)]'
-                      )}
-                      onClick={() => {
-                        set('termBackgroundPreset', preset.id)
-                        if (preset.id !== 'custom') set('termBackgroundTint', preset.color)
-                      }}
-                      aria-label={`${preset.label} background tint`}
-                    >
-                      <span className="w-3 h-3 rounded-full border border-[var(--outline-variant)]" style={{ backgroundColor: preset.color }} />
-                      {preset.label}
-                    </button>
-                  ))}
-                </div>
-                {form.termBackgroundPreset === 'custom' && (
-                  <div className="mt-2 flex items-center gap-2">
-                    <input
-                      type="color"
-                      value={form.termBackgroundTint}
-                      onChange={(e) => set('termBackgroundTint', e.target.value)}
-                      className="w-8 h-8 rounded-[var(--radius)] border-none cursor-pointer bg-transparent"
-                      aria-label="Custom background color"
-                    />
-                    <Input
-                      value={form.termBackgroundTint}
-                      onChange={(e) => set('termBackgroundTint', e.target.value)}
-                      placeholder="#1a0505"
-                      className="w-24 h-7 text-xs"
-                    />
+            <div className={cn(sectionCard, 'flex flex-col gap-4')}>
+              <div className="grid grid-cols-2 gap-4">
+                {/* Left column: scheme + tint + font */}
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <label className={fieldLabel} htmlFor="conn-term-scheme">COLOR SCHEME</label>
+                    <select id="conn-term-scheme" className={selectClass} value={form.termColorScheme} onChange={(e) => set('termColorScheme', e.target.value)}>
+                      <option value="">Global default</option>
+                      {COLOR_SCHEMES.map((s) => (
+                        <option key={s.name} value={s.name}>{s.name}</option>
+                      ))}
+                    </select>
                   </div>
-                )}
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className={fieldLabel} htmlFor="conn-term-fontsize">FONT SIZE OVERRIDE</label>
-                  <Input
-                    id="conn-term-fontsize"
-                    type="number"
-                    min={8}
-                    max={32}
-                    value={form.termFontSize}
-                    onChange={(e) => set('termFontSize', e.target.value)}
-                    placeholder="Global default"
-                  />
+                  <div>
+                    <label className={fieldLabel}>ENVIRONMENT TINT</label>
+                    <div className="flex gap-1.5 mt-1">
+                      {([
+                        { id: 'production', color: '#1a0505', label: 'Production', emoji: '🔴' },
+                        { id: 'staging', color: '#051a0a', label: 'Staging', emoji: '🟢' },
+                        { id: 'development', color: '#0d0d0f', label: 'Default', emoji: '⚫' },
+                        { id: 'custom', color: form.termBackgroundTint, label: 'Custom', emoji: '🎨' }
+                      ] as const).map((p) => (
+                        <button key={p.id} onClick={() => { set('termBackgroundPreset', p.id); if (p.id !== 'custom') set('termBackgroundTint', p.color) }}
+                          className={cn('flex-1 flex flex-col items-center gap-1 py-2 rounded-[var(--radius)] text-[10px] transition-colors',
+                            form.termBackgroundPreset === p.id ? 'bg-[var(--surface-container-highest)] text-[var(--on-surface)] ring-1 ring-[var(--outline-variant)]' : 'text-[var(--on-surface-variant)] hover:bg-[var(--surface-container-highest)]/50')}>
+                          <span className="w-5 h-5 rounded-full" style={{ backgroundColor: p.color, border: '1px solid rgba(199,196,215,0.15)' }} />
+                          <span className="font-semibold">{p.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                    {form.termBackgroundPreset === 'custom' && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <input type="color" value={form.termBackgroundTint} onChange={(e) => set('termBackgroundTint', e.target.value)} className="w-8 h-8 rounded-[var(--radius)] border-none cursor-pointer bg-transparent" />
+                        <Input value={form.termBackgroundTint} onChange={(e) => set('termBackgroundTint', e.target.value)} placeholder="#1a0505" className="flex-1 h-7 text-xs" />
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <label className={fieldLabel}>FONT FAMILY</label>
+                    <FontFamilySelect value={form.termFontFamily} onChange={(v) => set('termFontFamily', v)} />
+                  </div>
                 </div>
-                <div>
-                  <label className={fieldLabel} htmlFor="conn-term-cursor">CURSOR STYLE</label>
-                  <select
-                    id="conn-term-cursor"
-                    className={selectClass}
-                    value={form.termCursorStyle}
-                    onChange={(e) => set('termCursorStyle', e.target.value)}
-                  >
-                    <option value="">Global default</option>
-                    <option value="block">Block</option>
-                    <option value="underline">Underline</option>
-                    <option value="bar">Bar</option>
-                  </select>
+                {/* Right column: size + cursor + preview */}
+                <div className="flex flex-col gap-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className={fieldLabel} htmlFor="conn-term-fontsize">FONT SIZE</label>
+                      <Input id="conn-term-fontsize" type="number" min={8} max={32} value={form.termFontSize} onChange={(e) => set('termFontSize', e.target.value)} placeholder="14" />
+                    </div>
+                    <div>
+                      <label className={fieldLabel} htmlFor="conn-term-cursor">CURSOR</label>
+                      <select id="conn-term-cursor" className={selectClass} value={form.termCursorStyle} onChange={(e) => set('termCursorStyle', e.target.value)}>
+                        <option value="">Default</option>
+                        <option value="block">Block ▊</option>
+                        <option value="underline">Underline _</option>
+                        <option value="bar">Bar |</option>
+                      </select>
+                    </div>
+                  </div>
+                  {/* Live preview */}
+                  <div>
+                    <label className={fieldLabel}>PREVIEW</label>
+                    <div
+                      className="rounded-[var(--radius)] p-3 leading-relaxed overflow-hidden"
+                      style={{
+                        backgroundColor: form.termBackgroundTint || '#0d0d0f',
+                        fontFamily: form.termFontFamily || "'JetBrains Mono', monospace",
+                        fontSize: `${form.termFontSize || 14}px`,
+                        minHeight: '120px'
+                      }}
+                    >
+                      <div style={{ color: '#22c55e' }}>(.venv) <span style={{ color: '#3b82f6' }}>jrivas@{form.host || 'server'}</span>:<span style={{ color: '#a855f7' }}>~</span>$</div>
+                      <div style={{ color: '#e4e4e7' }}>systemctl status nginx</div>
+                      <div style={{ color: '#22c55e' }}>● nginx.service - A high performance web server</div>
+                      <div style={{ color: '#c7c4d7' }}>&nbsp;&nbsp;Active: <span style={{ color: '#22c55e' }}>active (running)</span></div>
+                      <div style={{ color: '#c7c4d7' }}>&nbsp;&nbsp;Memory: <span style={{ color: '#eab308' }}>4.2M</span></div>
+                      <div style={{ color: '#22c55e' }}>(.venv) <span style={{ color: '#3b82f6' }}>jrivas@{form.host || 'server'}</span>:<span style={{ color: '#a855f7' }}>~</span>$ <span style={{ color: '#71717a' }}>{form.termCursorStyle === 'underline' ? '_' : form.termCursorStyle === 'bar' ? '|' : '▊'}</span></div>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div>
-                <label className={fieldLabel} htmlFor="conn-term-font">FONT FAMILY OVERRIDE</label>
-                <Input
-                  id="conn-term-font"
-                  value={form.termFontFamily}
-                  onChange={(e) => set('termFontFamily', e.target.value)}
-                  placeholder="Global default"
-                />
-              </div>
-              <div
-                className="rounded-[var(--radius)] p-2 font-[family-name:var(--font-mono)] text-xs text-[var(--success)] leading-relaxed"
-                style={{ backgroundColor: form.termBackgroundTint || '#0d0d0f' }}
-              >
-                <span className="text-[var(--on-surface-variant)]">user@bifrost</span>:~$ tail -f /var/log/sys
               </div>
             </div>
           </section>
@@ -604,6 +581,60 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
           {saving ? 'Saving...' : connectionId ? t('actions.save', 'Save') : t('connections.save', 'Save Connection')}
         </Button>
       </div>
+    </div>
+  )
+}
+
+function FontFamilySelect({ value, onChange }: { value: string; onChange: (v: string) => void }): JSX.Element {
+  const [fonts, setFonts] = useState<string[]>([])
+  const [open, setOpen] = useState(false)
+  const [filter, setFilter] = useState('')
+
+  useEffect(() => {
+    window.bifrost?.fonts?.listMonospace().then((f) => setFonts(f)).catch(() => {
+      setFonts(['JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Source Code Pro', 'Ubuntu Mono', 'Hack', 'Inconsolata', 'monospace'])
+    })
+  }, [])
+
+  const filtered = filter ? fonts.filter((f) => f.toLowerCase().includes(filter.toLowerCase())) : fonts
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={cn(selectClass, 'text-left justify-between cursor-pointer')}
+      >
+        <span className="truncate" style={{ fontFamily: value || 'inherit' }}>{value || 'Global default'}</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      {open && (
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 rounded-[var(--radius)] bg-[var(--surface-container-high)] shadow-lg max-h-60 overflow-hidden flex flex-col">
+          <div className="p-1.5">
+            <input
+              type="text"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder="Search fonts..."
+              className="w-full bg-[var(--surface-container-highest)] rounded-[var(--radius)] px-2 py-1 text-xs text-[var(--on-surface)] outline-none placeholder-[var(--on-surface-variant)]/50"
+              autoFocus
+            />
+          </div>
+          <div className="overflow-y-auto flex-1">
+            <button type="button" onClick={() => { onChange(''); setOpen(false); setFilter('') }}
+              className={cn('w-full text-left px-3 py-1.5 text-xs hover:bg-[var(--surface-bright)]/10 transition-colors', !value && 'text-[var(--on-surface)] bg-[var(--surface-bright)]/5')}>
+              Global default
+            </button>
+            {filtered.map((f) => (
+              <button key={f} type="button" onClick={() => { onChange(f); setOpen(false); setFilter('') }}
+                className={cn('w-full text-left px-3 py-1.5 text-xs hover:bg-[var(--surface-bright)]/10 transition-colors flex items-center justify-between gap-2', value === f && 'text-[var(--on-surface)] bg-[var(--surface-bright)]/5')}>
+                <span className="truncate">{f}</span>
+                <span className="text-[10px] text-[var(--on-surface-variant)]/60 shrink-0" style={{ fontFamily: f }}>AaBb 01</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
