@@ -20,11 +20,48 @@ export interface Group {
   icon: string | null
 }
 
+export interface RecentConnection {
+  id: string
+  timestamp: number
+}
+
+const FAVORITES_KEY = 'bifrost:favorites'
+const RECENTS_KEY = 'bifrost:recents'
+const MAX_RECENTS = 10
+
+function loadFavorites(): string[] {
+  try {
+    const raw = localStorage.getItem(FAVORITES_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch {
+    return []
+  }
+}
+
+function saveFavorites(ids: string[]): void {
+  localStorage.setItem(FAVORITES_KEY, JSON.stringify(ids))
+}
+
+function loadRecents(): RecentConnection[] {
+  try {
+    const raw = localStorage.getItem(RECENTS_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch {
+    return []
+  }
+}
+
+function saveRecents(recents: RecentConnection[]): void {
+  localStorage.setItem(RECENTS_KEY, JSON.stringify(recents))
+}
+
 interface ConnectionsState {
   connections: Connection[]
   groups: Group[]
   loading: boolean
   selectedConnectionId: string | null
+  favorites: string[]
+  recentConnections: RecentConnection[]
 
   fetchConnections: () => Promise<void>
   fetchGroups: () => Promise<void>
@@ -33,14 +70,20 @@ interface ConnectionsState {
   updateConnection: (id: string, data: Partial<Connection>) => Promise<void>
   deleteConnection: (id: string) => Promise<void>
   createGroup: (data: Omit<Group, 'id' | 'sortOrder'>) => Promise<string>
+  updateGroup: (id: string, data: Partial<Group>) => Promise<void>
   deleteGroup: (id: string) => Promise<void>
+  toggleFavorite: (id: string) => void
+  isFavorite: (id: string) => boolean
+  addRecent: (id: string) => void
 }
 
-export const useConnectionsStore = create<ConnectionsState>((set) => ({
+export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
   connections: [],
   groups: [],
   loading: false,
   selectedConnectionId: null,
+  favorites: loadFavorites(),
+  recentConnections: loadRecents(),
 
   fetchConnections: async () => {
     set({ loading: true })
@@ -71,7 +114,12 @@ export const useConnectionsStore = create<ConnectionsState>((set) => ({
   deleteConnection: async (id) => {
     await window.bifrost.connections.delete(id)
     const connections = await window.bifrost.connections.list()
-    set({ connections: connections as Connection[], selectedConnectionId: null })
+    // Also remove from favorites if present
+    const favorites = get().favorites.filter((fid) => fid !== id)
+    saveFavorites(favorites)
+    const recentConnections = get().recentConnections.filter((r) => r.id !== id)
+    saveRecents(recentConnections)
+    set({ connections: connections as Connection[], selectedConnectionId: null, favorites, recentConnections })
   },
 
   createGroup: async (data) => {
@@ -81,9 +129,36 @@ export const useConnectionsStore = create<ConnectionsState>((set) => ({
     return id
   },
 
+  updateGroup: async (id, data) => {
+    await window.bifrost.connections.updateGroup(id, data)
+    const groups = await window.bifrost.connections.listGroups()
+    set({ groups: groups as Group[] })
+  },
+
   deleteGroup: async (id) => {
     await window.bifrost.connections.deleteGroup(id)
     const groups = await window.bifrost.connections.listGroups()
     set({ groups: groups as Group[] })
+  },
+
+  toggleFavorite: (id: string) => {
+    const { favorites } = get()
+    const next = favorites.includes(id)
+      ? favorites.filter((fid) => fid !== id)
+      : [...favorites, id]
+    saveFavorites(next)
+    set({ favorites: next })
+  },
+
+  isFavorite: (id: string) => {
+    return get().favorites.includes(id)
+  },
+
+  addRecent: (id: string) => {
+    const { recentConnections } = get()
+    const filtered = recentConnections.filter((r) => r.id !== id)
+    const next = [{ id, timestamp: Date.now() }, ...filtered].slice(0, MAX_RECENTS)
+    saveRecents(next)
+    set({ recentConnections: next })
   }
 }))

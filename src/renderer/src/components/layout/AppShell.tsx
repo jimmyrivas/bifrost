@@ -1,10 +1,11 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import { Search } from 'lucide-react'
 import { cn } from '@renderer/lib/utils'
 import { Sidebar } from './Sidebar'
 import { TabBar } from './TabBar'
 import { StatusBar } from './StatusBar'
+import { CommandPalette } from './CommandPalette'
 import { TerminalPane } from '@renderer/components/terminal/TerminalPane'
 import { ClusterManagerUI } from '@renderer/components/cluster/ClusterManagerUI'
 import { ExpectEditor } from '@renderer/components/automation/ExpectEditor'
@@ -37,6 +38,19 @@ export function AppShell(): JSX.Element {
   const createTab = useSessionsStore((s) => s.createTab)
   const [activeView, setActiveView] = useState<ViewSection>('connections')
   const [editingConnectionId, setEditingConnectionId] = useState<string | null>(null)
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
+
+  // Global Ctrl+K shortcut for command palette
+  useEffect(() => {
+    const handler = (e: KeyboardEvent): void => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault()
+        setCommandPaletteOpen((prev) => !prev)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
 
   const handleConnectSSH = useCallback(
     async (connectionId: string) => {
@@ -164,16 +178,17 @@ export function AppShell(): JSX.Element {
           ))}
         </nav>
         <div className="flex-1" />
-        <div className="flex items-center gap-2 px-2 py-1 rounded bg-[#1b1b1e]">
+        <button
+          className="flex items-center gap-2 px-2 py-1 rounded bg-[#1b1b1e] hover:bg-[#2a2a2d]/50 transition-colors cursor-pointer"
+          onClick={() => setCommandPaletteOpen(true)}
+          aria-label="Open command palette"
+        >
           <Search size={14} className="text-[#c7c4d7]" />
-          <input
-            type="text"
-            placeholder="Search sessions..."
-            className="bg-transparent text-sm text-[#e6e1e5] placeholder-[#c7c4d7]/50 outline-none w-40 font-['Inter']"
-            aria-label="Search sessions"
-          />
+          <span className="text-sm text-[#c7c4d7]/50 font-['Inter'] w-40 text-left">
+            Search connections...
+          </span>
           <kbd className="text-[10px] text-[#c7c4d7]/60 font-mono">Ctrl+K</kbd>
-        </div>
+        </button>
       </div>
 
       {/* Main area */}
@@ -251,6 +266,12 @@ export function AppShell(): JSX.Element {
       </PanelGroup>
 
       <StatusBar />
+
+      <CommandPalette
+        open={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+        onConnect={handleConnectSSH}
+      />
     </div>
   )
 }

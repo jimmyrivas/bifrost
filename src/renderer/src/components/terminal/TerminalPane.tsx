@@ -51,6 +51,7 @@ export function TerminalPane({ pane, tabId, connectionId }: TerminalPaneProps): 
   return (
     <XTerminal
       paneId={pane.id}
+      tabId={tabId}
       connectionId={connectionId}
       onTerminalCreated={(terminalId) => setTerminalId(tabId, pane.id, terminalId)}
     />

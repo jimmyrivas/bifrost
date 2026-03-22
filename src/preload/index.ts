@@ -3,6 +3,11 @@ import type { IpcRendererEvent } from 'electron'
 import type { ConnectionData, GroupData } from '../main/ipc/connections.ipc'
 import type { SftpFileEntry, SftpFileStat } from '../main/services/sftp-manager'
 import type { RdpOptions } from '../main/services/external-protocol'
+import type { SshConfigEntry } from '../main/services/ssh-config-parser'
+import type { AnsibleHost } from '../main/services/ansible-parser'
+import type { DiscoveredHost } from '../main/services/cloud-discovery'
+import type { HostKeyInfo, PortForward } from '../main/services/ssh-manager'
+import type { AuditEvent, AuditEventType } from '../main/services/audit-log'
 
 export interface BifrostApi {
   terminal: {
@@ -42,6 +47,44 @@ export interface BifrostApi {
     isConnected: (sessionId: string) => Promise<boolean>
     onData: (callback: (sessionId: string, data: string) => void) => () => void
     onClose: (callback: (sessionId: string) => void) => () => void
+    // Host key verification
+    verifyHostKey: (sessionId: string, accepted: boolean) => Promise<void>
+    getKnownHosts: () => Promise<HostKeyInfo[]>
+    removeKnownHost: (host: string, port: number) => Promise<void>
+    onHostKeyUnknown: (
+      callback: (
+        sessionId: string,
+        host: string,
+        port: number,
+        fingerprint: string,
+        algorithm: string
+      ) => void
+    ) => () => void
+    onHostKeyChanged: (
+      callback: (
+        sessionId: string,
+        host: string,
+        port: number,
+        oldFingerprint: string,
+        newFingerprint: string,
+        algorithm: string
+      ) => void
+    ) => () => void
+    // Port forwarding
+    addLocalForward: (
+      sessionId: string,
+      localPort: number,
+      remoteHost: string,
+      remotePort: number
+    ) => Promise<string>
+    addRemoteForward: (
+      sessionId: string,
+      remotePort: number,
+      localHost: string,
+      localPort: number
+    ) => Promise<string>
+    listForwards: (sessionId: string) => Promise<Array<Omit<PortForward, 'server'>>>
+    removeForward: (sessionId: string, forwardId: string) => Promise<void>
   }
   sftp: {
     open: (sshSessionId: string) => Promise<string>
@@ -82,6 +125,31 @@ export interface BifrostApi {
     logData: (sessionId: string, data: string) => void
     stopLogging: (sessionId: string) => Promise<void>
     getLogDir: () => Promise<string>
+  }
+  import: {
+    sshConfig: (configPath?: string) => Promise<SshConfigEntry[]>
+    sshConfigApply: (entries: SshConfigEntry[], groupId?: string) => Promise<string[]>
+    ansibleInventory: (filePath?: string) => Promise<AnsibleHost[]>
+    ansibleInventoryApply: (hosts: AnsibleHost[], groupId?: string) => Promise<string[]>
+    exportConnections: () => Promise<string | null>
+    importConnections: () => Promise<{ imported: number }>
+  }
+  discovery: {
+    aws: () => Promise<DiscoveredHost[]>
+    gcp: () => Promise<DiscoveredHost[]>
+    docker: () => Promise<DiscoveredHost[]>
+    kubernetes: () => Promise<DiscoveredHost[]>
+    available: () => Promise<Record<string, boolean>>
+  }
+  audit: {
+    query: (options?: {
+      connectionId?: string
+      event?: AuditEventType
+      since?: string
+      limit?: number
+    }) => Promise<AuditEvent[]>
+    getLogSize: () => Promise<number>
+    rotate: () => Promise<void>
   }
 }
 
@@ -138,7 +206,45 @@ const api: BifrostApi = {
       const handler = (_e: IpcRendererEvent, id: string): void => callback(id)
       ipcRenderer.on('ssh:close', handler)
       return () => ipcRenderer.removeListener('ssh:close', handler)
-    }
+    },
+    // Host key verification
+    verifyHostKey: (sessionId, accepted) =>
+      ipcRenderer.invoke('ssh:verifyHostKey', sessionId, accepted),
+    getKnownHosts: () => ipcRenderer.invoke('ssh:getKnownHosts'),
+    removeKnownHost: (host, port) => ipcRenderer.invoke('ssh:removeKnownHost', host, port),
+    onHostKeyUnknown: (callback) => {
+      const handler = (
+        _e: IpcRendererEvent,
+        sessionId: string,
+        host: string,
+        port: number,
+        fingerprint: string,
+        algorithm: string
+      ): void => callback(sessionId, host, port, fingerprint, algorithm)
+      ipcRenderer.on('ssh:hostKeyUnknown', handler)
+      return () => ipcRenderer.removeListener('ssh:hostKeyUnknown', handler)
+    },
+    onHostKeyChanged: (callback) => {
+      const handler = (
+        _e: IpcRendererEvent,
+        sessionId: string,
+        host: string,
+        port: number,
+        oldFingerprint: string,
+        newFingerprint: string,
+        algorithm: string
+      ): void => callback(sessionId, host, port, oldFingerprint, newFingerprint, algorithm)
+      ipcRenderer.on('ssh:hostKeyChanged', handler)
+      return () => ipcRenderer.removeListener('ssh:hostKeyChanged', handler)
+    },
+    // Port forwarding
+    addLocalForward: (sessionId, localPort, remoteHost, remotePort) =>
+      ipcRenderer.invoke('ssh:addLocalForward', sessionId, localPort, remoteHost, remotePort),
+    addRemoteForward: (sessionId, remotePort, localHost, localPort) =>
+      ipcRenderer.invoke('ssh:addRemoteForward', sessionId, remotePort, localHost, localPort),
+    listForwards: (sessionId) => ipcRenderer.invoke('ssh:listForwards', sessionId),
+    removeForward: (sessionId, forwardId) =>
+      ipcRenderer.invoke('ssh:removeForward', sessionId, forwardId)
   },
   sftp: {
     open: (sshSessionId) => ipcRenderer.invoke('sftp:open', sshSessionId),
@@ -187,6 +293,28 @@ const api: BifrostApi = {
     logData: (sessionId, data) => ipcRenderer.send('system:logData', sessionId, data),
     stopLogging: (sessionId) => ipcRenderer.invoke('system:stopLogging', sessionId),
     getLogDir: () => ipcRenderer.invoke('system:getLogDir')
+  },
+  import: {
+    sshConfig: (configPath?) => ipcRenderer.invoke('import:sshConfig', configPath),
+    sshConfigApply: (entries, groupId?) =>
+      ipcRenderer.invoke('import:sshConfigApply', entries, groupId),
+    ansibleInventory: (filePath?) => ipcRenderer.invoke('import:ansibleInventory', filePath),
+    ansibleInventoryApply: (hosts, groupId?) =>
+      ipcRenderer.invoke('import:ansibleInventoryApply', hosts, groupId),
+    exportConnections: () => ipcRenderer.invoke('import:exportConnections'),
+    importConnections: () => ipcRenderer.invoke('import:importConnections')
+  },
+  discovery: {
+    aws: () => ipcRenderer.invoke('discovery:aws'),
+    gcp: () => ipcRenderer.invoke('discovery:gcp'),
+    docker: () => ipcRenderer.invoke('discovery:docker'),
+    kubernetes: () => ipcRenderer.invoke('discovery:kubernetes'),
+    available: () => ipcRenderer.invoke('discovery:available')
+  },
+  audit: {
+    query: (options?) => ipcRenderer.invoke('audit:query', options),
+    getLogSize: () => ipcRenderer.invoke('audit:getLogSize'),
+    rotate: () => ipcRenderer.invoke('audit:rotate')
   }
 }
 

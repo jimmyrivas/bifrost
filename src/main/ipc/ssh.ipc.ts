@@ -66,4 +66,104 @@ export function registerSshIpc(mainWindow: BrowserWindow): void {
   ipcMain.handle('ssh:isConnected', (_event, sessionId: string) => {
     return sshManager.isConnected(sessionId)
   })
+
+  // === Host Key Verification ===
+
+  // Forward host key events to the renderer
+  sshManager.on(
+    'hostkey:unknown',
+    (sessionId: string, host: string, port: number, fingerprint: string, algorithm: string) => {
+      if (!mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(
+          'ssh:hostKeyUnknown',
+          sessionId,
+          host,
+          port,
+          fingerprint,
+          algorithm
+        )
+      }
+    }
+  )
+
+  sshManager.on(
+    'hostkey:changed',
+    (
+      sessionId: string,
+      host: string,
+      port: number,
+      oldFingerprint: string,
+      newFingerprint: string,
+      algorithm: string
+    ) => {
+      if (!mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(
+          'ssh:hostKeyChanged',
+          sessionId,
+          host,
+          port,
+          oldFingerprint,
+          newFingerprint,
+          algorithm
+        )
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'ssh:verifyHostKey',
+    (_event, sessionId: string, accepted: boolean) => {
+      sshManager.resolveHostKeyVerification(sessionId, accepted)
+    }
+  )
+
+  ipcMain.handle('ssh:getKnownHosts', () => {
+    return sshManager.getKnownHosts()
+  })
+
+  ipcMain.handle(
+    'ssh:removeKnownHost',
+    (_event, host: string, port: number) => {
+      sshManager.removeHostKey(host, port)
+    }
+  )
+
+  // === Port Forwarding ===
+
+  ipcMain.handle(
+    'ssh:addLocalForward',
+    async (
+      _event,
+      sessionId: string,
+      localPort: number,
+      remoteHost: string,
+      remotePort: number
+    ): Promise<string> => {
+      return sshManager.addLocalForward(sessionId, localPort, remoteHost, remotePort)
+    }
+  )
+
+  ipcMain.handle(
+    'ssh:addRemoteForward',
+    async (
+      _event,
+      sessionId: string,
+      remotePort: number,
+      localHost: string,
+      localPort: number
+    ): Promise<string> => {
+      return sshManager.addRemoteForward(sessionId, remotePort, localHost, localPort)
+    }
+  )
+
+  ipcMain.handle('ssh:listForwards', (_event, sessionId: string) => {
+    return sshManager.listForwards(sessionId)
+  })
+
+  ipcMain.handle(
+    'ssh:removeForward',
+    (_event, sessionId: string, forwardId: string) => {
+      sshManager.removeForward(sessionId, forwardId)
+    }
+  )
 }

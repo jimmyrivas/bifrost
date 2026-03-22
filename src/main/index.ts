@@ -10,6 +10,13 @@ import { registerClusterIpc } from './ipc/cluster.ipc'
 import { registerSystemIpc } from './ipc/system.ipc'
 import { registerSftpIpc } from './ipc/sftp.ipc'
 import { registerProtocolsIpc } from './ipc/protocols.ipc'
+import { registerPasswordManagerIpc } from './ipc/password-manager.ipc'
+import { registerSnippetsIpc } from './ipc/snippets.ipc'
+import { registerScriptsIpc } from './ipc/scripts.ipc'
+import { registerImportIpc } from './ipc/import.ipc'
+import { registerDiscoveryIpc } from './ipc/discovery.ipc'
+import { registerAuditIpc } from './ipc/audit.ipc'
+import { auditLogger } from './services/audit-log'
 import { sessionLogger } from './services/session-logger'
 import { runMigrations } from './db/migrate'
 import { closeDatabase } from './db'
@@ -17,6 +24,7 @@ import { sshManager } from './services/ssh-manager'
 import { sftpManager } from './services/sftp-manager'
 import { externalProtocolManager } from './services/external-protocol'
 import { trayManager } from './services/tray-manager'
+import { connectionHealthMonitor } from './services/connection-health'
 
 function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
@@ -26,7 +34,7 @@ function createWindow(): BrowserWindow {
     minHeight: 600,
     show: false,
     title: 'Bifrost',
-    backgroundColor: '#0a0a0b',
+    backgroundColor: '#131316',
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.mjs'),
@@ -57,19 +65,31 @@ function createWindow(): BrowserWindow {
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.bifrost.app')
 
-  // Run database migrations
   try {
     runMigrations()
   } catch (err) {
     console.error('Failed to run migrations:', err)
   }
 
-  // Register IPC handlers (non-window-dependent)
+  // Register non-window-dependent IPC handlers
   registerConnectionsIpc()
   registerCredentialsIpc()
   registerClusterIpc()
   registerSystemIpc()
   registerSftpIpc()
+  registerPasswordManagerIpc()
+  registerSnippetsIpc()
+  registerScriptsIpc()
+  registerImportIpc()
+  registerDiscoveryIpc()
+  registerAuditIpc()
+
+  // Rotate audit log on startup (remove entries older than 30 days)
+  try {
+    auditLogger.rotate()
+  } catch (err) {
+    console.warn('Audit log rotation failed (non-critical):', err)
+  }
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
@@ -83,7 +103,6 @@ app.whenReady().then(() => {
   registerExpectIpc(mainWindow)
   registerProtocolsIpc(mainWindow)
 
-  // Initialize tray (may fail on some Linux environments)
   try {
     trayManager.create()
   } catch (err) {
@@ -111,6 +130,7 @@ app.on('before-quit', () => {
   sshManager.disconnectAll()
   externalProtocolManager.disconnectAll()
   sessionLogger.stopAll()
+  connectionHealthMonitor.stopAll()
   trayManager.destroy()
   closeDatabase()
 })

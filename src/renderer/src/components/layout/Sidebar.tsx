@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   Network,
@@ -8,11 +8,23 @@ import {
   FileText,
   Settings,
   Plus,
-  HelpCircle
+  HelpCircle,
+  Search,
+  X,
+  Star,
+  Clock,
+  ChevronDown,
+  ChevronRight,
+  Terminal,
+  Monitor,
+  Tv,
+  Radio,
+  Laptop
 } from 'lucide-react'
 import { cn } from '@renderer/lib/utils'
 import { ConnectionTree } from '@renderer/components/connections/ConnectionTree'
 import { QuickConnect } from '@renderer/components/connections/QuickConnect'
+import { useConnectionsStore, type Connection } from '@renderer/stores/connections.store'
 import type { ViewSection } from './AppShell'
 
 interface SidebarProps {
@@ -32,6 +44,153 @@ const NAV_ITEMS: Array<{ id: ViewSection; label: string; icon: typeof Network }>
   { id: 'logs', label: 'Logs', icon: FileText }
 ]
 
+function MethodIcon({ method }: { method: string }): JSX.Element {
+  const props = { size: 13, strokeWidth: 1.5, className: 'shrink-0 text-[#c7c4d7]/60' }
+  switch (method) {
+    case 'ssh':
+      return <Terminal {...props} />
+    case 'rdp':
+      return <Monitor {...props} />
+    case 'vnc':
+      return <Tv {...props} />
+    case 'telnet':
+      return <Radio {...props} />
+    case 'local':
+      return <Laptop {...props} />
+    default:
+      return <Terminal {...props} />
+  }
+}
+
+function formatTimestamp(ts: number): string {
+  const now = Date.now()
+  const diff = now - ts
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
+}
+
+function FavoritesSection({
+  onConnect
+}: {
+  onConnect: (id: string) => void
+}): JSX.Element {
+  const [expanded, setExpanded] = useState(true)
+  const favorites = useConnectionsStore((s) => s.favorites)
+  const connections = useConnectionsStore((s) => s.connections)
+  const addRecent = useConnectionsStore((s) => s.addRecent)
+
+  const favoriteConns = connections.filter((c) => favorites.includes(c.id))
+
+  if (favoriteConns.length === 0) return <></>
+
+  const handleConnect = (id: string): void => {
+    addRecent(id)
+    onConnect(id)
+  }
+
+  return (
+    <div className="mt-1">
+      <button
+        className="w-full flex items-center gap-1.5 px-3 py-1 text-[#c7c4d7]/50 hover:text-[#c7c4d7]/70 transition-colors"
+        onClick={() => setExpanded(!expanded)}
+        aria-expanded={expanded}
+      >
+        {expanded ? (
+          <ChevronDown size={10} strokeWidth={1.5} className="shrink-0" />
+        ) : (
+          <ChevronRight size={10} strokeWidth={1.5} className="shrink-0" />
+        )}
+        <Star size={10} strokeWidth={1.5} className="shrink-0" />
+        <span className="text-[9px] font-semibold tracking-[0.12em] uppercase">Favorites</span>
+        <span className="text-[9px] text-[#c7c4d7]/25 ml-auto">{favoriteConns.length}</span>
+      </button>
+      {expanded && (
+        <div className="py-0.5">
+          {favoriteConns.map((conn) => (
+            <button
+              key={conn.id}
+              className="w-full flex items-center gap-2 px-4 py-1 text-[12px] text-[#c7c4d7] hover:bg-[#2a2a2d]/50 hover:text-[#e6e1e5] transition-colors"
+              onClick={() => handleConnect(conn.id)}
+              onDoubleClick={() => handleConnect(conn.id)}
+            >
+              <MethodIcon method={conn.method} />
+              <span className="truncate font-['Inter']">{conn.name}</span>
+              <Star size={8} strokeWidth={0} fill="#ffd56b" className="shrink-0 ml-auto" />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function RecentSection({
+  onConnect
+}: {
+  onConnect: (id: string) => void
+}): JSX.Element {
+  const [expanded, setExpanded] = useState(true)
+  const recentConnections = useConnectionsStore((s) => s.recentConnections)
+  const connections = useConnectionsStore((s) => s.connections)
+  const addRecent = useConnectionsStore((s) => s.addRecent)
+
+  const recentConns = recentConnections
+    .map((r) => {
+      const conn = connections.find((c) => c.id === r.id)
+      return conn ? { ...conn, timestamp: r.timestamp } : null
+    })
+    .filter((c): c is Connection & { timestamp: number } => c != null)
+
+  if (recentConns.length === 0) return <></>
+
+  const handleConnect = (id: string): void => {
+    addRecent(id)
+    onConnect(id)
+  }
+
+  return (
+    <div className="mt-1">
+      <button
+        className="w-full flex items-center gap-1.5 px-3 py-1 text-[#c7c4d7]/50 hover:text-[#c7c4d7]/70 transition-colors"
+        onClick={() => setExpanded(!expanded)}
+        aria-expanded={expanded}
+      >
+        {expanded ? (
+          <ChevronDown size={10} strokeWidth={1.5} className="shrink-0" />
+        ) : (
+          <ChevronRight size={10} strokeWidth={1.5} className="shrink-0" />
+        )}
+        <Clock size={10} strokeWidth={1.5} className="shrink-0" />
+        <span className="text-[9px] font-semibold tracking-[0.12em] uppercase">Recent</span>
+        <span className="text-[9px] text-[#c7c4d7]/25 ml-auto">{recentConns.length}</span>
+      </button>
+      {expanded && (
+        <div className="py-0.5">
+          {recentConns.map((conn) => (
+            <button
+              key={conn.id}
+              className="w-full flex items-center gap-2 px-4 py-1 text-[12px] text-[#c7c4d7] hover:bg-[#2a2a2d]/50 hover:text-[#e6e1e5] transition-colors"
+              onClick={() => handleConnect(conn.id)}
+              onDoubleClick={() => handleConnect(conn.id)}
+            >
+              <MethodIcon method={conn.method} />
+              <span className="truncate font-['Inter']">{conn.name}</span>
+              <span className="text-[10px] text-[#c7c4d7]/25 ml-auto shrink-0">
+                {formatTimestamp(conn.timestamp)}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function Sidebar({
   onConnectSSH,
   onEditConnection,
@@ -42,6 +201,11 @@ export function Sidebar({
 }: SidebarProps): JSX.Element {
   const { t } = useTranslation()
   const [showQuickConnect, setShowQuickConnect] = useState(false)
+  const [searchFilter, setSearchFilter] = useState('')
+
+  const handleClearSearch = useCallback(() => {
+    setSearchFilter('')
+  }, [])
 
   return (
     <div className="flex flex-col w-full h-full bg-[#1b1b1e] select-none">
@@ -81,9 +245,55 @@ export function Sidebar({
         <div className="h-[1px] bg-[#2a2a2d]/60" />
       </div>
 
-      {/* Connection tree (only when in connections view) */}
+      {/* Connection search + tree (only when in connections view) */}
       {activeNav === 'connections' && (
-        <ConnectionTree onConnect={onConnectSSH} onEdit={onEditConnection} />
+        <>
+          {/* Search input */}
+          <div className="px-2 pb-1">
+            <div className="relative flex items-center">
+              <Search
+                size={12}
+                strokeWidth={1.5}
+                className="absolute left-2.5 text-[#c7c4d7]/40 pointer-events-none"
+              />
+              <input
+                type="text"
+                value={searchFilter}
+                onChange={(e) => setSearchFilter(e.target.value)}
+                placeholder="Filter connections..."
+                className={cn(
+                  'w-full pl-7 pr-7 py-1.5 text-xs text-[#e6e1e5] placeholder-[#c7c4d7]/30',
+                  'bg-[#131316] rounded-[0.25rem] outline-none',
+                  "border border-[#39393c]/15 focus:border-[#6bd5ff]/30 transition-colors font-['Inter']"
+                )}
+                aria-label="Filter connections"
+              />
+              {searchFilter && (
+                <button
+                  onClick={handleClearSearch}
+                  className="absolute right-2 text-[#c7c4d7]/40 hover:text-[#e6e1e5] transition-colors"
+                  aria-label="Clear filter"
+                >
+                  <X size={12} strokeWidth={1.5} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Favorites section */}
+          <FavoritesSection onConnect={onConnectSSH} />
+
+          {/* Recent section */}
+          <RecentSection onConnect={onConnectSSH} />
+
+          {/* Connection tree */}
+          <ConnectionTree
+            onConnect={onConnectSSH}
+            onEdit={onEditConnection}
+            onNewConnection={onNewConnection}
+            searchFilter={searchFilter}
+          />
+        </>
       )}
 
       {/* Placeholder content for non-connections views */}

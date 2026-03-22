@@ -1,10 +1,12 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon } from '@xterm/addon-search'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { usePreferencesStore } from '@renderer/stores/preferences.store'
+import { useSessionsStore } from '@renderer/stores/sessions.store'
+import { getSchemeByName, getDefaultScheme } from '@renderer/lib/color-schemes'
 
 interface UseTerminalOptions {
   paneId: string
@@ -12,36 +14,64 @@ interface UseTerminalOptions {
   onTerminalCreated?: (terminalId: string) => void
 }
 
+interface PasteRequest {
+  text: string
+  resolve: (confirmed: boolean) => void
+}
+
 interface UseTerminalReturn {
   containerRef: React.RefObject<HTMLDivElement | null>
   terminalIdRef: React.RefObject<string | null>
   fitToContainer: () => void
+  zoomIn: () => void
+  zoomOut: () => void
+  resetZoom: () => void
+  pendingPaste: PasteRequest | null
+  confirmPaste: () => void
+  cancelPaste: () => void
 }
 
-const THEME = {
-  background: '#0d0d0f',
-  foreground: '#e4e4e7',
-  cursor: '#c7c4d7',
-  cursorAccent: '#0d0d0f',
-  selectionBackground: '#39393c80',
-  selectionForeground: '#ffffff',
-  selectionInactiveBackground: '#2a2a2d60',
-  black: '#1b1b1e',
-  red: '#ef4444',
-  green: '#22c55e',
-  yellow: '#eab308',
-  blue: '#3b82f6',
-  magenta: '#a855f7',
-  cyan: '#06b6d4',
-  white: '#e4e4e7',
-  brightBlack: '#71717a',
-  brightRed: '#f87171',
-  brightGreen: '#4ade80',
-  brightYellow: '#facc15',
-  brightBlue: '#60a5fa',
-  brightMagenta: '#c084fc',
-  brightCyan: '#22d3ee',
-  brightWhite: '#fafafa'
+const MIN_FONT_SIZE = 8
+const MAX_FONT_SIZE = 32
+
+function getThemeColors(schemeName: string) {
+  const scheme = getSchemeByName(schemeName) ?? getDefaultScheme()
+  return scheme.colors
+}
+
+/**
+ * Write data to a terminal by its ID, routing to SSH or local PTY as appropriate.
+ */
+function writeToTerminal(terminalId: string, data: string): void {
+  if (!window.bifrost) return
+  if (terminalId.startsWith('ssh:')) {
+    const sshSessionId = terminalId.slice(4)
+    window.bifrost.ssh.write(sshSessionId, data)
+  } else {
+    window.bifrost.terminal.write(terminalId, data)
+  }
+}
+
+/**
+ * Broadcast input data to sibling terminals based on the current broadcast mode.
+ * Excludes the originating terminal to avoid echo.
+ */
+function broadcastInput(originTerminalId: string, data: string): void {
+  const { broadcastMode } = useSessionsStore.getState()
+  if (broadcastMode === 'off') return
+
+  let targetIds: string[]
+  if (broadcastMode === 'panes') {
+    targetIds = useSessionsStore.getState().getActiveTabTerminalIds()
+  } else {
+    targetIds = useSessionsStore.getState().getAllTerminalIds()
+  }
+
+  for (const id of targetIds) {
+    if (id !== originTerminalId) {
+      writeToTerminal(id, data)
+    }
+  }
 }
 
 export function useTerminal({ paneId, connectionId, onTerminalCreated }: UseTerminalOptions): UseTerminalReturn {
@@ -49,14 +79,76 @@ export function useTerminal({ paneId, connectionId, onTerminalCreated }: UseTerm
   const terminalRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
   const terminalIdRef = useRef<string | null>(null)
+  const currentFontSizeRef = useRef<number>(0)
   const prefs = usePreferencesStore((s) => s.terminal)
+  const pasteWarningEnabled = usePreferencesStore((s) => s.terminal.pasteWarningEnabled)
+  const pasteWarningDismissed = usePreferencesStore((s) => s.pasteWarningDismissedForSession)
+
+  const [pendingPaste, setPendingPaste] = useState<PasteRequest | null>(null)
 
   const fitToContainer = useCallback(() => {
     fitAddonRef.current?.fit()
   }, [])
 
+  const zoomIn = useCallback(() => {
+    const terminal = terminalRef.current
+    if (!terminal) return
+    const current = terminal.options.fontSize ?? prefs.fontSize
+    if (current < MAX_FONT_SIZE) {
+      const next = current + 1
+      terminal.options.fontSize = next
+      currentFontSizeRef.current = next
+      fitAddonRef.current?.fit()
+    }
+  }, [prefs.fontSize])
+
+  const zoomOut = useCallback(() => {
+    const terminal = terminalRef.current
+    if (!terminal) return
+    const current = terminal.options.fontSize ?? prefs.fontSize
+    if (current > MIN_FONT_SIZE) {
+      const next = current - 1
+      terminal.options.fontSize = next
+      currentFontSizeRef.current = next
+      fitAddonRef.current?.fit()
+    }
+  }, [prefs.fontSize])
+
+  const resetZoom = useCallback(() => {
+    const terminal = terminalRef.current
+    if (!terminal) return
+    terminal.options.fontSize = prefs.fontSize
+    currentFontSizeRef.current = prefs.fontSize
+    fitAddonRef.current?.fit()
+  }, [prefs.fontSize])
+
+  const confirmPaste = useCallback(() => {
+    if (pendingPaste) {
+      pendingPaste.resolve(true)
+      setPendingPaste(null)
+    }
+  }, [pendingPaste])
+
+  const cancelPaste = useCallback(() => {
+    if (pendingPaste) {
+      pendingPaste.resolve(false)
+      setPendingPaste(null)
+    }
+  }, [pendingPaste])
+
+  // Update theme when colorScheme preference changes
+  useEffect(() => {
+    const terminal = terminalRef.current
+    if (!terminal) return
+    const theme = getThemeColors(prefs.colorScheme)
+    terminal.options.theme = theme
+  }, [prefs.colorScheme])
+
   useEffect(() => {
     if (!containerRef.current) return
+
+    const theme = getThemeColors(prefs.colorScheme)
+    currentFontSizeRef.current = prefs.fontSize
 
     const terminal = new Terminal({
       fontFamily: prefs.fontFamily,
@@ -65,7 +157,7 @@ export function useTerminal({ paneId, connectionId, onTerminalCreated }: UseTerm
       cursorBlink: prefs.cursorBlink,
       scrollback: prefs.scrollback,
       allowProposedApi: true,
-      theme: THEME
+      theme
     })
 
     const fitAddon = new FitAddon()
@@ -89,6 +181,20 @@ export function useTerminal({ paneId, connectionId, onTerminalCreated }: UseTerm
     const resizeObserver = new ResizeObserver(() => fitAddon.fit())
     resizeObserver.observe(containerRef.current)
 
+    // ── Intelligent Ctrl+C: copy selection or send ^C ──
+    terminal.attachCustomKeyEventHandler((event: KeyboardEvent) => {
+      if (event.type === 'keydown' && event.ctrlKey && event.key === 'c') {
+        const selection = terminal.getSelection()
+        if (selection && selection.length > 0) {
+          navigator.clipboard.writeText(selection)
+          terminal.clearSelection()
+          return false // prevent xterm from processing this key
+        }
+        // No selection: let xterm send ^C as normal
+      }
+      return true
+    })
+
     // Guard: bifrost API only available inside Electron
     if (!window.bifrost?.terminal) {
       terminal.write('\x1b[33mBifrost terminal API not available.\x1b[0m\r\n')
@@ -102,6 +208,90 @@ export function useTerminal({ paneId, connectionId, onTerminalCreated }: UseTerm
     let removeDataListener: (() => void) | null = null
     let removeExitListener: (() => void) | null = null
     let sshSessionId: string | null = null
+    let reconnectTimerId: ReturnType<typeof setTimeout> | null = null
+    let userDisconnected = false
+
+    /**
+     * Prompt a paste warning if necessary.
+     * Returns true if paste should proceed, false otherwise.
+     */
+    const shouldAllowPaste = (data: string): Promise<boolean> => {
+      // Only intercept multiline pastes
+      if (!data.includes('\n') && !data.includes('\r\n')) return Promise.resolve(true)
+
+      // Check session-level dismissal
+      const store = usePreferencesStore.getState()
+      if (!store.terminal.pasteWarningEnabled) return Promise.resolve(true)
+      if (store.pasteWarningDismissedForSession) return Promise.resolve(true)
+
+      return new Promise<boolean>((resolve) => {
+        setPendingPaste({ text: data, resolve })
+      })
+    }
+
+    // ── Auto-reconnect helper for SSH ──
+    const attemptReconnect = (connId: string): void => {
+      const sessionsStore = useSessionsStore.getState()
+      const attempt = sessionsStore.incrementReconnectAttempts(connId)
+      const maxAttempts = sessionsStore.maxReconnectAttempts
+
+      if (attempt > maxAttempts) {
+        terminal.write(
+          `\r\n\x1b[31mConnection lost after ${maxAttempts} attempts.\x1b[0m\r\n` +
+          '\x1b[90mPress Enter to reconnect manually.\x1b[0m\r\n'
+        )
+        // Listen for Enter to retry
+        const disposable = terminal.onData((d: string) => {
+          if (d === '\r' || d === '\n') {
+            disposable.dispose()
+            sessionsStore.resetReconnectAttempts(connId)
+            attemptReconnect(connId)
+          }
+        })
+        return
+      }
+
+      // Exponential backoff: 3s, 6s, 12s, 24s, 48s, 60s (cap)
+      const delay = Math.min(3000 * Math.pow(2, attempt - 1), 60000)
+      terminal.write(
+        `\r\n\x1b[33mReconnecting (attempt ${attempt}/${maxAttempts})...\x1b[0m `
+      )
+      terminal.write(`\x1b[90m[retry in ${Math.round(delay / 1000)}s]\x1b[0m\r\n`)
+
+      reconnectTimerId = setTimeout(() => {
+        if (userDisconnected) return
+
+        window.bifrost.ssh
+          .connect(connId)
+          .then(async (sid: string) => {
+            sshSessionId = sid
+            terminalIdRef.current = `ssh:${sid}`
+            onTerminalCreated?.(`ssh:${sid}`)
+            useSessionsStore.getState().resetReconnectAttempts(connId)
+
+            const { cols, rows } = terminal
+            await window.bifrost.ssh.openShell(sid, cols, rows)
+
+            terminal.write('\x1b[32mReconnected.\x1b[0m\r\n')
+
+            terminal.onData(async (data: string) => {
+              if (data.includes('\n') || data.includes('\r\n')) {
+                const allowed = await shouldAllowPaste(data)
+                if (!allowed) return
+              }
+              window.bifrost.ssh.write(sid, data)
+              broadcastInput(`ssh:${sid}`, data)
+            })
+
+            terminal.onResize(({ cols, rows }: { cols: number; rows: number }) => {
+              window.bifrost.ssh.resize(sid, cols, rows)
+            })
+          })
+          .catch(() => {
+            attemptReconnect(connId)
+          })
+      }, delay)
+    }
 
     if (connectionId) {
       // === SSH MODE ===
@@ -117,12 +307,17 @@ export function useTerminal({ paneId, connectionId, onTerminalCreated }: UseTerm
           const { cols, rows } = terminal
           await window.bifrost.ssh.openShell(sid, cols, rows)
 
-          // Wire xterm input → SSH
-          terminal.onData((data: string) => {
+          // Wire xterm input -> SSH (with paste interception + broadcast)
+          terminal.onData(async (data: string) => {
+            if (data.includes('\n') || data.includes('\r\n')) {
+              const allowed = await shouldAllowPaste(data)
+              if (!allowed) return
+            }
             window.bifrost.ssh.write(sid, data)
+            broadcastInput(`ssh:${sid}`, data)
           })
 
-          // Wire xterm resize → SSH
+          // Wire xterm resize -> SSH
           terminal.onResize(({ cols, rows }: { cols: number; rows: number }) => {
             window.bifrost.ssh.resize(sid, cols, rows)
           })
@@ -131,7 +326,7 @@ export function useTerminal({ paneId, connectionId, onTerminalCreated }: UseTerm
           terminal.write(`\x1b[31mSSH connection failed: ${err.message}\x1b[0m\r\n`)
         })
 
-      // Wire SSH output → xterm
+      // Wire SSH output -> xterm
       removeDataListener = window.bifrost.ssh.onData((id: string, data: string) => {
         if (id === sshSessionId) {
           terminal.write(data)
@@ -141,7 +336,16 @@ export function useTerminal({ paneId, connectionId, onTerminalCreated }: UseTerm
       removeExitListener = window.bifrost.ssh.onClose((id: string) => {
         if (id === sshSessionId) {
           terminal.write('\r\n\x1b[90m[SSH connection closed]\x1b[0m\r\n')
+          const prevSessionId = sshSessionId
           sshSessionId = null
+
+          // Auto-reconnect if enabled and not user-initiated
+          if (!userDisconnected && connectionId) {
+            const autoReconnect = usePreferencesStore.getState().terminal.autoReconnect
+            if (autoReconnect) {
+              attemptReconnect(connectionId)
+            }
+          }
         }
       })
     } else {
@@ -151,8 +355,14 @@ export function useTerminal({ paneId, connectionId, onTerminalCreated }: UseTerm
         terminalIdRef.current = id
         onTerminalCreated?.(id)
 
-        terminal.onData((data: string) => {
+        // Wire xterm input -> PTY (with paste interception + broadcast)
+        terminal.onData(async (data: string) => {
+          if (data.includes('\n') || data.includes('\r\n')) {
+            const allowed = await shouldAllowPaste(data)
+            if (!allowed) return
+          }
           window.bifrost.terminal.write(id, data)
+          broadcastInput(id, data)
         })
 
         terminal.onResize(({ cols, rows }: { cols: number; rows: number }) => {
@@ -174,6 +384,8 @@ export function useTerminal({ paneId, connectionId, onTerminalCreated }: UseTerm
     }
 
     return () => {
+      userDisconnected = true
+      if (reconnectTimerId) clearTimeout(reconnectTimerId)
       resizeObserver.disconnect()
       removeDataListener?.()
       removeExitListener?.()
@@ -187,5 +399,15 @@ export function useTerminal({ paneId, connectionId, onTerminalCreated }: UseTerm
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paneId])
 
-  return { containerRef, terminalIdRef, fitToContainer }
+  return {
+    containerRef,
+    terminalIdRef,
+    fitToContainer,
+    zoomIn,
+    zoomOut,
+    resetZoom,
+    pendingPaste,
+    confirmPaste,
+    cancelPaste
+  }
 }

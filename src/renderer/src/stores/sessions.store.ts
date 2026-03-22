@@ -20,9 +20,14 @@ export interface Tab {
   connectionId: string | null // null = local terminal, string = SSH connection ID
 }
 
+export type BroadcastMode = 'off' | 'panes' | 'all-tabs'
+
 interface SessionsState {
   tabs: Tab[]
   activeTabId: string | null
+  broadcastMode: BroadcastMode
+  reconnectAttempts: Map<string, number>
+  maxReconnectAttempts: number
 
   createTab: (title?: string, connectionId?: string) => string
   closeTab: (tabId: string) => void
@@ -31,6 +36,13 @@ interface SessionsState {
   setTerminalId: (tabId: string, paneId: string, terminalId: string) => void
   splitPane: (tabId: string, paneId: string, direction: SplitDirection) => void
   closeSplitPane: (tabId: string, paneId: string) => void
+  setBroadcastMode: (mode: BroadcastMode) => void
+  cycleBroadcastMode: () => void
+  getReconnectAttempts: (sessionId: string) => number
+  incrementReconnectAttempts: (sessionId: string) => number
+  resetReconnectAttempts: (sessionId: string) => void
+  getAllTerminalIds: () => string[]
+  getActiveTabTerminalIds: () => string[]
 }
 
 let paneIdCounter = 0
@@ -115,9 +127,22 @@ function setTerminalInPane(
   return pane
 }
 
+function collectTerminalIds(pane: TerminalPane): string[] {
+  if (pane.split) {
+    return [
+      ...collectTerminalIds(pane.split.panes[0]),
+      ...collectTerminalIds(pane.split.panes[1])
+    ]
+  }
+  return pane.terminalId ? [pane.terminalId] : []
+}
+
 export const useSessionsStore = create<SessionsState>((set, get) => ({
   tabs: [],
   activeTabId: null,
+  broadcastMode: 'off',
+  reconnectAttempts: new Map(),
+  maxReconnectAttempts: 50,
 
   createTab: (title?: string, connectionId?: string) => {
     const tabId = newTabId()
@@ -193,5 +218,52 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
         return result ? { ...t, rootPane: result } : t
       })
     }))
+  },
+
+  setBroadcastMode: (mode: BroadcastMode) => {
+    set({ broadcastMode: mode })
+  },
+
+  cycleBroadcastMode: () => {
+    const current = get().broadcastMode
+    const next: BroadcastMode =
+      current === 'off' ? 'panes' : current === 'panes' ? 'all-tabs' : 'off'
+    set({ broadcastMode: next })
+  },
+
+  getReconnectAttempts: (sessionId: string) => {
+    return get().reconnectAttempts.get(sessionId) ?? 0
+  },
+
+  incrementReconnectAttempts: (sessionId: string) => {
+    const attempts = get().reconnectAttempts
+    const current = attempts.get(sessionId) ?? 0
+    const next = current + 1
+    const updated = new Map(attempts)
+    updated.set(sessionId, next)
+    set({ reconnectAttempts: updated })
+    return next
+  },
+
+  resetReconnectAttempts: (sessionId: string) => {
+    const attempts = new Map(get().reconnectAttempts)
+    attempts.delete(sessionId)
+    set({ reconnectAttempts: attempts })
+  },
+
+  getAllTerminalIds: () => {
+    const { tabs } = get()
+    const ids: string[] = []
+    for (const tab of tabs) {
+      ids.push(...collectTerminalIds(tab.rootPane))
+    }
+    return ids
+  },
+
+  getActiveTabTerminalIds: () => {
+    const { tabs, activeTabId } = get()
+    const activeTab = tabs.find((t) => t.id === activeTabId)
+    if (!activeTab) return []
+    return collectTerminalIds(activeTab.rootPane)
   }
 }))
