@@ -13,29 +13,30 @@ import {
 import { cn } from '@renderer/lib/utils'
 import { ConnectionTree } from '@renderer/components/connections/ConnectionTree'
 import { QuickConnect } from '@renderer/components/connections/QuickConnect'
-
-type NavSection = 'connections' | 'clusters' | 'scripts'
+import type { ViewSection } from './AppShell'
 
 interface SidebarProps {
   onConnectSSH: (connectionId: string) => void
   onQuickConnect: (host: string, port: number, username: string) => void
-  activeNav: NavSection
-  onNavChange: (section: NavSection) => void
+  activeNav: ViewSection
+  onNavChange: (section: ViewSection) => void
+  onNewConnection: () => void
 }
 
-const NAV_ITEMS = [
+const NAV_ITEMS: Array<{ id: ViewSection; label: string; icon: typeof Network }> = [
   { id: 'connections', label: 'Connections', icon: Network },
   { id: 'clusters', label: 'Clusters', icon: LayoutGrid },
   { id: 'scripts', label: 'Scripts', icon: Code2 },
   { id: 'keys', label: 'Keys', icon: KeyRound },
   { id: 'logs', label: 'Logs', icon: FileText }
-] as const
+]
 
 export function Sidebar({
   onConnectSSH,
   onQuickConnect,
   activeNav,
-  onNavChange
+  onNavChange,
+  onNewConnection
 }: SidebarProps): JSX.Element {
   const { t } = useTranslation()
   const [showQuickConnect, setShowQuickConnect] = useState(false)
@@ -63,11 +64,7 @@ export function Sidebar({
                   ? 'bg-[#2a2a2d] text-[#e6e1e5]'
                   : 'text-[#c7c4d7] hover:text-[#e6e1e5] hover:bg-[#2a2a2d]/50'
               )}
-              onClick={() => {
-                if (item.id === 'connections' || item.id === 'clusters' || item.id === 'scripts') {
-                  onNavChange(item.id)
-                }
-              }}
+              onClick={() => onNavChange(item.id)}
               aria-current={isActive ? 'page' : undefined}
             >
               <Icon size={15} strokeWidth={1.5} />
@@ -82,8 +79,15 @@ export function Sidebar({
         <div className="h-[1px] bg-[#2a2a2d]/60" />
       </div>
 
-      {/* Connection tree */}
-      <ConnectionTree onConnect={onConnectSSH} />
+      {/* Connection tree (only when in connections view) */}
+      {activeNav === 'connections' && <ConnectionTree onConnect={onConnectSSH} />}
+
+      {/* Placeholder content for non-connections views */}
+      {activeNav !== 'connections' && (
+        <div className="flex-1 px-4 py-3 text-xs text-[#c7c4d7]/40">
+          {/* Could show contextual sidebar content per section */}
+        </div>
+      )}
 
       {/* Quick connect toggle */}
       {showQuickConnect && (
@@ -94,41 +98,44 @@ export function Sidebar({
 
       {/* Bottom actions */}
       <div className="mt-auto px-2 pb-2 space-y-0.5">
-        {/* New connection button */}
         <button
           className={cn(
             'w-full flex items-center gap-2.5 px-2.5 py-1.5 text-sm rounded transition-colors',
-            'text-[#c7c4d7] hover:text-[#e6e1e5] hover:bg-[#2a2a2d]/50'
+            activeNav === 'new-connection'
+              ? 'bg-[#2a2a2d] text-[#e6e1e5]'
+              : 'text-[#c7c4d7] hover:text-[#e6e1e5] hover:bg-[#2a2a2d]/50'
           )}
-          onClick={() => setShowQuickConnect(!showQuickConnect)}
+          onClick={onNewConnection}
           aria-label="New connection"
         >
           <Plus size={15} strokeWidth={1.5} />
           <span className="text-xs font-medium tracking-wide uppercase">New Connection</span>
         </button>
 
-        {/* Settings */}
         <button
           className={cn(
             'w-full flex items-center gap-2.5 px-2.5 py-1.5 text-sm rounded transition-colors',
-            'text-[#c7c4d7] hover:text-[#e6e1e5] hover:bg-[#2a2a2d]/50'
+            activeNav === 'settings' || activeNav === 'preferences'
+              ? 'bg-[#2a2a2d] text-[#e6e1e5]'
+              : 'text-[#c7c4d7] hover:text-[#e6e1e5] hover:bg-[#2a2a2d]/50'
           )}
+          onClick={() => onNavChange('settings')}
           aria-label={t('sidebar.settings')}
         >
           <Settings size={15} strokeWidth={1.5} />
           <span>Settings</span>
         </button>
 
-        {/* Support */}
         <button
           className={cn(
             'w-full flex items-center gap-2.5 px-2.5 py-1.5 text-sm rounded transition-colors',
             'text-[#c7c4d7] hover:text-[#e6e1e5] hover:bg-[#2a2a2d]/50'
           )}
-          aria-label="Support"
+          onClick={() => setShowQuickConnect(!showQuickConnect)}
+          aria-label="Quick connect"
         >
           <HelpCircle size={15} strokeWidth={1.5} />
-          <span>Support</span>
+          <span>Quick Connect</span>
         </button>
       </div>
     </div>
