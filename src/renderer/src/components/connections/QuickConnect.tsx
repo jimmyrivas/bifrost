@@ -1,5 +1,10 @@
 import { useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Zap } from 'lucide-react'
+import { cn } from '@renderer/lib/utils'
+
+const SPECTRAL_GRADIENT =
+  'linear-gradient(135deg, #ff6b6b, #ffa36b, #ffd56b, #6bff6b, #6bd5ff, #6b6bff, #d56bff)'
 
 interface QuickConnectProps {
   onConnect: (host: string, port: number, username: string) => void
@@ -8,12 +13,12 @@ interface QuickConnectProps {
 export function QuickConnect({ onConnect }: QuickConnectProps): JSX.Element {
   const { t } = useTranslation()
   const [value, setValue] = useState('')
+  const [isFocused, setIsFocused] = useState(false)
 
   const handleSubmit = useCallback(() => {
     const trimmed = value.trim()
     if (!trimmed) return
 
-    // Parse formats: user@host:port, user@host, host:port, host
     let username = ''
     let host = trimmed
     let port = 22
@@ -36,24 +41,43 @@ export function QuickConnect({ onConnect }: QuickConnectProps): JSX.Element {
   }, [value, onConnect])
 
   return (
-    <div className="flex items-center gap-1 px-2 py-1 border-b border-zinc-800">
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') handleSubmit()
-        }}
-        placeholder="user@host:port"
-        className="flex-1 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-blue-500"
-        aria-label="Quick connect"
-      />
+    <div className="relative flex items-center gap-1.5 px-2 py-2">
+      <div className="relative flex-1">
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handleSubmit()
+          }}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
+          placeholder="user@host:port"
+          className={cn(
+            'w-full bg-[#39393c] rounded px-2.5 py-1.5',
+            "text-sm text-[#e6e1e5] placeholder-[#c7c4d7]/40 font-['JetBrains_Mono',monospace]",
+            'outline-none transition-colors'
+          )}
+          aria-label="Quick connect"
+        />
+        {/* Spectral thread focus indicator */}
+        <div
+          className={cn(
+            'absolute bottom-0 left-0 right-0 h-[1px] rounded-b transition-opacity',
+            isFocused ? 'opacity-100' : 'opacity-0'
+          )}
+          style={{ background: SPECTRAL_GRADIENT }}
+        />
+      </div>
       <button
         onClick={handleSubmit}
-        className="px-2 py-1 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded transition-colors"
+        className={cn(
+          'flex items-center justify-center w-7 h-7 rounded shrink-0 transition-colors',
+          'text-[#c7c4d7] hover:text-[#e6e1e5] hover:bg-[#2a2a2d]'
+        )}
         aria-label={t('actions.connect')}
       >
-        {t('actions.connect')}
+        <Zap size={14} strokeWidth={1.5} />
       </button>
     </div>
   )

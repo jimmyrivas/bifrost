@@ -1,18 +1,69 @@
-import { useTranslation } from 'react-i18next'
 import { useSessionsStore } from '@renderer/stores/sessions.store'
+import { cn } from '@renderer/lib/utils'
+import { Radio } from 'lucide-react'
 
 export function StatusBar(): JSX.Element {
-  const { t } = useTranslation()
   const tabs = useSessionsStore((s) => s.tabs)
+  const activeTabId = useSessionsStore((s) => s.activeTabId)
+  const activeTab = tabs.find((t) => t.id === activeTabId)
 
   return (
-    <div className="flex items-center justify-between h-6 px-3 bg-zinc-900 border-t border-zinc-800 text-xs text-zinc-500 select-none">
-      <div className="flex items-center gap-3">
-        <span>{t('status.ready')}</span>
-        <span>{tabs.length} {tabs.length === 1 ? 'tab' : 'tabs'}</span>
+    <div
+      className={cn(
+        'flex items-center justify-between h-6 px-3 shrink-0 select-none',
+        'bg-[#131316] text-[11px] text-[#c7c4d7]/70 font-[Inter]'
+      )}
+      role="status"
+      aria-label="Status bar"
+    >
+      {/* Left section */}
+      <div className="flex items-center gap-4">
+        {/* Connection status */}
+        <span className="flex items-center gap-1.5">
+          <span
+            className={cn(
+              'inline-block w-1.5 h-1.5 rounded-full',
+              activeTab ? 'bg-[#22c55e]' : 'bg-[#c7c4d7]/30'
+            )}
+          />
+          <span className="uppercase tracking-wide text-[10px] font-medium">
+            {activeTab ? 'Ready' : 'No session'}
+          </span>
+        </span>
+
+        {/* Tab count */}
+        <span>
+          {tabs.length} {tabs.length === 1 ? 'tab' : 'tabs'}
+        </span>
       </div>
-      <div className="flex items-center gap-3">
-        <span>UTF-8</span>
+
+      {/* Center section */}
+      <div className="flex items-center gap-4">
+        <span className="uppercase tracking-wide text-[10px]">Encoding: UTF-8</span>
+      </div>
+
+      {/* Right section */}
+      <div className="flex items-center gap-4">
+        {/* PCC indicator */}
+        <span className="flex items-center gap-1.5">
+          <Radio size={11} strokeWidth={1.5} className="text-[#c7c4d7]/40" />
+          <span className="uppercase tracking-wide text-[10px]">PCC</span>
+        </span>
+
+        {/* Connected session info */}
+        {activeTab && (
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#22c55e]" />
+            <span className="uppercase tracking-wide text-[10px] font-medium">
+              Connected: {activeTab.title}
+            </span>
+          </span>
+        )}
+
+        {/* Cluster info */}
+        <span className="uppercase tracking-wide text-[10px]">
+          Cluster: Alpha
+        </span>
       </div>
     </div>
   )

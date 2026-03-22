@@ -1,43 +1,181 @@
 @import "tailwindcss";
 
+/* ============================================
+   Spectral Command Design System
+   "Obsidian glass panes floating in a void"
+   ============================================ */
+
 :root {
-  --bifrost-gradient: linear-gradient(135deg, #ff6b6b, #ffa36b, #ffd56b, #6bff6b, #6bd5ff, #6b6bff, #d56bff);
+  /* Surface Hierarchy */
+  --surface: #131316;
+  --surface-container-lowest: #0d0d0f;
+  --surface-container-low: #1b1b1e;
+  --surface-container-high: #2a2a2d;
+  --surface-container-highest: #3a3a3d;
+  --surface-bright: #39393c;
+
+  /* Content Colors */
+  --on-surface: #e4e4e7;
+  --on-surface-variant: #c7c4d7;
+  --outline-variant: rgba(199, 196, 215, 0.15);
+
+  /* Bifrost Spectral Gradient */
+  --bifrost-gradient: linear-gradient(
+    135deg,
+    #ff6b6b,
+    #ffa36b,
+    #ffd56b,
+    #6bff6b,
+    #6bd5ff,
+    #6b6bff,
+    #d56bff
+  );
+
+  /* Semantic Colors */
+  --success: #22c55e;
+  --error: #ef4444;
+  --warning: #eab308;
+
+  /* Typography */
+  --font-ui: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+
+  /* Spacing & Rounding */
+  --radius: 0.25rem;
 }
+
+/* ============================================
+   Base
+   ============================================ */
 
 body {
   margin: 0;
   padding: 0;
   overflow: hidden;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  background-color: #0a0a0b;
-  color: #e4e4e7;
+  font-family: var(--font-ui);
+  background-color: var(--surface);
+  color: var(--on-surface);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Scrollbar styling */
+/* ============================================
+   Scrollbar Styling
+   ============================================ */
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #18181b;
+  background: var(--surface-container-low);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #3f3f46;
+  background: var(--surface-container-highest);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #52525b;
+  background: var(--surface-bright);
 }
 
-/* xterm.js container */
+/* ============================================
+   Ghost Border
+   A border that is "felt rather than seen"
+   ============================================ */
+
+.ghost-border {
+  outline: 1px solid var(--outline-variant);
+  outline-offset: -1px;
+}
+
+/* ============================================
+   Spectral Thread
+   Rainbow gradient bottom border for focus states
+   ============================================ */
+
+.spectral-thread {
+  position: relative;
+}
+
+.spectral-thread::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--bifrost-gradient);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.spectral-thread:focus-within::after,
+.spectral-thread.spectral-thread--active::after {
+  opacity: 1;
+}
+
+/* ============================================
+   Spectral Text
+   Gradient text using the Bifrost palette
+   ============================================ */
+
+.spectral-text {
+  background: var(--bifrost-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ============================================
+   Surface Utility Classes
+   Map to the surface hierarchy levels
+   ============================================ */
+
+.surface-0 {
+  background-color: var(--surface);
+}
+
+.surface-1 {
+  background-color: var(--surface-container-low);
+}
+
+.surface-2 {
+  background-color: var(--surface-container-high);
+}
+
+.surface-3 {
+  background-color: var(--surface-bright);
+}
+
+/* ============================================
+   xterm.js container
+   ============================================ */
+
 .xterm-container {
   width: 100%;
   height: 100%;
+  background-color: var(--surface-container-lowest);
 }
 
 .xterm-container .xterm {
   padding: 4px;
+}
+
+/* ============================================
+   Typography helpers
+   ============================================ */
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+.text-on-surface {
+  color: var(--on-surface);
+}
+
+.text-on-surface-variant {
+  color: var(--on-surface-variant);
 }

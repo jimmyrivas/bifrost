@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Plus, Trash2, Eye, EyeOff, Pencil, Check, X } from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
+import { Switch } from '@renderer/components/ui/switch'
 import { cn } from '@renderer/lib/utils'
 
 export interface Variable {
@@ -18,13 +19,10 @@ interface VariableManagerProps {
 }
 
 let varCounter = 0
-function newVarId(): string {
-  return `var-${++varCounter}-${Date.now()}`
-}
+function newVarId(): string { return `var-${++varCounter}-${Date.now()}` }
 
-const checkClass = 'h-4 w-4 rounded border-zinc-600 bg-zinc-900 accent-zinc-400'
-const cellClass = 'px-3 py-2 text-sm text-zinc-300'
-const headerClass = 'px-3 py-2 text-xs font-medium text-zinc-400 text-left'
+const headerCell = 'px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--on-surface-variant)] text-left'
+const bodyCell = 'px-4 py-2.5 text-sm'
 
 export function VariableManager({ variables, onChange }: VariableManagerProps): JSX.Element {
   const { t } = useTranslation()
@@ -66,9 +64,7 @@ export function VariableManager({ variables, onChange }: VariableManagerProps): 
   const cancelEdit = useCallback(() => {
     if (editingId) {
       const v = variables.find((x) => x.id === editingId)
-      if (v && !v.name && !v.value) {
-        onChange(variables.filter((x) => x.id !== editingId))
-      }
+      if (v && !v.name && !v.value) onChange(variables.filter((x) => x.id !== editingId))
     }
     setEditingId(null)
   }, [editingId, variables, onChange])
@@ -76,124 +72,108 @@ export function VariableManager({ variables, onChange }: VariableManagerProps): 
   const toggleVisible = useCallback((id: string) => {
     setVisibleIds((prev) => {
       const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
+      if (next.has(id)) next.delete(id); else next.add(id)
       return next
     })
   }, [])
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4 p-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-zinc-100">{t('variables.title', 'Global Variables')}</h3>
-        <Button variant="outline" size="sm" onClick={addVariable}>
-          <Plus className="h-3 w-3" /> {t('variables.add', 'Add Variable')}
+        <h3 className="text-sm font-semibold text-[var(--on-surface)]">{t('variables.title', 'Global Variables')}</h3>
+        <Button variant="spectral" size="sm" onClick={addVariable}>
+          <Plus className="h-3 w-3" /> {t('variables.add', 'ADD VARIABLE')}
         </Button>
       </div>
 
-      <div className="border border-zinc-700 rounded-md overflow-hidden">
-        <table className="w-full" role="grid" aria-label={t('variables.title', 'Global Variables')}>
-          <thead className="bg-zinc-800/50">
-            <tr>
-              <th className={headerClass}>{t('variables.name', 'Name')}</th>
-              <th className={headerClass}>{t('variables.value', 'Value')}</th>
-              <th className={cn(headerClass, 'w-24 text-center')}>{t('variables.password', 'Password')}</th>
-              <th className={cn(headerClass, 'w-24 text-center')}>{t('variables.actions', 'Actions')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {variables.length === 0 && (
-              <tr>
-                <td colSpan={4} className="text-center text-xs text-zinc-500 py-6">
-                  {t('variables.empty', 'No variables defined.')}
-                </td>
-              </tr>
-            )}
-            {variables.map((v) => {
-              const isEditing = editingId === v.id
-              const isVisible = visibleIds.has(v.id)
+      <div className="rounded-[var(--radius)] overflow-hidden" role="grid" aria-label={t('variables.title', 'Global Variables')}>
+        {/* Header */}
+        <div className="surface-2 flex" role="row">
+          <div className={cn(headerCell, 'flex-1')} role="columnheader">{t('variables.name', 'NAME')}</div>
+          <div className={cn(headerCell, 'flex-1')} role="columnheader">{t('variables.value', 'VALUE')}</div>
+          <div className={cn(headerCell, 'w-24 text-center')} role="columnheader">{t('variables.password', 'SECRET')}</div>
+          <div className={cn(headerCell, 'w-24 text-center')} role="columnheader">{t('variables.actions', 'ACTIONS')}</div>
+        </div>
 
-              return (
-                <tr key={v.id} className="border-t border-zinc-700/50 hover:bg-zinc-800/30">
-                  <td className={cellClass}>
-                    {isEditing ? (
-                      <Input
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        className="h-7 text-xs"
-                        placeholder={t('variables.namePlaceholder', 'VARIABLE_NAME')}
-                        autoFocus
-                        onKeyDown={(e) => { if (e.key === 'Enter') confirmEdit(); if (e.key === 'Escape') cancelEdit() }}
-                        aria-label={t('variables.name', 'Name')}
-                      />
-                    ) : (
-                      <span className="font-mono text-xs">{v.name}</span>
+        {/* Body */}
+        {variables.length === 0 ? (
+          <div className="text-center text-xs text-[var(--on-surface-variant)] py-8 surface-1">
+            {t('variables.empty', 'No variables defined.')}
+          </div>
+        ) : variables.map((v, idx) => {
+          const isEditing = editingId === v.id
+          const isVisible = visibleIds.has(v.id)
+
+          return (
+            <div
+              key={v.id} role="row"
+              className={cn(
+                'flex items-center transition-colors',
+                idx % 2 === 0 ? 'bg-[var(--surface-container-low)]' : 'bg-[var(--surface)]',
+                'hover:bg-[var(--surface-container-high)]/50'
+              )}
+            >
+              <div className={cn(bodyCell, 'flex-1')}>
+                {isEditing ? (
+                  <Input
+                    value={editName} onChange={(e) => setEditName(e.target.value)}
+                    className="h-7 text-xs" placeholder="VARIABLE_NAME" autoFocus
+                    onKeyDown={(e) => { if (e.key === 'Enter') confirmEdit(); if (e.key === 'Escape') cancelEdit() }}
+                    aria-label="Variable name"
+                  />
+                ) : (
+                  <span className="font-[family-name:var(--font-mono)] text-xs text-[var(--on-surface)]">{v.name}</span>
+                )}
+              </div>
+
+              <div className={cn(bodyCell, 'flex-1')}>
+                {isEditing ? (
+                  <Input
+                    value={editValue} onChange={(e) => setEditValue(e.target.value)}
+                    type={editIsPassword ? 'password' : 'text'} className="h-7 text-xs"
+                    onKeyDown={(e) => { if (e.key === 'Enter') confirmEdit(); if (e.key === 'Escape') cancelEdit() }}
+                    aria-label="Variable value"
+                  />
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-[family-name:var(--font-mono)] text-xs text-[var(--on-surface-variant)]">
+                      {v.isPassword && !isVisible ? '********' : v.value}
+                    </span>
+                    {v.isPassword && (
+                      <button type="button" onClick={() => toggleVisible(v.id)} className="text-[var(--on-surface-variant)] hover:text-[var(--on-surface)]" aria-label={isVisible ? 'Hide value' : 'Show value'}>
+                        {isVisible ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                      </button>
                     )}
-                  </td>
-                  <td className={cellClass}>
-                    {isEditing ? (
-                      <Input
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        type={editIsPassword ? 'password' : 'text'}
-                        className="h-7 text-xs"
-                        onKeyDown={(e) => { if (e.key === 'Enter') confirmEdit(); if (e.key === 'Escape') cancelEdit() }}
-                        aria-label={t('variables.value', 'Value')}
-                      />
-                    ) : (
-                      <div className="flex items-center gap-1">
-                        <span className="font-mono text-xs">
-                          {v.isPassword && !isVisible ? '********' : v.value}
-                        </span>
-                        {v.isPassword && (
-                          <button type="button" onClick={() => toggleVisible(v.id)} className="text-zinc-400 hover:text-zinc-200" aria-label={isVisible ? 'Hide value' : 'Show value'}>
-                            {isVisible ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </td>
-                  <td className={cn(cellClass, 'text-center')}>
-                    {isEditing ? (
-                      <input
-                        type="checkbox"
-                        className={checkClass}
-                        checked={editIsPassword}
-                        onChange={(e) => setEditIsPassword(e.target.checked)}
-                        aria-label={t('variables.togglePassword', 'Mark as password')}
-                      />
-                    ) : (
-                      <span className="text-xs">{v.isPassword ? t('variables.yes', 'Yes') : t('variables.no', 'No')}</span>
-                    )}
-                  </td>
-                  <td className={cn(cellClass, 'text-center')}>
-                    <div className="flex items-center justify-center gap-1">
-                      {isEditing ? (
-                        <>
-                          <button type="button" onClick={confirmEdit} className="text-green-400 hover:text-green-300" aria-label={t('common.confirm', 'Confirm')}>
-                            <Check className="h-4 w-4" />
-                          </button>
-                          <button type="button" onClick={cancelEdit} className="text-zinc-400 hover:text-zinc-200" aria-label={t('common.cancel', 'Cancel')}>
-                            <X className="h-4 w-4" />
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button type="button" onClick={() => startEdit(v)} className="text-zinc-400 hover:text-zinc-200" aria-label={t('common.edit', 'Edit')}>
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                          <button type="button" onClick={() => deleteVariable(v.id)} className="text-red-400 hover:text-red-300" aria-label={t('common.delete', 'Delete')}>
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+                  </div>
+                )}
+              </div>
+
+              <div className={cn(bodyCell, 'w-24 flex justify-center')}>
+                {isEditing ? (
+                  <Switch checked={editIsPassword} onCheckedChange={setEditIsPassword} aria-label="Mark as secret" />
+                ) : (
+                  <span className={cn('text-[10px] font-semibold uppercase', v.isPassword ? 'text-[var(--warning)]' : 'text-[var(--on-surface-variant)]')}>
+                    {v.isPassword ? 'YES' : 'NO'}
+                  </span>
+                )}
+              </div>
+
+              <div className={cn(bodyCell, 'w-24 flex items-center justify-center gap-1.5')}>
+                {isEditing ? (
+                  <>
+                    <button type="button" onClick={confirmEdit} className="text-[var(--success)] hover:text-[var(--success)]/80" aria-label="Confirm"><Check className="h-4 w-4" /></button>
+                    <button type="button" onClick={cancelEdit} className="text-[var(--on-surface-variant)] hover:text-[var(--on-surface)]" aria-label="Cancel"><X className="h-4 w-4" /></button>
+                  </>
+                ) : (
+                  <>
+                    <button type="button" onClick={() => startEdit(v)} className="text-[var(--on-surface-variant)] hover:text-[var(--on-surface)]" aria-label="Edit"><Pencil className="h-3.5 w-3.5" /></button>
+                    <button type="button" onClick={() => deleteVariable(v.id)} className="text-[var(--error)] hover:text-[var(--error)]/80" aria-label="Delete"><Trash2 className="h-3.5 w-3.5" /></button>
+                  </>
+                )}
+              </div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )

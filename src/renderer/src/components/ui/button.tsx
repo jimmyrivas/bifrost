@@ -4,21 +4,26 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@renderer/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-400 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[var(--radius)] text-sm font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--on-surface-variant)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
-        default: "bg-zinc-100 text-zinc-900 shadow hover:bg-zinc-200",
-        destructive: "bg-red-600 text-zinc-100 shadow-sm hover:bg-red-700",
+        default:
+          "ghost-border bg-transparent text-[var(--on-surface)] hover:bg-[var(--surface-bright)]/10",
+        spectral:
+          "ghost-border spectral-text hover:bg-[var(--surface-bright)]/10",
+        destructive:
+          "ghost-border text-[var(--error)] hover:bg-[var(--error)]/10",
         outline:
-          "border border-zinc-700 bg-transparent text-zinc-100 shadow-sm hover:bg-zinc-800 hover:text-zinc-100",
-        ghost: "text-zinc-100 hover:bg-zinc-800 hover:text-zinc-100",
-        link: "text-zinc-100 underline-offset-4 hover:underline",
+          "ghost-border text-[var(--on-surface-variant)] hover:bg-[var(--surface-bright)]/10 hover:text-[var(--on-surface)]",
+        ghost:
+          "text-[var(--on-surface-variant)] hover:bg-[var(--surface-bright)]/10 hover:text-[var(--on-surface)]",
+        link: "text-[var(--on-surface)] underline-offset-4 hover:underline",
       },
       size: {
         default: "h-9 px-4 py-2",
-        sm: "h-8 rounded-md px-3 text-xs",
-        lg: "h-10 rounded-md px-8",
+        sm: "h-8 px-3 text-xs",
+        lg: "h-10 px-8",
         icon: "h-9 w-9",
       },
     },

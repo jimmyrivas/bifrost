@@ -1,5 +1,7 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { ChevronRight, ChevronDown, Terminal, Monitor, Tv, Radio, Laptop } from 'lucide-react'
+import { cn } from '@renderer/lib/utils'
 import { useConnectionsStore, type Connection, type Group } from '@renderer/stores/connections.store'
 
 interface TreeNode {
@@ -14,7 +16,6 @@ function buildTree(groups: Group[], connections: Connection[]): TreeNode[] {
   const groupMap = new Map<string, TreeNode>()
   const rootNodes: TreeNode[] = []
 
-  // Create group nodes
   for (const group of groups) {
     groupMap.set(group.id, {
       id: group.id,
@@ -25,7 +26,6 @@ function buildTree(groups: Group[], connections: Connection[]): TreeNode[] {
     })
   }
 
-  // Nest groups
   for (const group of groups) {
     const node = groupMap.get(group.id)!
     if (group.parentId && groupMap.has(group.parentId)) {
@@ -35,7 +35,6 @@ function buildTree(groups: Group[], connections: Connection[]): TreeNode[] {
     }
   }
 
-  // Add connections to groups or root
   for (const conn of connections) {
     const connNode: TreeNode = {
       id: conn.id,
@@ -54,15 +53,126 @@ function buildTree(groups: Group[], connections: Connection[]): TreeNode[] {
   return rootNodes
 }
 
-function methodIcon(method: string): string {
+function MethodIcon({ method }: { method: string }): JSX.Element {
+  const props = { size: 13, strokeWidth: 1.5, className: 'shrink-0 text-[#c7c4d7]/60' }
   switch (method) {
-    case 'ssh': return '🔑'
-    case 'rdp': return '🖥️'
-    case 'vnc': return '📺'
-    case 'telnet': return '📡'
-    case 'local': return '💻'
-    default: return '🔗'
+    case 'ssh':
+      return <Terminal {...props} />
+    case 'rdp':
+      return <Monitor {...props} />
+    case 'vnc':
+      return <Tv {...props} />
+    case 'telnet':
+      return <Radio {...props} />
+    case 'local':
+      return <Laptop {...props} />
+    default:
+      return <Terminal {...props} />
   }
+}
+
+function GroupNode({
+  node,
+  depth,
+  onSelect,
+  onConnect,
+  selectedId
+}: {
+  node: TreeNode
+  depth: number
+  onSelect: (id: string) => void
+  onConnect: (id: string) => void
+  selectedId: string | null
+}): JSX.Element {
+  const [expanded, setExpanded] = useState(true)
+
+  return (
+    <div>
+      <button
+        className={cn(
+          'w-full flex items-center gap-1.5 py-1 px-2 transition-colors',
+          'text-[#c7c4d7]/70 hover:bg-[#2a2a2d]/30'
+        )}
+        style={{ paddingLeft: `${depth * 12 + 8}px` }}
+        onClick={() => setExpanded(!expanded)}
+        aria-expanded={expanded}
+      >
+        {expanded ? (
+          <ChevronDown size={12} strokeWidth={1.5} className="shrink-0" />
+        ) : (
+          <ChevronRight size={12} strokeWidth={1.5} className="shrink-0" />
+        )}
+        <span className="text-[10px] font-semibold tracking-[0.1em] uppercase truncate">
+          {node.name}
+        </span>
+        <span className="text-[10px] text-[#c7c4d7]/30 ml-auto">
+          {node.children.length}
+        </span>
+      </button>
+      {expanded &&
+        node.children.map((child) => (
+          <TreeNodeItem
+            key={child.id}
+            node={child}
+            depth={depth + 1}
+            onSelect={onSelect}
+            onConnect={onConnect}
+            selectedId={selectedId}
+          />
+        ))}
+    </div>
+  )
+}
+
+function ConnectionNode({
+  node,
+  depth,
+  onSelect,
+  onConnect,
+  selectedId
+}: {
+  node: TreeNode
+  depth: number
+  onSelect: (id: string) => void
+  onConnect: (id: string) => void
+  selectedId: string | null
+}): JSX.Element {
+  const isSelected = node.id === selectedId
+  const conn = node.data as Connection
+
+  return (
+    <div
+      className={cn(
+        'relative flex items-center gap-2 py-1 px-2 text-[13px] cursor-pointer transition-colors',
+        isSelected
+          ? 'bg-[#2a2a2d] text-[#e6e1e5]'
+          : 'text-[#c7c4d7] hover:bg-[#2a2a2d]/50 hover:text-[#e6e1e5]'
+      )}
+      style={{ paddingLeft: `${depth * 12 + 8}px` }}
+      onClick={() => onSelect(node.id)}
+      onDoubleClick={() => onConnect(node.id)}
+      role="treeitem"
+      aria-selected={isSelected}
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') onConnect(node.id)
+      }}
+    >
+      {/* Selected left accent */}
+      {isSelected && (
+        <div className="absolute left-0 top-1 bottom-1 w-[2px] rounded-full bg-[#6bd5ff]" />
+      )}
+
+      <MethodIcon method={conn.method} />
+      <span className="truncate font-['Inter']">{node.name}</span>
+
+      {/* Status dot */}
+      <span
+        className="ml-auto w-1.5 h-1.5 rounded-full shrink-0 bg-[#c7c4d7]/20"
+        aria-label="Disconnected"
+      />
+    </div>
+  )
 }
 
 function TreeNodeItem({
@@ -78,56 +188,25 @@ function TreeNodeItem({
   onConnect: (id: string) => void
   selectedId: string | null
 }): JSX.Element {
-  const isSelected = node.id === selectedId
-
   if (node.type === 'group') {
     return (
-      <div>
-        <div
-          className="flex items-center gap-1 py-1 px-2 text-sm text-zinc-400 hover:bg-zinc-800/50 cursor-pointer"
-          style={{ paddingLeft: `${depth * 12 + 8}px` }}
-        >
-          <span className="text-xs">📁</span>
-          <span className="truncate">{node.name}</span>
-        </div>
-        {node.children.map((child) => (
-          <TreeNodeItem
-            key={child.id}
-            node={child}
-            depth={depth + 1}
-            onSelect={onSelect}
-            onConnect={onConnect}
-            selectedId={selectedId}
-          />
-        ))}
-      </div>
+      <GroupNode
+        node={node}
+        depth={depth}
+        onSelect={onSelect}
+        onConnect={onConnect}
+        selectedId={selectedId}
+      />
     )
   }
-
-  const conn = node.data as Connection
   return (
-    <div
-      className={`flex items-center gap-1 py-1 px-2 text-sm cursor-pointer transition-colors ${
-        isSelected ? 'bg-zinc-700/50 text-zinc-100' : 'text-zinc-300 hover:bg-zinc-800/50'
-      }`}
-      style={{ paddingLeft: `${depth * 12 + 8}px` }}
-      onClick={() => onSelect(node.id)}
-      onDoubleClick={() => onConnect(node.id)}
-      role="treeitem"
-      aria-selected={isSelected}
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') onConnect(node.id)
-      }}
-    >
-      <span className="text-xs">{methodIcon(conn.method)}</span>
-      <span className="truncate">{node.name}</span>
-      {conn.host && (
-        <span className="text-xs text-zinc-500 ml-auto truncate max-w-[80px]">
-          {conn.host}
-        </span>
-      )}
-    </div>
+    <ConnectionNode
+      node={node}
+      depth={depth}
+      onSelect={onSelect}
+      onConnect={onConnect}
+      selectedId={selectedId}
+    />
   )
 }
 
@@ -152,9 +231,13 @@ export function ConnectionTree({ onConnect }: ConnectionTreeProps): JSX.Element 
   const tree = buildTree(groups, connections)
 
   return (
-    <div className="flex-1 overflow-y-auto" role="tree" aria-label={t('sidebar.connections')}>
+    <div
+      className="flex-1 overflow-y-auto py-1"
+      role="tree"
+      aria-label={t('sidebar.connections')}
+    >
       {tree.length === 0 ? (
-        <div className="p-3 text-xs text-zinc-500 text-center">
+        <div className="px-4 py-6 text-xs text-[#c7c4d7]/40 text-center">
           No connections yet
         </div>
       ) : (

@@ -1,46 +1,134 @@
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import {
+  Network,
+  LayoutGrid,
+  Code2,
+  KeyRound,
+  FileText,
+  Settings,
+  Plus,
+  HelpCircle
+} from 'lucide-react'
+import { cn } from '@renderer/lib/utils'
 import { ConnectionTree } from '@renderer/components/connections/ConnectionTree'
 import { QuickConnect } from '@renderer/components/connections/QuickConnect'
+
+type NavSection = 'connections' | 'clusters' | 'scripts'
 
 interface SidebarProps {
   onConnectSSH: (connectionId: string) => void
   onQuickConnect: (host: string, port: number, username: string) => void
+  activeNav: NavSection
+  onNavChange: (section: NavSection) => void
 }
 
-export function Sidebar({ onConnectSSH, onQuickConnect }: SidebarProps): JSX.Element {
+const NAV_ITEMS = [
+  { id: 'connections', label: 'Connections', icon: Network },
+  { id: 'clusters', label: 'Clusters', icon: LayoutGrid },
+  { id: 'scripts', label: 'Scripts', icon: Code2 },
+  { id: 'keys', label: 'Keys', icon: KeyRound },
+  { id: 'logs', label: 'Logs', icon: FileText }
+] as const
+
+export function Sidebar({
+  onConnectSSH,
+  onQuickConnect,
+  activeNav,
+  onNavChange
+}: SidebarProps): JSX.Element {
   const { t } = useTranslation()
+  const [showQuickConnect, setShowQuickConnect] = useState(false)
 
   return (
-    <div className="flex flex-col w-full h-full bg-zinc-950 border-r border-zinc-800">
-      {/* Bifrost branding */}
-      <div className="flex items-center h-9 px-3 border-b border-zinc-800">
-        <span
-          className="text-sm font-semibold bg-clip-text text-transparent"
-          style={{
-            backgroundImage: 'linear-gradient(135deg, #ff6b6b, #ffa36b, #ffd56b, #6bff6b, #6bd5ff, #6b6bff, #d56bff)'
-          }}
-        >
-          {t('app.name')}
+    <div className="flex flex-col w-full h-full bg-[#1b1b1e] select-none">
+      {/* Workspace title */}
+      <div className="px-4 pt-3 pb-2">
+        <span className="text-[10px] font-semibold tracking-[0.12em] uppercase text-[#c7c4d7]/60">
+          Spectral Command
         </span>
       </div>
 
-      {/* Quick connect */}
-      <QuickConnect onConnect={onQuickConnect} />
+      {/* Navigation items */}
+      <nav className="px-2 space-y-0.5" role="navigation" aria-label="Sidebar navigation">
+        {NAV_ITEMS.map((item) => {
+          const isActive = item.id === activeNav
+          const Icon = item.icon
+          return (
+            <button
+              key={item.id}
+              className={cn(
+                'w-full flex items-center gap-2.5 px-2.5 py-1.5 text-sm rounded transition-colors',
+                isActive
+                  ? 'bg-[#2a2a2d] text-[#e6e1e5]'
+                  : 'text-[#c7c4d7] hover:text-[#e6e1e5] hover:bg-[#2a2a2d]/50'
+              )}
+              onClick={() => {
+                if (item.id === 'connections' || item.id === 'clusters' || item.id === 'scripts') {
+                  onNavChange(item.id)
+                }
+              }}
+              aria-current={isActive ? 'page' : undefined}
+            >
+              <Icon size={15} strokeWidth={1.5} />
+              <span>{item.label}</span>
+            </button>
+          )
+        })}
+      </nav>
+
+      {/* Separator via spacing */}
+      <div className="mt-3 mx-3 mb-1">
+        <div className="h-[1px] bg-[#2a2a2d]/60" />
+      </div>
 
       {/* Connection tree */}
       <ConnectionTree onConnect={onConnectSSH} />
 
-      {/* Settings at bottom */}
-      <div className="p-2 border-t border-zinc-800">
+      {/* Quick connect toggle */}
+      {showQuickConnect && (
+        <div className="px-2 pb-2">
+          <QuickConnect onConnect={onQuickConnect} />
+        </div>
+      )}
+
+      {/* Bottom actions */}
+      <div className="mt-auto px-2 pb-2 space-y-0.5">
+        {/* New connection button */}
         <button
-          className="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-zinc-400 hover:bg-zinc-800 rounded transition-colors"
+          className={cn(
+            'w-full flex items-center gap-2.5 px-2.5 py-1.5 text-sm rounded transition-colors',
+            'text-[#c7c4d7] hover:text-[#e6e1e5] hover:bg-[#2a2a2d]/50'
+          )}
+          onClick={() => setShowQuickConnect(!showQuickConnect)}
+          aria-label="New connection"
+        >
+          <Plus size={15} strokeWidth={1.5} />
+          <span className="text-xs font-medium tracking-wide uppercase">New Connection</span>
+        </button>
+
+        {/* Settings */}
+        <button
+          className={cn(
+            'w-full flex items-center gap-2.5 px-2.5 py-1.5 text-sm rounded transition-colors',
+            'text-[#c7c4d7] hover:text-[#e6e1e5] hover:bg-[#2a2a2d]/50'
+          )}
           aria-label={t('sidebar.settings')}
         >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <circle cx="8" cy="8" r="2" />
-            <path d="M8 1v2M8 13v2M1 8h2M13 8h2M2.9 2.9l1.4 1.4M11.7 11.7l1.4 1.4M13.1 2.9l-1.4 1.4M4.3 11.7l-1.4 1.4" />
-          </svg>
-          {t('sidebar.settings')}
+          <Settings size={15} strokeWidth={1.5} />
+          <span>Settings</span>
+        </button>
+
+        {/* Support */}
+        <button
+          className={cn(
+            'w-full flex items-center gap-2.5 px-2.5 py-1.5 text-sm rounded transition-colors',
+            'text-[#c7c4d7] hover:text-[#e6e1e5] hover:bg-[#2a2a2d]/50'
+          )}
+          aria-label="Support"
+        >
+          <HelpCircle size={15} strokeWidth={1.5} />
+          <span>Support</span>
         </button>
       </div>
     </div>

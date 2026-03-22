@@ -39,11 +39,14 @@ export function useTerminal({ paneId, onTerminalCreated }: UseTerminalOptions): 
       scrollback: prefs.scrollback,
       allowProposedApi: true,
       theme: {
-        background: '#0a0a0b',
-        foreground: '#e4e4e7',
-        cursor: '#a1a1aa',
-        selectionBackground: '#3f3f4680',
-        black: '#18181b',
+        background: '#0d0d0f',        // surface_container_lowest
+        foreground: '#e4e4e7',         // on_surface
+        cursor: '#c7c4d7',            // on_surface_variant
+        cursorAccent: '#0d0d0f',
+        selectionBackground: '#39393c80', // surface_bright with opacity
+        selectionForeground: '#ffffff',
+        selectionInactiveBackground: '#2a2a2d60',
+        black: '#1b1b1e',             // surface_container_low
         red: '#ef4444',
         green: '#22c55e',
         yellow: '#eab308',

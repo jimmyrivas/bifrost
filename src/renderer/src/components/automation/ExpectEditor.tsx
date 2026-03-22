@@ -1,9 +1,9 @@
 import { useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Plus, Trash2, ChevronUp, ChevronDown, GripVertical } from 'lucide-react'
+import { Plus, Trash2, GripVertical, ChevronUp, ChevronDown, Activity, Info, ListOrdered } from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
-import { Label } from '@renderer/components/ui/label'
+import { Switch } from '@renderer/components/ui/switch'
 import { cn } from '@renderer/lib/utils'
 
 export interface ExpectRule {
@@ -15,6 +15,7 @@ export interface ExpectRule {
   hideFromLog: boolean
   onMatch: string | null
   onFail: string | null
+  priority: number
 }
 
 interface ExpectEditorProps {
@@ -23,41 +24,32 @@ interface ExpectEditorProps {
 }
 
 let ruleCounter = 0
-function newRuleId(): string {
-  return `rule-${++ruleCounter}-${Date.now()}`
-}
+function newRuleId(): string { return `rule-${++ruleCounter}-${Date.now()}` }
 
-const selectClass = 'flex h-8 w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-400'
-const switchClass = 'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors'
+const headerCell = 'px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--on-surface-variant)] text-left'
+const bodyCell = 'px-3 py-2.5 text-sm'
+const sectionLabel = 'text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--on-surface-variant)] mb-2'
 
-function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }): JSX.Element {
-  return (
-    <button
-      role="switch"
-      type="button"
-      aria-checked={checked}
-      aria-label={label}
-      className={cn(switchClass, checked ? 'bg-zinc-400' : 'bg-zinc-700')}
-      onClick={() => onChange(!checked)}
-    >
-      <span className={cn('pointer-events-none block h-4 w-4 rounded-full bg-zinc-100 shadow transition-transform', checked ? 'translate-x-4' : 'translate-x-0')} />
-    </button>
-  )
-}
+const selectClass = cn(
+  'flex h-8 w-full rounded-[var(--radius)] bg-[var(--surface-container-highest)] px-2 py-1',
+  'text-xs text-[var(--on-surface)] ghost-border focus-visible:outline-none [font-family:var(--font-mono)]'
+)
 
 export function ExpectEditor({ rules, onChange }: ExpectEditorProps): JSX.Element {
   const { t } = useTranslation()
+  const [selectedId, setSelectedId] = useState<string | null>(null)
 
   const addRule = useCallback(() => {
     onChange([...rules, {
       id: newRuleId(), pattern: '', sendText: '', timeout: 10,
-      sendReturn: true, hideFromLog: false, onMatch: null, onFail: null
+      sendReturn: true, hideFromLog: false, onMatch: null, onFail: null, priority: rules.length
     }])
   }, [rules, onChange])
 
   const removeRule = useCallback((id: string) => {
     onChange(rules.filter((r) => r.id !== id))
-  }, [rules, onChange])
+    if (selectedId === id) setSelectedId(null)
+  }, [rules, onChange, selectedId])
 
   const updateRule = useCallback(<K extends keyof ExpectRule>(id: string, key: K, value: ExpectRule[K]) => {
     onChange(rules.map((r) => r.id === id ? { ...r, [key]: value } : r))
@@ -74,81 +66,109 @@ export function ExpectEditor({ rules, onChange }: ExpectEditorProps): JSX.Elemen
   const ruleOptions = rules.map((r) => ({ value: r.id, label: r.pattern || r.id }))
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4 p-4">
+      {/* Breadcrumb + actions */}
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-zinc-100">{t('expect.title', 'Expect Rules')}</h3>
-        <Button variant="outline" size="sm" onClick={addRule}>
-          <Plus className="h-3 w-3" /> {t('expect.add', 'Add Rule')}
-        </Button>
+        <div className="flex items-center gap-2 text-xs text-[var(--on-surface-variant)]">
+          <span>scripts</span>
+          <span className="text-[var(--on-surface-variant)]/50">/</span>
+          <span>automation</span>
+          <span className="text-[var(--on-surface-variant)]/50">&gt;</span>
+          <span className="text-[var(--on-surface)] font-[family-name:var(--font-mono)]">expect_editor.rules</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button variant="spectral" size="sm" onClick={addRule}>
+            <Plus className="h-3 w-3" /> {t('expect.add', 'ADD RULE')}
+          </Button>
+          <Switch aria-label="Enable expect engine" />
+        </div>
       </div>
 
-      {rules.length === 0 && (
-        <p className="text-xs text-zinc-500 text-center py-4">{t('expect.empty', 'No expect rules defined.')}</p>
+      {/* Rules table */}
+      {rules.length === 0 ? (
+        <div className="text-xs text-[var(--on-surface-variant)] text-center py-8 surface-2 rounded-[var(--radius)]">
+          {t('expect.empty', 'No expect rules defined. Add a rule to get started.')}
+        </div>
+      ) : (
+        <div className="rounded-[var(--radius)] overflow-hidden" role="table" aria-label={t('expect.title', 'Expect Rules')}>
+          <div className="surface-2 flex" role="row">
+            <div className={cn(headerCell, 'w-8')} role="columnheader" />
+            <div className={cn(headerCell, 'flex-1')} role="columnheader">REGEX PATTERN</div>
+            <div className={cn(headerCell, 'w-36')} role="columnheader">SEND TEXT</div>
+            <div className={cn(headerCell, 'w-20')} role="columnheader">TIMEOUT</div>
+            <div className={cn(headerCell, 'w-28')} role="columnheader">ON MATCH</div>
+            <div className={cn(headerCell, 'w-28')} role="columnheader">ON FAIL</div>
+            <div className={cn(headerCell, 'w-16 text-center')} role="columnheader">PRI</div>
+            <div className={cn(headerCell, 'w-20')} role="columnheader" />
+          </div>
+          {rules.map((rule, idx) => (
+            <div
+              key={rule.id} role="row"
+              onClick={() => setSelectedId(rule.id)}
+              className={cn(
+                'flex items-center transition-colors cursor-pointer',
+                idx % 2 === 0 ? 'bg-[var(--surface-container-low)]' : 'bg-[var(--surface-container-high)]',
+                selectedId === rule.id && 'ring-1 ring-inset ring-[var(--outline-variant)]'
+              )}
+            >
+              <div className={cn(bodyCell, 'w-8 flex flex-col items-center gap-0.5')}>
+                <GripVertical className="h-3 w-3 text-[var(--on-surface-variant)]" />
+              </div>
+              <div className={cn(bodyCell, 'flex-1')}>
+                <Input value={rule.pattern} onChange={(e) => updateRule(rule.id, 'pattern', e.target.value)} placeholder="regex..." className="h-7 text-xs" />
+              </div>
+              <div className={cn(bodyCell, 'w-36')}>
+                <Input value={rule.sendText} onChange={(e) => updateRule(rule.id, 'sendText', e.target.value)} className="h-7 text-xs" type="password" />
+              </div>
+              <div className={cn(bodyCell, 'w-20')}>
+                <Input type="number" min={1} value={rule.timeout} onChange={(e) => updateRule(rule.id, 'timeout', Number(e.target.value))} className="h-7 text-xs" />
+              </div>
+              <div className={cn(bodyCell, 'w-28')}>
+                <select className={cn(selectClass, 'h-7 text-[10px]')} value={rule.onMatch ?? ''} onChange={(e) => updateRule(rule.id, 'onMatch', e.target.value || null)}>
+                  <option value="">NONE</option>
+                  {ruleOptions.filter((o) => o.value !== rule.id).map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className={cn(bodyCell, 'w-28')}>
+                <select className={cn(selectClass, 'h-7 text-[10px]')} value={rule.onFail ?? ''} onChange={(e) => updateRule(rule.id, 'onFail', e.target.value || null)}>
+                  <option value="">NEXT RULE</option>
+                  {ruleOptions.filter((o) => o.value !== rule.id).map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className={cn(bodyCell, 'w-16 text-center text-xs text-[var(--on-surface-variant)]')}>{idx + 1}</div>
+              <div className={cn(bodyCell, 'w-20 flex items-center gap-1')}>
+                <Switch checked={rule.sendReturn} onCheckedChange={(v) => updateRule(rule.id, 'sendReturn', v)} aria-label="Toggle active" />
+                <button type="button" onClick={(e) => { e.stopPropagation(); removeRule(rule.id) }} className="text-[var(--error)] hover:text-[var(--error)]/80 ml-1" aria-label="Delete rule">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
 
-      <div className="flex flex-col gap-2" role="list" aria-label={t('expect.title', 'Expect Rules')}>
-        {rules.map((rule, idx) => (
-          <div key={rule.id} role="listitem" className="flex gap-2 items-start p-3 bg-zinc-800/50 rounded-md border border-zinc-700/50">
-            <div className="flex flex-col gap-1 pt-1" aria-label={t('expect.reorder', 'Reorder')}>
-              <GripVertical className="h-4 w-4 text-zinc-500" />
-              <button type="button" onClick={() => moveRule(idx, -1)} disabled={idx === 0} className="text-zinc-400 hover:text-zinc-200 disabled:opacity-30" aria-label={t('expect.moveUp', 'Move up')}>
-                <ChevronUp className="h-3 w-3" />
-              </button>
-              <button type="button" onClick={() => moveRule(idx, 1)} disabled={idx === rules.length - 1} className="text-zinc-400 hover:text-zinc-200 disabled:opacity-30" aria-label={t('expect.moveDown', 'Move down')}>
-                <ChevronDown className="h-3 w-3" />
-              </button>
-            </div>
-
-            <div className="flex-1 grid grid-cols-3 gap-2">
-              <div>
-                <Label className="text-xs">{t('expect.pattern', 'Pattern')}</Label>
-                <Input value={rule.pattern} onChange={(e) => updateRule(rule.id, 'pattern', e.target.value)} placeholder="regex..." className="h-8 text-xs" />
-              </div>
-              <div>
-                <Label className="text-xs">{t('expect.sendText', 'Send Text')}</Label>
-                <Input value={rule.sendText} onChange={(e) => updateRule(rule.id, 'sendText', e.target.value)} className="h-8 text-xs" />
-              </div>
-              <div>
-                <Label className="text-xs">{t('expect.timeout', 'Timeout (s)')}</Label>
-                <Input type="number" min={1} value={rule.timeout} onChange={(e) => updateRule(rule.id, 'timeout', Number(e.target.value))} className="h-8 text-xs" />
-              </div>
-
-              <div className="flex items-center gap-3">
-                <Label className="text-xs">{t('expect.sendReturn', 'Send Return')}</Label>
-                <Toggle checked={rule.sendReturn} onChange={(v) => updateRule(rule.id, 'sendReturn', v)} label={t('expect.sendReturn', 'Send Return')} />
-              </div>
-              <div className="flex items-center gap-3">
-                <Label className="text-xs">{t('expect.hideLog', 'Hide from Log')}</Label>
-                <Toggle checked={rule.hideFromLog} onChange={(v) => updateRule(rule.id, 'hideFromLog', v)} label={t('expect.hideLog', 'Hide from Log')} />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 col-span-3">
-                <div>
-                  <Label className="text-xs">{t('expect.onMatch', 'On Match')}</Label>
-                  <select className={selectClass} value={rule.onMatch ?? ''} onChange={(e) => updateRule(rule.id, 'onMatch', e.target.value || null)}>
-                    <option value="">{t('expect.none', '-- None --')}</option>
-                    {ruleOptions.filter((o) => o.value !== rule.id).map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <Label className="text-xs">{t('expect.onFail', 'On Fail')}</Label>
-                  <select className={selectClass} value={rule.onFail ?? ''} onChange={(e) => updateRule(rule.id, 'onFail', e.target.value || null)}>
-                    <option value="">{t('expect.none', '-- None --')}</option>
-                    {ruleOptions.filter((o) => o.value !== rule.id).map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <Button variant="ghost" size="icon" onClick={() => removeRule(rule.id)} className="shrink-0 text-red-400 hover:text-red-300 h-8 w-8" aria-label={t('expect.delete', 'Delete rule')}>
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
-        ))}
+      {/* Bottom info cards */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className={cn('rounded-[var(--radius)] surface-2 p-3')}>
+          <h4 className={sectionLabel}><Info className="inline h-3 w-3 mr-1" />RULE DETAILS</h4>
+          <p className="text-xs text-[var(--on-surface-variant)] leading-relaxed">
+            {selectedId ? `Selected: ${rules.find((r) => r.id === selectedId)?.pattern || 'unnamed'}` : 'Select a rule to view details.'}
+          </p>
+        </div>
+        <div className={cn('rounded-[var(--radius)] surface-2 p-3')}>
+          <h4 className={sectionLabel}><ListOrdered className="inline h-3 w-3 mr-1" />MATCH SEQUENCE</h4>
+          <p className="text-xs text-[var(--on-surface-variant)] leading-relaxed font-[family-name:var(--font-mono)]">
+            {rules.length > 0 ? `${rules.length} rules in chain` : 'No active rules'}
+          </p>
+        </div>
+        <div className={cn('rounded-[var(--radius)] surface-2 p-3')}>
+          <h4 className={sectionLabel}><Activity className="inline h-3 w-3 mr-1" />ACTIVE MONITOR</h4>
+          <p className="text-xs text-[var(--success)] font-[family-name:var(--font-mono)]">Idle</p>
+        </div>
       </div>
     </div>
   )
