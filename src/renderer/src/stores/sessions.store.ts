@@ -47,6 +47,8 @@ interface SessionsState {
   resetReconnectAttempts: (sessionId: string) => void
   getAllTerminalIds: () => string[]
   getActiveTabTerminalIds: () => string[]
+  markTabDetaching: (tabId: string) => void
+  isTabDetaching: (tabId: string) => boolean
   /** #6: Explode a tab with splits into separate tabs, one per leaf pane */
   explodePanes: (tabId: string) => void
   /** #7: Combine all open tabs into one tab with vertical splits */
@@ -162,6 +164,7 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
   reconnectAttempts: new Map(),
   maxReconnectAttempts: 50,
   maximizedPaneId: null,
+  _detachingTabs: new Set<string>(),
 
   createTab: (title?: string, connectionId?: string) => {
     const tabId = newTabId()
@@ -298,6 +301,14 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
     const activeTab = tabs.find((t) => t.id === activeTabId)
     if (!activeTab) return []
     return collectTerminalIds(activeTab.rootPane)
+  },
+
+  markTabDetaching: (tabId: string) => {
+    get()._detachingTabs.add(tabId)
+  },
+
+  isTabDetaching: (tabId: string) => {
+    return get()._detachingTabs.has(tabId)
   },
 
   explodePanes: (tabId: string) => {

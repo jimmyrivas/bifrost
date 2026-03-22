@@ -492,10 +492,15 @@ export function useTerminal({ paneId, connectionId, onTerminalCreated }: UseTerm
       resizeObserver.disconnect()
       removeDataListener?.()
       removeExitListener?.()
-      if (connectionId && sshSessionId) {
-        window.bifrost.ssh.disconnect(sshSessionId)
-      } else if (terminalIdRef.current && !connectionId) {
-        window.bifrost.terminal.destroy(terminalIdRef.current)
+      // Don't kill PTY/SSH if this tab is being detached (session transferred)
+      const detaching = useSessionsStore.getState()._detachingTabs.has(paneId) ||
+        Array.from(useSessionsStore.getState()._detachingTabs).length > 0
+      if (!detaching) {
+        if (connectionId && sshSessionId) {
+          window.bifrost.ssh.disconnect(sshSessionId)
+        } else if (terminalIdRef.current && !connectionId) {
+          window.bifrost.terminal.destroy(terminalIdRef.current)
+        }
       }
       terminal.dispose()
     }

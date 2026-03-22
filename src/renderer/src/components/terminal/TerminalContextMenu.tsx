@@ -179,17 +179,18 @@ export function TerminalContextMenu({
       const tab = tabs.find((t) => t.id === tabId)
       const title = tab?.title ?? 'Terminal'
       const connId = tab?.connectionId ?? ''
-      // Get the actual session ID from the terminal pane
-      const paneEl = document.querySelector(`[data-pane-id]`)
+      const paneEl = document.querySelector(`[data-pane-id="${paneId}"]`)
       const termId = paneEl?.getAttribute('data-terminal-id') ?? ''
       if (window.bifrost?.window?.detachTab) {
+        // Mark tab as detaching so useTerminal cleanup won't kill the PTY
+        useSessionsStore.getState().markTabDetaching(tabId)
         await window.bifrost.window.detachTab(tabId, title, connId, termId)
         closeTab(tabId)
       }
     } catch (err) {
       console.error('Detach failed:', err)
     }
-  }, [tabId, closeTab])
+  }, [tabId, paneId, closeTab])
 
   return (
     <ContextMenu>
