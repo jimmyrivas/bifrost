@@ -1,5 +1,5 @@
-import { readFileSync, existsSync, globSync, readdirSync } from 'fs'
-import { join, dirname, resolve } from 'path'
+import { readFileSync, existsSync, readdirSync } from 'fs'
+import { join, dirname, resolve, basename } from 'path'
 import { homedir } from 'os'
 
 export interface SshConfigEntry {
@@ -42,8 +42,19 @@ function resolveIncludes(line: string, baseDir: string): string[] {
     : resolve(baseDir, pattern)
 
   try {
-    const matched = globSync(absolutePattern)
-    return matched.filter((f) => existsSync(f))
+    // Simple glob: if pattern contains *, list directory and filter
+    if (absolutePattern.includes('*')) {
+      const dir = dirname(absolutePattern)
+      const globPart = basename(absolutePattern)
+      const regex = new RegExp('^' + globPart.replace(/\*/g, '.*').replace(/\?/g, '.') + '$')
+      if (!existsSync(dir)) return []
+      return readdirSync(dir)
+        .filter((f) => regex.test(f))
+        .map((f) => join(dir, f))
+        .filter((f) => existsSync(f))
+    }
+    // No glob — just check if file exists
+    return existsSync(absolutePattern) ? [absolutePattern] : []
   } catch {
     return []
   }
