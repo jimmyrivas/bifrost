@@ -1,5 +1,6 @@
-import { useEffect, useCallback, useRef } from 'react'
+import { useEffect, useCallback, useRef, useMemo } from 'react'
 import { AppShell } from '@renderer/components/layout/AppShell'
+import { DetachedTerminal } from '@renderer/components/terminal/DetachedTerminal'
 import { useSessionsStore } from '@renderer/stores/sessions.store'
 
 const CHORD_TIMEOUT = 1000
@@ -168,6 +169,16 @@ export function App(): JSX.Element {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [handleKeyDown])
+
+  // Check if this window is a detached terminal
+  const detachTabId = useMemo(() => {
+    const params = new URLSearchParams(window.location.search)
+    return params.get('detach')
+  }, [])
+
+  if (detachTabId) {
+    return <DetachedTerminal tabId={detachTabId} />
+  }
 
   return <AppShell />
 }

@@ -166,11 +166,16 @@ app.whenReady().then(() => {
   })
 
   // Detach tab to separate window (#72)
-  ipcMain.handle('window:detachTab', (_event, _tabId: string) => {
+  // The detached window loads with ?detach=tabId — the renderer checks this
+  // and renders only that terminal (no sidebar, no tab bar).
+  // Main window removes the tab from its store via IPC event.
+  const detachedWindows = new Map<string, BrowserWindow>()
+
+  ipcMain.handle('window:detachTab', (_event, tabId: string, title: string) => {
     const detachedWindow = new BrowserWindow({
       width: 900,
       height: 600,
-      title: 'Bifrost — Detached Terminal',
+      title: `Bifrost — ${title}`,
       backgroundColor: '#131316',
       autoHideMenuBar: true,
       webPreferences: {
@@ -180,13 +185,31 @@ app.whenReady().then(() => {
         nodeIntegration: false
       }
     })
+    detachedWindows.set(tabId, detachedWindow)
+
     if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-      detachedWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+      detachedWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}?detach=${tabId}`)
     } else {
-      detachedWindow.loadFile(join(__dirname, '../renderer/index.html'))
+      detachedWindow.loadFile(join(__dirname, '../renderer/index.html'), {
+        query: { detach: tabId }
+      })
     }
-    // IPC handlers are already registered globally — no need to re-register.
-    // The detached window shares the same IPC channels as the main window.
+
+    detachedWindow.on('closed', () => {
+      detachedWindows.delete(tabId)
+      // Notify main window to re-attach the tab
+      if (!mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('window:tabReattached', tabId)
+      }
+    })
+  })
+
+  // Re-attach: close the detached window, main window gets the event above
+  ipcMain.handle('window:reattachTab', (_event, tabId: string) => {
+    const win = detachedWindows.get(tabId)
+    if (win && !win.isDestroyed()) {
+      win.close() // This triggers the 'closed' event which sends tabReattached
+    }
   })
 
   // Confirm dialog for pre/post exec commands (#55)

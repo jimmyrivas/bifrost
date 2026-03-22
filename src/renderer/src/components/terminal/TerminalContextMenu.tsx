@@ -172,20 +172,21 @@ export function TerminalContextMenu({
     }
   }, [paneId])
 
-  // #72 Detach to Window — use Electron IPC to open a real BrowserWindow
+  // #72 Detach to Window — opens a new Electron window with just the terminal
   const handleDetach = useCallback(async () => {
     try {
+      const { tabs } = useSessionsStore.getState()
+      const tab = tabs.find((t) => t.id === tabId)
+      const title = tab?.title ?? 'Terminal'
       if (window.bifrost?.window?.detachTab) {
-        await window.bifrost.window.detachTab(tabId)
-      } else {
-        // Fallback: open new window via window.open
-        const url = `${window.location.origin}?detach=true&tab=${tabId}`
-        window.open(url, '_blank', 'width=900,height=600,nodeIntegration=no')
+        await window.bifrost.window.detachTab(tabId, title)
+        // Hide the tab from main window (it's now in a separate window)
+        closeTab(tabId)
       }
     } catch (err) {
       console.error('Detach failed:', err)
     }
-  }, [tabId])
+  }, [tabId, closeTab])
 
   return (
     <ContextMenu>
