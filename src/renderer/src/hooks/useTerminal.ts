@@ -90,25 +90,41 @@ export function useTerminal({ paneId, onTerminalCreated }: UseTerminalOptions): 
     terminalRef.current = terminal
     fitAddonRef.current = fitAddon
 
+    // Handle resize
+    const resizeObserver = new ResizeObserver(() => {
+      fitAddon.fit()
+    })
+    resizeObserver.observe(containerRef.current)
+
+    // Guard: bifrost API only available inside Electron (preload)
+    if (!window.bifrost?.terminal) {
+      terminal.write('\x1b[33mBifrost terminal API not available.\x1b[0m\r\n')
+      terminal.write('\x1b[90mRunning outside Electron — terminal IPC disabled.\x1b[0m\r\n')
+      return () => {
+        resizeObserver.disconnect()
+        terminal.dispose()
+      }
+    }
+
     // Create PTY in main process
     const { cols, rows } = terminal
+    let removeDataListener: (() => void) | null = null
+    let removeExitListener: (() => void) | null = null
+
     window.bifrost.terminal.create(cols, rows).then((id: string) => {
       terminalIdRef.current = id
       onTerminalCreated?.(id)
 
-      // Wire terminal input → PTY
       terminal.onData((data: string) => {
         window.bifrost.terminal.write(id, data)
       })
 
-      // Wire terminal resize → PTY
       terminal.onResize(({ cols, rows }: { cols: number; rows: number }) => {
         window.bifrost.terminal.resize(id, cols, rows)
       })
     })
 
-    // Wire PTY output → terminal
-    const removeDataListener = window.bifrost.terminal.onData(
+    removeDataListener = window.bifrost.terminal.onData(
       (id: string, data: string) => {
         if (id === terminalIdRef.current) {
           terminal.write(data)
@@ -116,7 +132,7 @@ export function useTerminal({ paneId, onTerminalCreated }: UseTerminalOptions): 
       }
     )
 
-    const removeExitListener = window.bifrost.terminal.onExit(
+    removeExitListener = window.bifrost.terminal.onExit(
       (id: string, _exitCode: number) => {
         if (id === terminalIdRef.current) {
           terminal.write('\r\n\x1b[90m[Process exited]\x1b[0m\r\n')
@@ -124,16 +140,10 @@ export function useTerminal({ paneId, onTerminalCreated }: UseTerminalOptions): 
       }
     )
 
-    // Handle resize
-    const resizeObserver = new ResizeObserver(() => {
-      fitAddon.fit()
-    })
-    resizeObserver.observe(containerRef.current)
-
     return () => {
       resizeObserver.disconnect()
-      removeDataListener()
-      removeExitListener()
+      removeDataListener?.()
+      removeExitListener?.()
       if (terminalIdRef.current) {
         window.bifrost.terminal.destroy(terminalIdRef.current)
       }
