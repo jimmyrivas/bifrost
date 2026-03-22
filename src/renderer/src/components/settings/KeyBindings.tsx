@@ -1,5 +1,8 @@
-import { useState } from 'react'
-import { RotateCcw } from 'lucide-react'
+import { useState, useCallback, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
+import { RotateCcw, Keyboard } from 'lucide-react'
+import { Button } from '@renderer/components/ui/button'
+import { cn } from '@renderer/lib/utils'
 
 interface KeyBinding {
   action: string
@@ -14,89 +17,158 @@ const defaultBindings: KeyBinding[] = [
   { action: 'prevTab', label: 'Previous Tab', keys: 'Ctrl+Shift+Tab' },
   { action: 'splitH', label: 'Split Horizontal', keys: 'Ctrl+Shift+H' },
   { action: 'splitV', label: 'Split Vertical', keys: 'Ctrl+Shift+V' },
-  { action: 'toggleSidebar', label: 'Toggle Sidebar', keys: 'Ctrl+B' },
-  { action: 'quickConnect', label: 'Quick Connect', keys: 'Ctrl+K' },
-  { action: 'settings', label: 'Settings', keys: 'Ctrl+,' },
-  { action: 'quakeToggle', label: 'Quake Terminal', keys: 'F12' },
-  { action: 'pccToggle', label: 'Toggle PCC', keys: 'Ctrl+Shift+P' },
-  { action: 'find', label: 'Find in Terminal', keys: 'Ctrl+F' }
+  { action: 'closePane', label: 'Close Pane', keys: 'Ctrl+Shift+W' },
+  { action: 'copy', label: 'Copy', keys: 'Ctrl+Shift+C' },
+  { action: 'paste', label: 'Paste', keys: 'Ctrl+Shift+V' },
+  { action: 'find', label: 'Find', keys: 'Ctrl+Shift+F' },
+  { action: 'zoomIn', label: 'Zoom In', keys: 'Ctrl+=' },
+  { action: 'zoomOut', label: 'Zoom Out', keys: 'Ctrl+-' },
+  { action: 'resetZoom', label: 'Reset Zoom', keys: 'Ctrl+0' },
+  { action: 'togglePCC', label: 'Toggle PCC', keys: 'Ctrl+Shift+P' },
+  { action: 'preferences', label: 'Preferences', keys: 'Ctrl+,' },
+  { action: 'quickConnect', label: 'Quick Connect', keys: 'Ctrl+Shift+N' },
 ]
 
-export function KeyBindings(): JSX.Element {
-  const [bindings, setBindings] = useState<KeyBinding[]>([...defaultBindings])
-  const [recording, setRecording] = useState<string | null>(null)
+const headerClass = 'px-4 py-2 text-xs font-medium text-zinc-400 text-left'
+const cellClass = 'px-4 py-2.5 text-sm'
 
-  const handleKeyRecord = (action: string, event: React.KeyboardEvent): void => {
-    event.preventDefault()
-    const parts: string[] = []
-    if (event.ctrlKey) parts.push('Ctrl')
-    if (event.shiftKey) parts.push('Shift')
-    if (event.altKey) parts.push('Alt')
-    if (event.metaKey) parts.push('Meta')
+function formatKeyEvent(e: KeyboardEvent): string {
+  const parts: string[] = []
+  if (e.ctrlKey) parts.push('Ctrl')
+  if (e.altKey) parts.push('Alt')
+  if (e.shiftKey) parts.push('Shift')
+  if (e.metaKey) parts.push('Super')
 
-    const key = event.key
-    if (!['Control', 'Shift', 'Alt', 'Meta'].includes(key)) {
-      parts.push(key.length === 1 ? key.toUpperCase() : key)
-      setBindings(bindings.map((b) => (b.action === action ? { ...b, keys: parts.join('+') } : b)))
-      setRecording(null)
+  const key = e.key
+  if (!['Control', 'Alt', 'Shift', 'Meta'].includes(key)) {
+    if (key === ' ') parts.push('Space')
+    else if (key.length === 1) parts.push(key.toUpperCase())
+    else parts.push(key)
+  }
+
+  return parts.join('+')
+}
+
+interface KeyBindingsProps {
+  bindings?: KeyBinding[]
+  onChange?: (bindings: KeyBinding[]) => void
+}
+
+export function KeyBindings({ bindings: externalBindings, onChange }: KeyBindingsProps): JSX.Element {
+  const { t } = useTranslation()
+  const [bindings, setBindings] = useState<KeyBinding[]>(externalBindings ?? defaultBindings.map((b) => ({ ...b })))
+  const [recordingAction, setRecordingAction] = useState<string | null>(null)
+  const recordingRef = useRef<string | null>(null)
+
+  const updateBindings = useCallback((next: KeyBinding[]) => {
+    setBindings(next)
+    onChange?.(next)
+  }, [onChange])
+
+  const startRecording = useCallback((action: string) => {
+    setRecordingAction(action)
+    recordingRef.current = action
+  }, [])
+
+  const cancelRecording = useCallback(() => {
+    setRecordingAction(null)
+    recordingRef.current = null
+  }, [])
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent): void => {
+      if (!recordingRef.current) return
+      e.preventDefault()
+      e.stopPropagation()
+
+      if (e.key === 'Escape') {
+        cancelRecording()
+        return
+      }
+
+      if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return
+
+      const combo = formatKeyEvent(e)
+      if (!combo) return
+
+      const action = recordingRef.current
+      updateBindings(
+        bindings.map((b) => b.action === action ? { ...b, keys: combo } : b)
+      )
+      setRecordingAction(null)
+      recordingRef.current = null
     }
-  }
 
-  const resetDefaults = (): void => {
-    setBindings([...defaultBindings])
-  }
+    window.addEventListener('keydown', handler, true)
+    return () => window.removeEventListener('keydown', handler, true)
+  }, [bindings, cancelRecording, updateBindings])
+
+  const resetDefaults = useCallback(() => {
+    const reset = defaultBindings.map((b) => ({ ...b }))
+    updateBindings(reset)
+    cancelRecording()
+  }, [updateBindings, cancelRecording])
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-zinc-200">Key Bindings</h3>
-        <button
-          onClick={resetDefaults}
-          className="flex items-center gap-1 px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded"
-        >
-          <RotateCcw className="w-3 h-3" />
-          Reset Defaults
-        </button>
-      </div>
-
-      <div className="border border-zinc-700 rounded overflow-hidden">
-        <table className="w-full text-xs">
-          <thead className="bg-zinc-800">
-            <tr>
-              <th className="text-left px-3 py-2 text-zinc-400 font-medium">Action</th>
-              <th className="text-left px-3 py-2 text-zinc-400 font-medium">Shortcut</th>
-            </tr>
-          </thead>
-          <tbody>
-            {bindings.map((binding) => (
-              <tr key={binding.action} className="border-t border-zinc-800 hover:bg-zinc-800/30">
-                <td className="px-3 py-1.5 text-zinc-300">{binding.label}</td>
-                <td className="px-3 py-1.5">
-                  <button
-                    onClick={() => setRecording(binding.action)}
-                    onKeyDown={(e) => {
-                      if (recording === binding.action) {
-                        handleKeyRecord(binding.action, e)
-                      }
-                    }}
-                    className={`px-2 py-0.5 rounded font-mono text-xs transition-colors ${
-                      recording === binding.action
-                        ? 'bg-blue-900/50 border border-blue-500 text-blue-300'
-                        : 'bg-zinc-900 border border-zinc-700 text-zinc-300 hover:border-zinc-500'
-                    }`}
-                  >
-                    {recording === binding.action ? 'Press keys...' : binding.keys}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <h3 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
+          <Keyboard className="h-4 w-4" />
+          {t('keybindings.title', 'Key Bindings')}
+        </h3>
+        <Button variant="outline" size="sm" onClick={resetDefaults}>
+          <RotateCcw className="h-3 w-3" /> {t('keybindings.reset', 'Reset to Defaults')}
+        </Button>
       </div>
 
       <p className="text-xs text-zinc-500">
-        Click a shortcut to record a new key combination.
+        {t('keybindings.hint', 'Click a key combination to record a new binding. Press Escape to cancel.')}
       </p>
+
+      <div className="border border-zinc-700 rounded-md overflow-hidden">
+        <table className="w-full" role="grid" aria-label={t('keybindings.title', 'Key Bindings')}>
+          <thead className="bg-zinc-800/50">
+            <tr>
+              <th className={headerClass}>{t('keybindings.action', 'Action')}</th>
+              <th className={cn(headerClass, 'w-60')}>{t('keybindings.keyCombination', 'Key Combination')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {bindings.map((binding) => {
+              const isRecording = recordingAction === binding.action
+
+              return (
+                <tr key={binding.action} className="border-t border-zinc-700/50 hover:bg-zinc-800/30">
+                  <td className={cn(cellClass, 'text-zinc-300')}>
+                    {t(`keybindings.actions.${binding.action}`, binding.label)}
+                  </td>
+                  <td className={cellClass}>
+                    <button
+                      type="button"
+                      onClick={() => isRecording ? cancelRecording() : startRecording(binding.action)}
+                      className={cn(
+                        'inline-flex items-center gap-1 px-3 py-1 rounded text-xs font-mono transition-colors border',
+                        isRecording
+                          ? 'border-blue-500 bg-blue-950/30 text-blue-400 animate-pulse'
+                          : 'border-zinc-600 bg-zinc-800 text-zinc-300 hover:border-zinc-500 hover:text-zinc-100'
+                      )}
+                      aria-label={isRecording
+                        ? t('keybindings.recording', 'Press key combination...')
+                        : t('keybindings.clickToEdit', 'Click to edit {{keys}}', { keys: binding.keys })
+                      }
+                    >
+                      {isRecording
+                        ? t('keybindings.recording', 'Press key combination...')
+                        : binding.keys
+                      }
+                    </button>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
