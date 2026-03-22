@@ -136,7 +136,7 @@ export function DetachedTerminal({ tabId }: DetachedTerminalProps): JSX.Element 
           Re-attach
         </button>
       </div>
-      <div ref={containerRef} className="flex-1 overflow-hidden" />
+      <div ref={containerRef} className="flex-1 min-h-0 overflow-hidden" style={{ height: 'calc(100vh - 32px)' }} />
     </div>
   )
 }
