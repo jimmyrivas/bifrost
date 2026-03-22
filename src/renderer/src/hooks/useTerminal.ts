@@ -107,48 +107,47 @@ export function useTerminal({ paneId, connectionId, onTerminalCreated }: UseTerm
   const zoomIn = useCallback(() => {
     const terminal = terminalRef.current
     if (!terminal) return
-    const current = terminal.options.fontSize ?? fontSize
+    const current = terminal.options.fontSize ?? 14
     if (current < MAX_FONT_SIZE) {
-      const next = current + 1
-      terminal.options.fontSize = next
-      currentFontSizeRef.current = next
+      terminal.options.fontSize = current + 1
+      currentFontSizeRef.current = current + 1
       fitAddonRef.current?.fit()
     }
-  }, [fontSize])
+  }, [])
 
   const zoomOut = useCallback(() => {
     const terminal = terminalRef.current
     if (!terminal) return
-    const current = terminal.options.fontSize ?? fontSize
+    const current = terminal.options.fontSize ?? 14
     if (current > MIN_FONT_SIZE) {
-      const next = current - 1
-      terminal.options.fontSize = next
-      currentFontSizeRef.current = next
+      terminal.options.fontSize = current - 1
+      currentFontSizeRef.current = current - 1
       fitAddonRef.current?.fit()
     }
-  }, [fontSize])
+  }, [])
 
   const resetZoom = useCallback(() => {
     const terminal = terminalRef.current
     if (!terminal) return
-    terminal.options.fontSize = fontSize
-    currentFontSizeRef.current = fontSize
+    const defaultSize = usePreferencesStore.getState().terminal.fontSize
+    terminal.options.fontSize = defaultSize
+    currentFontSizeRef.current = defaultSize
     fitAddonRef.current?.fit()
-  }, [fontSize])
+  }, [])
 
   const confirmPaste = useCallback(() => {
-    if (pendingPaste) {
-      pendingPaste.resolve(true)
-      setPendingPaste(null)
-    }
-  }, [pendingPaste])
+    setPendingPaste((prev) => {
+      if (prev) prev.resolve(true)
+      return null
+    })
+  }, [])
 
   const cancelPaste = useCallback(() => {
-    if (pendingPaste) {
-      pendingPaste.resolve(false)
-      setPendingPaste(null)
-    }
-  }, [pendingPaste])
+    setPendingPaste((prev) => {
+      if (prev) prev.resolve(false)
+      return null
+    })
+  }, [])
 
   // Update theme when colorScheme preference changes
   useEffect(() => {

@@ -23,13 +23,13 @@ export function XTerminal({ paneId, tabId, connectionId, onTerminalCreated }: XT
 
   // Update tab title from OSC sequences (#8)
   const renameTab = useSessionsStore((s) => s.renameTab)
-  const tabs = useSessionsStore((s) => s.tabs)
   useEffect(() => {
     if (!tabId || !dynamicTitle) return
+    const { tabs } = useSessionsStore.getState()
     const tab = tabs.find((t) => t.id === tabId)
     if (tab?.lockTitle) return
     renameTab(tabId, dynamicTitle)
-  }, [dynamicTitle, tabId, renameTab, tabs])
+  }, [dynamicTitle, tabId, renameTab])
   const broadcastMode = useSessionsStore((s) => s.broadcastMode)
   const [showSearch, setShowSearch] = useState(false)
 
