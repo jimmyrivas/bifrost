@@ -1,4 +1,5 @@
 import { ipcMain, BrowserWindow } from 'electron'
+import { sendToOwner, bufferOutput, setOwner, removeOwner } from '../services/window-router'
 import { sshManager, type SshConnectionConfig, type SshAlgorithms, type HttpProxyConfig } from '../services/ssh-manager'
 import { getDatabase, schema } from '../db'
 import { eq } from 'drizzle-orm'
@@ -46,16 +47,19 @@ export function registerSshIpc(mainWindow: BrowserWindow): void {
     async (_event, sessionId: string, cols: number, rows: number): Promise<void> => {
       const stream = await sshManager.openShell(sessionId, cols, rows)
 
+      // Set owner to the window that opened the shell
+      const senderWin = BrowserWindow.fromWebContents(_event.sender)
+      if (senderWin) setOwner(sessionId, senderWin)
+
       stream.on('data', (data: Buffer) => {
-        if (!mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('ssh:data', sessionId, data.toString())
-        }
+        const str = data.toString()
+        bufferOutput(sessionId, str)
+        sendToOwner(sessionId, 'ssh:data', sessionId, str)
       })
 
       stream.on('close', () => {
-        if (!mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('ssh:close', sessionId)
-        }
+        sendToOwner(sessionId, 'ssh:close', sessionId)
+        removeOwner(sessionId)
         sshManager.disconnect(sessionId)
       })
     }

@@ -171,7 +171,7 @@ app.whenReady().then(() => {
   // Main window removes the tab from its store via IPC event.
   const detachedWindows = new Map<string, BrowserWindow>()
 
-  ipcMain.handle('window:detachTab', (_event, tabId: string, title: string, connectionId?: string) => {
+  ipcMain.handle('window:detachTab', (_event, tabId: string, title: string, connectionId?: string, sessionId?: string) => {
     const detachedWindow = new BrowserWindow({
       width: 900,
       height: 600,
@@ -189,6 +189,7 @@ app.whenReady().then(() => {
 
     const query: Record<string, string> = { detach: tabId }
     if (connectionId) query.connId = connectionId
+    if (sessionId) query.sessionId = sessionId
 
     if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
       const params = new URLSearchParams(query).toString()

@@ -15,7 +15,7 @@ interface XTerminalProps {
 }
 
 export function XTerminal({ paneId, tabId, connectionId, onTerminalCreated }: XTerminalProps): JSX.Element {
-  const { containerRef, pendingPaste, confirmPaste, cancelPaste, dynamicTitle, detectedErrors } = useTerminal({
+  const { containerRef, terminalIdRef, pendingPaste, confirmPaste, cancelPaste, dynamicTitle, detectedErrors } = useTerminal({
     paneId,
     connectionId,
     onTerminalCreated
@@ -69,6 +69,7 @@ export function XTerminal({ paneId, tabId, connectionId, onTerminalCreated }: XT
         ref={containerRef}
         className="xterm-container w-full h-full"
         data-pane-id={paneId}
+        data-terminal-id={terminalIdRef.current ?? ''}
       />
       {showSearch && (
         <TerminalSearchBar paneId={paneId} onClose={() => setShowSearch(false)} />

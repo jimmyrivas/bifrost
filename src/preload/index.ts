@@ -25,6 +25,8 @@ export interface BifrostApi {
     getDefaultShell: () => Promise<string>
     onData: (callback: (id: string, data: string) => void) => () => void
     onExit: (callback: (id: string, exitCode: number) => void) => () => void
+    transferOwnership: (terminalId: string) => Promise<void>
+    getBuffer: (terminalId: string) => Promise<string>
   }
   connections: {
     list: () => Promise<ConnectionData[]>
@@ -267,7 +269,7 @@ export interface BifrostApi {
   window: {
     toggleFullscreen: () => Promise<void>
     showConfirmDialog: (message: string) => Promise<boolean>
-    detachTab: (tabId: string, title: string, connectionId?: string) => Promise<void>
+    detachTab: (tabId: string, title: string, connectionId?: string, sessionId?: string) => Promise<void>
     reattachTab: (tabId: string) => Promise<void>
     onTabReattached: (callback: (tabId: string) => void) => () => void
   }
@@ -289,7 +291,9 @@ const api: BifrostApi = {
       const handler = (_e: IpcRendererEvent, id: string, code: number): void => callback(id, code)
       ipcRenderer.on('terminal:exit', handler)
       return () => ipcRenderer.removeListener('terminal:exit', handler)
-    }
+    },
+    transferOwnership: (terminalId) => ipcRenderer.invoke('terminal:transferOwnership', terminalId),
+    getBuffer: (terminalId) => ipcRenderer.invoke('terminal:getBuffer', terminalId)
   },
   connections: {
     list: () => ipcRenderer.invoke('connections:list'),
@@ -543,7 +547,7 @@ const api: BifrostApi = {
   window: {
     toggleFullscreen: () => ipcRenderer.invoke('window:toggleFullscreen'),
     showConfirmDialog: (message: string) => ipcRenderer.invoke('window:confirmDialog', message),
-    detachTab: (tabId: string, title: string, connectionId?: string) => ipcRenderer.invoke('window:detachTab', tabId, title, connectionId),
+    detachTab: (tabId: string, title: string, connectionId?: string, sessionId?: string) => ipcRenderer.invoke('window:detachTab', tabId, title, connectionId, sessionId),
     reattachTab: (tabId: string) => ipcRenderer.invoke('window:reattachTab', tabId),
     onTabReattached: (callback: (tabId: string) => void) => {
       const handler = (_e: IpcRendererEvent, tabId: string): void => callback(tabId)
