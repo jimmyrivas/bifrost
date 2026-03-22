@@ -97,10 +97,18 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
         sendIntervalSeconds: form.sendIntervalSeconds || undefined,
         sendIdleOnly: form.sendIdleOnly, groupId: null as string | null
       }
-      if (connectionId) await updateConnection(connectionId, data)
-      else await createConnection(data)
-      if (form.password) await window.bifrost.credentials.setPassword(connectionId ?? '', form.password)
-      if (form.passphrase) await window.bifrost.credentials.setPassphrase(connectionId ?? '', form.passphrase)
+      let savedId = connectionId
+      if (connectionId) {
+        await updateConnection(connectionId, data)
+      } else {
+        savedId = await createConnection(data)
+      }
+      if (savedId && form.password) {
+        await window.bifrost.credentials.setPassword(savedId, form.password)
+      }
+      if (savedId && form.passphrase) {
+        await window.bifrost.credentials.setPassphrase(savedId, form.passphrase)
+      }
       onClose()
     } finally { setSaving(false) }
   }
@@ -270,6 +278,16 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
             </div>
           </section>
         </div>
+      </div>
+
+      {/* Bottom action bar */}
+      <div className="flex items-center justify-end gap-3 pt-4">
+        <Button variant="ghost" onClick={onClose} disabled={saving}>
+          {t('actions.cancel', 'Cancel')}
+        </Button>
+        <Button variant="spectral" onClick={handleSave} disabled={saving || !form.name.trim()}>
+          {saving ? 'Saving...' : connectionId ? t('actions.save', 'Save') : t('connections.save', 'Save Connection')}
+        </Button>
       </div>
     </div>
   )

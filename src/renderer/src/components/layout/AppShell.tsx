@@ -9,7 +9,6 @@ import { TerminalPane } from '@renderer/components/terminal/TerminalPane'
 import { ClusterManagerUI } from '@renderer/components/cluster/ClusterManagerUI'
 import { ExpectEditor } from '@renderer/components/automation/ExpectEditor'
 import { VariableManager } from '@renderer/components/automation/VariableManager'
-import { MacroEditor } from '@renderer/components/automation/MacroEditor'
 import { Preferences } from '@renderer/components/settings/Preferences'
 import { KeyBindings } from '@renderer/components/settings/KeyBindings'
 import { ConnectionForm } from '@renderer/components/connections/ConnectionForm'
@@ -39,9 +38,17 @@ export function AppShell(): JSX.Element {
   const [activeView, setActiveView] = useState<ViewSection>('connections')
 
   const handleConnectSSH = useCallback(
-    (connectionId: string) => {
-      createTab(`SSH: ${connectionId.slice(0, 8)}`)
+    async (connectionId: string) => {
       setActiveView('connections')
+      try {
+        const conn = await window.bifrost.connections.get(connectionId)
+        const label = conn?.name ?? `SSH: ${connectionId.slice(0, 8)}`
+        createTab(label)
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error('Failed to get connection:', msg)
+        createTab(`Connection ${connectionId.slice(0, 8)}`)
+      }
     },
     [createTab]
   )
@@ -63,11 +70,8 @@ export function AppShell(): JSX.Element {
     setActiveView('connections')
   }, [])
 
-  // Check if current view shows the terminal area
-  const isTerminalView = activeView === 'connections'
-
-  // Render the main content based on active view
-  const renderMainContent = (): JSX.Element => {
+  // Build overlay content for non-terminal views
+  const renderOverlay = (): JSX.Element | null => {
     switch (activeView) {
       case 'clusters':
         return <ClusterManagerUI />
@@ -109,47 +113,19 @@ export function AppShell(): JSX.Element {
       case 'new-connection':
         return (
           <div className="p-6 h-full overflow-y-auto">
-            <ConnectionForm
-              onClose={handleConnectionSaved}
-            />
+            <ConnectionForm onClose={handleConnectionSaved} />
           </div>
         )
-      case 'connections':
       default:
-        return (
-          <div className="flex flex-col h-full">
-            <TabBar />
-            <div className="flex-1 overflow-hidden">
-              {activeTab ? (
-                <TerminalPane pane={activeTab.rootPane} tabId={activeTab.id} />
-              ) : (
-                <div className="flex items-center justify-center h-full">
-                  <div className="text-center">
-                    <p
-                      className="text-4xl font-semibold bg-clip-text text-transparent mb-2"
-                      style={{ backgroundImage: SPECTRAL_GRADIENT }}
-                    >
-                      Bifrost
-                    </p>
-                    <p className="text-sm text-[#c7c4d7]">
-                      Ctrl+T to open a new terminal
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )
+        return null
     }
   }
 
+  const overlay = renderOverlay()
+
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#131316]">
-      {/* Spectral gradient top line */}
-      <div
-        className="h-[2px] w-full shrink-0"
-        style={{ background: SPECTRAL_GRADIENT }}
-      />
+      <div className="h-[2px] w-full shrink-0" style={{ background: SPECTRAL_GRADIENT }} />
 
       {/* Top navbar */}
       <div className="flex items-center h-10 shrink-0 bg-[#131316] px-4 select-none">
@@ -159,7 +135,6 @@ export function AppShell(): JSX.Element {
         >
           Bifrost
         </span>
-
         <nav className="flex items-center gap-1" role="navigation" aria-label="Main navigation">
           {TOP_NAV_SECTIONS.map((section) => (
             <button
@@ -171,15 +146,12 @@ export function AppShell(): JSX.Element {
                   : 'text-[#c7c4d7] hover:text-[#e6e1e5] hover:bg-[#1b1b1e]'
               )}
               onClick={() => setActiveView(section)}
-              aria-current={activeView === section ? 'page' : undefined}
             >
               {section}
             </button>
           ))}
         </nav>
-
         <div className="flex-1" />
-
         <div className="flex items-center gap-2 px-2 py-1 rounded bg-[#1b1b1e]">
           <Search size={14} className="text-[#c7c4d7]" />
           <input
@@ -192,7 +164,7 @@ export function AppShell(): JSX.Element {
         </div>
       </div>
 
-      {/* Main area: sidebar + content */}
+      {/* Main area */}
       <PanelGroup direction="horizontal" className="flex-1 min-h-0">
         <Panel defaultSize={18} minSize={12} maxSize={30} collapsible>
           <Sidebar
@@ -211,8 +183,41 @@ export function AppShell(): JSX.Element {
           )}
         />
         <Panel>
-          <div className="h-full bg-[#131316]">
-            {renderMainContent()}
+          <div className="relative h-full bg-[#131316]">
+            {/*
+              Terminal layer — ALWAYS mounted so terminals persist.
+              Hidden via visibility (not display:none) to keep PTY alive.
+            */}
+            <div
+              className="absolute inset-0 flex flex-col"
+              style={{ visibility: overlay ? 'hidden' : 'visible' }}
+            >
+              <TabBar />
+              <div className="flex-1 overflow-hidden">
+                {activeTab ? (
+                  <TerminalPane pane={activeTab.rootPane} tabId={activeTab.id} />
+                ) : (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-center">
+                      <p
+                        className="text-4xl font-semibold bg-clip-text text-transparent mb-2"
+                        style={{ backgroundImage: SPECTRAL_GRADIENT }}
+                      >
+                        Bifrost
+                      </p>
+                      <p className="text-sm text-[#c7c4d7]">Ctrl+T to open a new terminal</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Overlay layer — covers terminal area when navigating to other views */}
+            {overlay && (
+              <div className="absolute inset-0 z-10 bg-[#131316]">
+                {overlay}
+              </div>
+            )}
           </div>
         </Panel>
       </PanelGroup>
