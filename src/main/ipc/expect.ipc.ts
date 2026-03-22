@@ -40,12 +40,13 @@ export function registerExpectIpc(mainWindow: BrowserWindow): void {
         rules.push({
           id: gp.id,
           pattern: new RegExp(gp.pattern),
-          sendText: '', // global patterns just detect, action depends on type
+          sendText: '',
           sendReturn: true,
           hideFromLog: gp.name === 'password_prompt',
           timeout: 10000,
           onMatch: null,
-          onFail: null
+          onFail: null,
+          enabled: gp.enabled !== false
         })
       }
 
@@ -58,7 +59,8 @@ export function registerExpectIpc(mainWindow: BrowserWindow): void {
           hideFromLog: cr.hideFromLog ?? false,
           timeout: cr.timeoutMs ?? 10000,
           onMatch: cr.onMatchRuleId,
-          onFail: cr.onFailRuleId
+          onFail: cr.onFailRuleId,
+          enabled: (cr as Record<string, unknown>).enabled !== false
         })
       }
 
@@ -68,6 +70,13 @@ export function registerExpectIpc(mainWindow: BrowserWindow): void {
       engine.on('expect-event', (event: ExpectEvent) => {
         if (!mainWindow.isDestroyed()) {
           mainWindow.webContents.send('expect:event', sessionId, event)
+        }
+      })
+
+      // Forward buffer updates for debug panel (#49)
+      engine.on('buffer-update', (buffer: string) => {
+        if (!mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('expect:bufferUpdate', sessionId, buffer)
         }
       })
 

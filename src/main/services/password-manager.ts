@@ -177,12 +177,172 @@ export const bitwarden = {
   }
 }
 
+// === HashiCorp Vault SSH Engine (#78) ===
+
+export const vault = {
+  isAvailable(): boolean {
+    return commandExists('vault')
+  },
+
+  /**
+   * Sign an SSH public key using Vault's SSH secrets engine.
+   * POST /v1/ssh/sign/{role}
+   */
+  signSSHKey(pubKeyPath: string, role: string, addr: string, token: string): string {
+    try {
+      const { readFileSync: readFs } = require('fs') as typeof import('fs')
+      const pubKey = readFs(pubKeyPath, 'utf-8').trim()
+
+      const payload = JSON.stringify({ public_key: pubKey })
+
+      const result = execSync(
+        `curl -s -X POST -H "X-Vault-Token: ${token}" -H "Content-Type: application/json" -d '${payload}' ${addr}/v1/ssh/sign/${role}`,
+        { encoding: 'utf-8', timeout: 15000, stdio: 'pipe' }
+      )
+
+      const response = JSON.parse(result) as { data?: { signed_key?: string }; errors?: string[] }
+      if (response.errors && response.errors.length > 0) {
+        throw new Error(response.errors.join(', '))
+      }
+      return response.data?.signed_key ?? ''
+    } catch (err) {
+      throw new Error(`Vault SSH sign failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  },
+
+  /**
+   * List available SSH roles.
+   * GET /v1/ssh/roles?list=true
+   */
+  listRoles(addr: string, token: string): string[] {
+    try {
+      const result = execSync(
+        `curl -s -H "X-Vault-Token: ${token}" "${addr}/v1/ssh/roles?list=true"`,
+        { encoding: 'utf-8', timeout: 10000, stdio: 'pipe' }
+      )
+      const response = JSON.parse(result) as { data?: { keys?: string[] } }
+      return response.data?.keys ?? []
+    } catch {
+      return []
+    }
+  },
+
+  /**
+   * Get a secret from Vault KV engine.
+   */
+  getSecret(path: string, addr: string, token: string): string {
+    try {
+      const result = execSync(
+        `curl -s -H "X-Vault-Token: ${token}" "${addr}/v1/${path}"`,
+        { encoding: 'utf-8', timeout: 10000, stdio: 'pipe' }
+      )
+      const response = JSON.parse(result) as { data?: { data?: Record<string, string>; value?: string } }
+      return response.data?.value ?? JSON.stringify(response.data?.data ?? {})
+    } catch {
+      return ''
+    }
+  }
+}
+
+// === AWS Secrets Manager (#79) ===
+
+export const awsSM = {
+  isAvailable(): boolean {
+    return commandExists('aws')
+  },
+
+  /**
+   * Get a secret value from AWS Secrets Manager.
+   */
+  getSecret(secretId: string): string {
+    try {
+      return execSync(
+        `aws secretsmanager get-secret-value --secret-id "${secretId}" --query SecretString --output text`,
+        { encoding: 'utf-8', timeout: 15000, stdio: 'pipe' }
+      ).trim()
+    } catch (err) {
+      throw new Error(`AWS Secrets Manager get failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  },
+
+  /**
+   * List secrets in AWS Secrets Manager.
+   */
+  listSecrets(): Array<{ name: string; arn: string; description: string }> {
+    try {
+      const result = execSync(
+        'aws secretsmanager list-secrets --output json',
+        { encoding: 'utf-8', timeout: 15000, stdio: 'pipe' }
+      )
+      const data = JSON.parse(result) as {
+        SecretList?: Array<{ Name?: string; ARN?: string; Description?: string }>
+      }
+      return (data.SecretList ?? []).map((s) => ({
+        name: s.Name ?? '',
+        arn: s.ARN ?? '',
+        description: s.Description ?? ''
+      }))
+    } catch {
+      return []
+    }
+  }
+}
+
+// === Azure Key Vault (#80) ===
+
+export const azureKV = {
+  isAvailable(): boolean {
+    return commandExists('az')
+  },
+
+  /**
+   * Get a secret from Azure Key Vault.
+   */
+  getSecret(vaultName: string, secretName: string): string {
+    try {
+      return execSync(
+        `az keyvault secret show --vault-name "${vaultName}" --name "${secretName}" --query value -o tsv`,
+        { encoding: 'utf-8', timeout: 15000, stdio: 'pipe' }
+      ).trim()
+    } catch (err) {
+      throw new Error(`Azure KV get failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  },
+
+  /**
+   * List secrets in an Azure Key Vault.
+   */
+  listSecrets(vaultName: string): Array<{ name: string; id: string; enabled: boolean }> {
+    try {
+      const result = execSync(
+        `az keyvault secret list --vault-name "${vaultName}" -o json`,
+        { encoding: 'utf-8', timeout: 15000, stdio: 'pipe' }
+      )
+      const data = JSON.parse(result) as Array<{
+        name?: string
+        id?: string
+        attributes?: { enabled?: boolean }
+      }>
+      return data.map((s) => ({
+        name: s.name ?? s.id?.split('/').pop() ?? '',
+        id: s.id ?? '',
+        enabled: s.attributes?.enabled ?? true
+      }))
+    } catch {
+      return []
+    }
+  }
+}
+
 // === Detect Available Password Managers ===
 
 export interface PasswordManagerStatus {
   onePassword: { available: boolean; signedIn: boolean }
   bitwarden: { available: boolean; unlocked: boolean }
   keepassxc: { available: boolean }
+  vault: { available: boolean }
+  awsSM: { available: boolean }
+  azureKV: { available: boolean }
 }
 
 export function detectPasswordManagers(): PasswordManagerStatus {
@@ -197,6 +357,15 @@ export function detectPasswordManagers(): PasswordManagerStatus {
     },
     keepassxc: {
       available: commandExists('keepassxc-cli')
+    },
+    vault: {
+      available: vault.isAvailable()
+    },
+    awsSM: {
+      available: awsSM.isAvailable()
+    },
+    azureKV: {
+      available: azureKV.isAvailable()
     }
   }
 }

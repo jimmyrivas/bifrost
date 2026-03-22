@@ -270,6 +270,22 @@ function ConnectionNode({
         )}
       </span>
 
+      {/* Tag badges (#102) */}
+      {conn.sshConfig && (() => {
+        try {
+          const cfg = JSON.parse(conn.sshConfig) as { tags?: string }
+          const tags = cfg.tags?.split(',').map((t: string) => t.trim()).filter(Boolean) ?? []
+          return tags.slice(0, 2).map((tag: string) => (
+            <span
+              key={tag}
+              className="px-1 py-0 rounded-[2px] text-[8px] font-semibold bg-[#6bd5ff]/15 text-[#6bd5ff] shrink-0"
+            >
+              {tag}
+            </span>
+          ))
+        } catch { return null }
+      })()}
+
       {isFavorite && (
         <Star size={10} strokeWidth={0} fill="#ffd56b" className="shrink-0 ml-auto" />
       )}
@@ -608,9 +624,18 @@ export function ConnectionTree({ onConnect, onEdit, onNewConnection, searchFilte
     return nodes.reduce<TreeNode[]>((acc, node) => {
       if (node.type === 'connection') {
         const conn = node.data as Connection
+        // Also search tags (#102)
+        let tagMatch = false
+        if (conn.sshConfig) {
+          try {
+            const cfg = JSON.parse(conn.sshConfig) as { tags?: string }
+            tagMatch = cfg.tags?.toLowerCase().includes(lf) ?? false
+          } catch { /* ignore */ }
+        }
         const matches =
           node.name.toLowerCase().includes(lf) ||
-          (conn.host && conn.host.toLowerCase().includes(lf))
+          (conn.host && conn.host.toLowerCase().includes(lf)) ||
+          tagMatch
         if (matches) acc.push(node)
       } else {
         const filteredChildren = filterTree(node.children, filter)

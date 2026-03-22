@@ -16,11 +16,21 @@ export interface ExpectRule {
   onMatch: string | null
   onFail: string | null
   priority: number
+  enabled: boolean
+}
+
+export interface ExpectDebugEvent {
+  type: 'match' | 'send' | 'timeout' | 'complete' | 'error'
+  ruleId: string
+  text?: string
+  timestamp: number
 }
 
 interface ExpectEditorProps {
   rules: ExpectRule[]
   onChange: (rules: ExpectRule[]) => void
+  debugEvents?: ExpectDebugEvent[]
+  bufferContent?: string
 }
 
 let ruleCounter = 0
@@ -35,14 +45,17 @@ const selectClass = cn(
   'text-xs text-[var(--on-surface)] ghost-border focus-visible:outline-none [font-family:var(--font-mono)]'
 )
 
-export function ExpectEditor({ rules, onChange }: ExpectEditorProps): JSX.Element {
+export function ExpectEditor({ rules, onChange, debugEvents = [], bufferContent = '' }: ExpectEditorProps): JSX.Element {
   const { t } = useTranslation()
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [engineEnabled, setEngineEnabled] = useState(false)
+  const [showDebug, setShowDebug] = useState(false)
 
   const addRule = useCallback(() => {
     onChange([...rules, {
       id: newRuleId(), pattern: '', sendText: '', timeout: 10,
-      sendReturn: true, hideFromLog: false, onMatch: null, onFail: null, priority: rules.length
+      sendReturn: true, hideFromLog: false, onMatch: null, onFail: null, priority: rules.length,
+      enabled: true
     }])
   }, [rules, onChange])
 
@@ -80,7 +93,23 @@ export function ExpectEditor({ rules, onChange }: ExpectEditorProps): JSX.Elemen
           <Button variant="spectral" size="sm" onClick={addRule}>
             <Plus className="h-3 w-3" /> {t('expect.add', 'ADD RULE')}
           </Button>
-          <Switch aria-label="Enable expect engine" />
+          <button
+            type="button"
+            onClick={() => setShowDebug(!showDebug)}
+            className={cn(
+              'px-2 py-1 text-[10px] font-semibold uppercase tracking-wider rounded-[var(--radius)] transition-colors',
+              showDebug
+                ? 'bg-[#6bd5ff]/15 text-[#6bd5ff]'
+                : 'text-[var(--on-surface-variant)] hover:text-[var(--on-surface)]'
+            )}
+          >
+            DEBUG
+          </button>
+          <Switch
+            checked={engineEnabled}
+            onCheckedChange={setEngineEnabled}
+            aria-label="Enable expect engine"
+          />
         </div>
       </div>
 
@@ -141,7 +170,7 @@ export function ExpectEditor({ rules, onChange }: ExpectEditorProps): JSX.Elemen
               </div>
               <div className={cn(bodyCell, 'w-16 text-center text-xs text-[var(--on-surface-variant)]')}>{idx + 1}</div>
               <div className={cn(bodyCell, 'w-20 flex items-center gap-1')}>
-                <Switch checked={rule.sendReturn} onCheckedChange={(v) => updateRule(rule.id, 'sendReturn', v)} aria-label="Toggle active" />
+                <Switch checked={rule.enabled} onCheckedChange={(v) => updateRule(rule.id, 'enabled', v)} aria-label="Toggle rule enabled" />
                 <button type="button" onClick={(e) => { e.stopPropagation(); removeRule(rule.id) }} className="text-[var(--error)] hover:text-[var(--error)]/80 ml-1" aria-label="Delete rule">
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
@@ -162,14 +191,50 @@ export function ExpectEditor({ rules, onChange }: ExpectEditorProps): JSX.Elemen
         <div className={cn('rounded-[var(--radius)] surface-2 p-3')}>
           <h4 className={sectionLabel}><ListOrdered className="inline h-3 w-3 mr-1" />MATCH SEQUENCE</h4>
           <p className="text-xs text-[var(--on-surface-variant)] leading-relaxed font-[family-name:var(--font-mono)]">
-            {rules.length > 0 ? `${rules.length} rules in chain` : 'No active rules'}
+            {rules.filter((r) => r.enabled).length} of {rules.length} rules enabled
           </p>
         </div>
         <div className={cn('rounded-[var(--radius)] surface-2 p-3')}>
           <h4 className={sectionLabel}><Activity className="inline h-3 w-3 mr-1" />ACTIVE MONITOR</h4>
-          <p className="text-xs text-[var(--success)] font-[family-name:var(--font-mono)]">Idle</p>
+          <p className={cn('text-xs font-[family-name:var(--font-mono)]', engineEnabled ? 'text-[var(--success)]' : 'text-[var(--on-surface-variant)]')}>
+            {engineEnabled ? 'Running' : 'Idle'}
+          </p>
         </div>
       </div>
+
+      {/* Debug panel (#49) */}
+      {showDebug && (
+        <div className="rounded-[var(--radius)] surface-2 p-3 flex flex-col gap-2">
+          <h4 className={sectionLabel}>EXPECT DEBUG MONITOR</h4>
+          <div className="rounded-[var(--radius)] bg-[var(--surface-container-lowest)] p-2 max-h-24 overflow-y-auto">
+            <p className="text-[10px] text-[var(--on-surface-variant)] mb-1">BUFFER CONTENT:</p>
+            <pre className="text-xs text-[var(--on-surface)] font-[family-name:var(--font-mono)] whitespace-pre-wrap break-all">
+              {bufferContent || '(empty)'}
+            </pre>
+          </div>
+          <div className="rounded-[var(--radius)] bg-[var(--surface-container-lowest)] p-2 max-h-32 overflow-y-auto flex flex-col gap-0.5">
+            <p className="text-[10px] text-[var(--on-surface-variant)] mb-1">EVENT LOG:</p>
+            {debugEvents.length === 0 ? (
+              <p className="text-xs text-[var(--on-surface-variant)] font-[family-name:var(--font-mono)]">No events yet</p>
+            ) : (
+              debugEvents.slice(-20).map((evt, i) => (
+                <div key={i} className="text-[10px] font-[family-name:var(--font-mono)] flex gap-2">
+                  <span className="text-[var(--on-surface-variant)] shrink-0">{new Date(evt.timestamp).toLocaleTimeString()}</span>
+                  <span className={cn(
+                    evt.type === 'match' && 'text-[var(--success)]',
+                    evt.type === 'send' && 'text-[#6bd5ff]',
+                    evt.type === 'timeout' && 'text-[var(--warning)]',
+                    evt.type === 'error' && 'text-[var(--error)]',
+                    evt.type === 'complete' && 'text-[var(--on-surface)]'
+                  )}>
+                    [{evt.type.toUpperCase()}] {evt.ruleId}{evt.text ? `: ${evt.text}` : ''}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

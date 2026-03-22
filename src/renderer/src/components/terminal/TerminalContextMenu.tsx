@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import {
   ClipboardCopy,
   ClipboardPaste,
@@ -10,7 +10,12 @@ import {
   Copy,
   Save,
   RotateCcw,
-  Eraser
+  Eraser,
+  Bookmark,
+  Maximize2,
+  Bot,
+  Camera,
+  ExternalLink
 } from 'lucide-react'
 import {
   ContextMenu,
@@ -41,6 +46,7 @@ export function TerminalContextMenu({
   const closeSplitPane = useSessionsStore((s) => s.closeSplitPane)
   const closeTab = useSessionsStore((s) => s.closeTab)
   const createTab = useSessionsStore((s) => s.createTab)
+  const toggleMaximizePane = useSessionsStore((s) => s.toggleMaximizePane)
 
   const handleCopy = useCallback(async () => {
     const selection = document.getSelection()?.toString()
@@ -112,6 +118,66 @@ export function TerminalContextMenu({
     }
   }, [paneId])
 
+  const handleSaveAsConnection = useCallback(async () => {
+    if (!connectionId) return
+    try {
+      const conn = await window.bifrost.connections.get(connectionId)
+      if (conn) {
+        const name = `Copy of ${conn.name ?? 'Connection'}`
+        await window.bifrost.connections.create({ ...conn, name } as Parameters<typeof window.bifrost.connections.create>[0])
+      }
+    } catch (err) {
+      console.error('Save as connection failed:', err)
+    }
+  }, [connectionId])
+
+  const handleMaximize = useCallback(() => {
+    toggleMaximizePane(paneId)
+  }, [toggleMaximizePane, paneId])
+
+  // #98 Explain Command
+  const [explanation, setExplanation] = useState<string | null>(null)
+  const handleExplainCommand = useCallback(async () => {
+    const selection = document.getSelection()?.toString()?.trim()
+    if (!selection) {
+      setExplanation('Select a command first, then right-click and choose Explain Command.')
+      setTimeout(() => setExplanation(null), 3000)
+      return
+    }
+    try {
+      setExplanation('Analyzing...')
+      const result = await window.bifrost?.ai?.explain(selection)
+      setExplanation(result ?? 'No explanation available')
+      setTimeout(() => setExplanation(null), 10000)
+    } catch {
+      setExplanation('Could not explain command')
+      setTimeout(() => setExplanation(null), 3000)
+    }
+  }, [])
+
+  // #61 Terminal Screenshot
+  const handleScreenshot = useCallback(async () => {
+    const paneEl = document.querySelector(`[data-pane-id="${paneId}"]`)
+    if (!paneEl) return
+    const canvas = paneEl.querySelector('canvas')
+    if (!canvas) return
+    try {
+      const dataUrl = canvas.toDataURL('image/png')
+      const link = document.createElement('a')
+      link.download = `bifrost-screenshot-${Date.now()}.png`
+      link.href = dataUrl
+      link.click()
+    } catch (err) {
+      console.error('Screenshot failed:', err)
+    }
+  }, [paneId])
+
+  // #72 Detach to Window
+  const handleDetach = useCallback(() => {
+    const url = window.location.href + (window.location.href.includes('?') ? '&' : '?') + `detach=true&tab=${tabId}`
+    window.open(url, '_blank', 'width=800,height=600')
+  }, [tabId])
+
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
@@ -145,6 +211,11 @@ export function TerminalContextMenu({
           <SplitSquareVertical size={14} strokeWidth={1.5} />
           Split Vertical
         </ContextMenuItem>
+        <ContextMenuItem onClick={handleMaximize} className="gap-2">
+          <Maximize2 size={14} strokeWidth={1.5} />
+          Maximize Pane
+          <ContextMenuShortcut>Ctrl+Shift+M</ContextMenuShortcut>
+        </ContextMenuItem>
         <ContextMenuItem onClick={handleCloseSplit} className="gap-2">
           <X size={14} strokeWidth={1.5} />
           Close Split Pane
@@ -166,6 +237,27 @@ export function TerminalContextMenu({
           <Save size={14} strokeWidth={1.5} />
           Save Session Log
         </ContextMenuItem>
+        {connectionId && (
+          <ContextMenuItem onClick={handleSaveAsConnection} className="gap-2">
+            <Bookmark size={14} strokeWidth={1.5} />
+            Save as Connection
+          </ContextMenuItem>
+        )}
+
+        <ContextMenuSeparator />
+
+        <ContextMenuItem onClick={handleExplainCommand} className="gap-2">
+          <Bot size={14} strokeWidth={1.5} />
+          Explain Command
+        </ContextMenuItem>
+        <ContextMenuItem onClick={handleScreenshot} className="gap-2">
+          <Camera size={14} strokeWidth={1.5} />
+          Take Screenshot
+        </ContextMenuItem>
+        <ContextMenuItem onClick={handleDetach} className="gap-2">
+          <ExternalLink size={14} strokeWidth={1.5} />
+          Detach to Window
+        </ContextMenuItem>
 
         <ContextMenuSeparator />
 
@@ -178,6 +270,20 @@ export function TerminalContextMenu({
           Reset Terminal
         </ContextMenuItem>
       </ContextMenuContent>
+
+      {/* Explanation tooltip (#98) */}
+      {explanation && (
+        <div
+          className="fixed bottom-12 right-4 z-50 max-w-sm p-3 rounded-[var(--radius)] bg-[var(--surface-bright)] text-xs text-[var(--on-surface)] shadow-lg backdrop-blur-[12px]"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex items-start gap-2">
+            <Bot size={14} className="text-[#6bd5ff] shrink-0 mt-0.5" />
+            <p className="whitespace-pre-wrap">{explanation}</p>
+          </div>
+        </div>
+      )}
     </ContextMenu>
   )
 }

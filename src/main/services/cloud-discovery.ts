@@ -8,7 +8,7 @@ export interface DiscoveredHost {
   host: string
   port: number
   user: string
-  type: 'aws' | 'gcp' | 'docker' | 'kubernetes'
+  type: 'aws' | 'gcp' | 'azure' | 'docker' | 'podman' | 'kubernetes'
   metadata: Record<string, string>
 }
 
@@ -262,15 +262,135 @@ export async function discoverKubernetes(): Promise<DiscoveredHost[]> {
 }
 
 /**
+ * #83: Discover Azure VMs via az CLI.
+ * Requires `az` CLI configured with valid credentials.
+ */
+export async function discoverAzure(): Promise<DiscoveredHost[]> {
+  if (!(await commandExists('az'))) {
+    throw new Error('Azure CLI (az) not found on PATH')
+  }
+
+  const result = (await runJsonCommand('az', [
+    'vm',
+    'list',
+    '-d',
+    '--output',
+    'json'
+  ])) as Array<Record<string, unknown>>
+
+  const hosts: DiscoveredHost[] = []
+
+  for (const vm of result) {
+    const powerState = (vm['powerState'] as string) ?? ''
+    if (!powerState.toLowerCase().includes('running')) continue
+
+    const name = (vm['name'] as string) ?? 'unknown'
+    const publicIps = (vm['publicIps'] as string) ?? ''
+    const privateIps = (vm['privateIps'] as string) ?? ''
+    const osType = (vm['storageProfile'] as Record<string, unknown>)?.['osDisk'] as Record<string, string> | undefined
+    const osTypeStr = (vm['osType'] as string) ?? osType?.['osType'] ?? ''
+    const location = (vm['location'] as string) ?? ''
+    const resourceGroup = (vm['resourceGroup'] as string) ?? ''
+    const vmSize = (vm['hardwareProfile'] as Record<string, string>)?.['vmSize'] ?? ''
+
+    const host = publicIps.split(',')[0]?.trim() || privateIps.split(',')[0]?.trim()
+    if (!host) continue
+
+    // Default user based on OS type
+    const user = osTypeStr.toLowerCase() === 'windows' ? '' : 'azureuser'
+
+    hosts.push({
+      name,
+      host,
+      port: 22,
+      user,
+      type: 'azure',
+      metadata: {
+        publicIps,
+        privateIps,
+        osType: osTypeStr,
+        location,
+        resourceGroup,
+        vmSize,
+        powerState
+      }
+    })
+  }
+
+  return hosts
+}
+
+/**
+ * #90: Discover running Podman containers via podman CLI.
+ */
+export async function discoverPodman(): Promise<DiscoveredHost[]> {
+  if (!(await commandExists('podman'))) {
+    throw new Error('Podman CLI (podman) not found on PATH')
+  }
+
+  const { stdout } = await execFileAsync(
+    'podman',
+    ['ps', '--format', 'json'],
+    { timeout: 15000, maxBuffer: 5 * 1024 * 1024 }
+  )
+
+  const containers = JSON.parse(stdout) as Array<Record<string, unknown>>
+  const hosts: DiscoveredHost[] = []
+
+  for (const container of containers) {
+    try {
+      const id = ((container['Id'] ?? container['id']) as string) ?? ''
+      const shortId = id.slice(0, 12)
+      const names = (container['Names'] as string[]) ?? []
+      const name = names.length > 0 ? names[0].replace(/^\//, '') : shortId
+      const image = (container['Image'] as string) ?? ''
+      const state = (container['State'] as string) ?? ''
+
+      // Extract port mappings
+      const portMappings = (container['Ports'] as Array<Record<string, unknown>>) ?? []
+      let sshPort = 0
+      for (const pm of portMappings) {
+        const containerPort = (pm['container_port'] ?? pm['containerPort']) as number
+        const hostPort = (pm['host_port'] ?? pm['hostPort']) as number
+        if (containerPort === 22 && hostPort) {
+          sshPort = hostPort
+          break
+        }
+      }
+
+      hosts.push({
+        name,
+        host: '127.0.0.1',
+        port: sshPort || 22,
+        user: 'root',
+        type: 'podman',
+        metadata: {
+          containerId: shortId,
+          image,
+          state,
+          names: names.join(',')
+        }
+      })
+    } catch {
+      // Skip malformed entries
+    }
+  }
+
+  return hosts
+}
+
+/**
  * Check which cloud/container CLI tools are available.
  */
 export async function checkAvailableClis(): Promise<Record<string, boolean>> {
-  const [aws, gcloud, docker, kubectl] = await Promise.all([
+  const [aws, gcloud, az, docker, podman, kubectl] = await Promise.all([
     commandExists('aws'),
     commandExists('gcloud'),
+    commandExists('az'),
     commandExists('docker'),
+    commandExists('podman'),
     commandExists('kubectl')
   ])
 
-  return { aws, gcloud, docker, kubectl }
+  return { aws, gcloud, az, docker, podman, kubectl }
 }

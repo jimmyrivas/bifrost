@@ -9,6 +9,7 @@ export interface ExpectRule {
   timeout: number
   onMatch: string | null // rule id to jump to
   onFail: string | null  // rule id to jump to on timeout
+  enabled: boolean
 }
 
 export type ExpectEvent =
@@ -32,7 +33,8 @@ export class ExpectEngine extends EventEmitter {
   }
 
   setRules(rules: ExpectRule[]): void {
-    this.rules = rules
+    // Filter out disabled rules
+    this.rules = rules.filter((r) => r.enabled !== false)
     this.currentRuleIndex = 0
     this.buffer = ''
   }
@@ -70,6 +72,9 @@ export class ExpectEngine extends EventEmitter {
     if (!this.running || this.rules.length === 0) return
 
     this.buffer += data
+
+    // Emit buffer update for debug panel
+    this.emit('buffer-update', this.buffer.slice(-500))
 
     if (this.debug) {
       this.emit('expect-event', {

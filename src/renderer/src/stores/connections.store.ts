@@ -10,6 +10,7 @@ export interface Connection {
   authType: 'userpass' | 'key' | 'key_pass' | 'manual' | null
   username: string | null
   sortOrder: number
+  sshConfig?: string | null // JSON: includes tags and SSH options
 }
 
 export interface Group {

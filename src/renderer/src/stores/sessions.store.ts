@@ -18,6 +18,7 @@ export interface Tab {
   rootPane: TerminalPane
   isActive: boolean
   connectionId: string | null // null = local terminal, string = SSH connection ID
+  lockTitle: boolean
 }
 
 export type BroadcastMode = 'off' | 'panes' | 'all-tabs'
@@ -28,6 +29,7 @@ interface SessionsState {
   broadcastMode: BroadcastMode
   reconnectAttempts: Map<string, number>
   maxReconnectAttempts: number
+  maximizedPaneId: string | null
 
   createTab: (title?: string, connectionId?: string) => string
   closeTab: (tabId: string) => void
@@ -38,6 +40,8 @@ interface SessionsState {
   closeSplitPane: (tabId: string, paneId: string) => void
   setBroadcastMode: (mode: BroadcastMode) => void
   cycleBroadcastMode: () => void
+  toggleLockTitle: (tabId: string) => void
+  toggleMaximizePane: (paneId: string) => void
   getReconnectAttempts: (sessionId: string) => number
   incrementReconnectAttempts: (sessionId: string) => number
   resetReconnectAttempts: (sessionId: string) => void
@@ -143,6 +147,7 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
   broadcastMode: 'off',
   reconnectAttempts: new Map(),
   maxReconnectAttempts: 50,
+  maximizedPaneId: null,
 
   createTab: (title?: string, connectionId?: string) => {
     const tabId = newTabId()
@@ -152,7 +157,8 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
       title: label,
       rootPane: createPane(label),
       isActive: true,
-      connectionId: connectionId ?? null
+      connectionId: connectionId ?? null,
+      lockTitle: false
     }
     set((state) => ({
       tabs: state.tabs.map((t) => ({ ...t, isActive: false })).concat(tab),
@@ -229,6 +235,19 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
     const next: BroadcastMode =
       current === 'off' ? 'panes' : current === 'panes' ? 'all-tabs' : 'off'
     set({ broadcastMode: next })
+  },
+
+  toggleLockTitle: (tabId: string) => {
+    set((state) => ({
+      tabs: state.tabs.map((t) =>
+        t.id === tabId ? { ...t, lockTitle: !t.lockTitle } : t
+      )
+    }))
+  },
+
+  toggleMaximizePane: (paneId: string) => {
+    const current = get().maximizedPaneId
+    set({ maximizedPaneId: current === paneId ? null : paneId })
   },
 
   getReconnectAttempts: (sessionId: string) => {

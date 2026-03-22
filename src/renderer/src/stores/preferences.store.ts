@@ -11,6 +11,8 @@ export interface TerminalPreferences {
   colorScheme: string
   pasteWarningEnabled: boolean
   autoReconnect: boolean
+  fontLigatures: boolean
+  copyOnSelect: boolean
 }
 
 interface PreferencesState {
@@ -34,7 +36,9 @@ const defaultTerminal: TerminalPreferences = {
   theme: 'dark',
   colorScheme: 'Spectral',
   pasteWarningEnabled: true,
-  autoReconnect: true
+  autoReconnect: true,
+  fontLigatures: true,
+  copyOnSelect: false
 }
 
 export const usePreferencesStore = create<PreferencesState>()(

@@ -38,6 +38,32 @@ export function registerProtocolsIpc(mainWindow: BrowserWindow): void {
     externalProtocolManager.writeTelnet(sessionId, data)
   })
 
+  // === #41: Mosh ===
+  ipcMain.handle(
+    'protocols:connectMosh',
+    (_event, host: string, user?: string, port?: number, extraArgs?: string[]): string => {
+      return externalProtocolManager.connectMosh(host, user, port, extraArgs)
+    }
+  )
+
+  // === #89: AWS SSM ===
+  ipcMain.handle(
+    'protocols:connectSSM',
+    (_event, instanceId: string, region: string): string => {
+      return externalProtocolManager.connectSSM(instanceId, region)
+    }
+  )
+
+  // PTY write (for mosh, ssm)
+  ipcMain.on('protocols:writePty', (_event, sessionId: string, data: string) => {
+    externalProtocolManager.writePty(sessionId, data)
+  })
+
+  // PTY resize (for mosh, ssm)
+  ipcMain.on('protocols:resizePty', (_event, sessionId: string, cols: number, rows: number) => {
+    externalProtocolManager.resizePty(sessionId, cols, rows)
+  })
+
   // Disconnect
   ipcMain.handle('protocols:disconnect', (_event, sessionId: string) => {
     externalProtocolManager.disconnect(sessionId)

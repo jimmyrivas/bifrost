@@ -1,20 +1,22 @@
 import { useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Monitor, Globe, Network, KeyRound } from 'lucide-react'
+import { Monitor, Globe, Network, KeyRound, GitBranch } from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { Switch } from '@renderer/components/ui/switch'
 import { cn } from '@renderer/lib/utils'
 import { usePreferencesStore, type TerminalPreferences } from '@renderer/stores/preferences.store'
 import { ColorSchemeSelector } from './ColorSchemeSelector'
+import { ConfigSync } from './ConfigSync'
 
-type PrefsTab = 'terminal' | 'language' | 'network' | 'keepass'
+type PrefsTab = 'terminal' | 'language' | 'network' | 'keepass' | 'sync'
 
 const tabConfig: Array<{ id: PrefsTab; icon: typeof Monitor; labelKey: string; fallback: string }> = [
   { id: 'terminal', icon: Monitor, labelKey: 'prefs.terminal', fallback: 'Terminal' },
   { id: 'language', icon: Globe, labelKey: 'prefs.language', fallback: 'Language' },
   { id: 'network', icon: Network, labelKey: 'prefs.network', fallback: 'Network' },
   { id: 'keepass', icon: KeyRound, labelKey: 'prefs.keepass', fallback: 'KeePass' },
+  { id: 'sync', icon: GitBranch, labelKey: 'prefs.sync', fallback: 'Sync' },
 ]
 
 const selectClass = cn(
@@ -115,6 +117,14 @@ export function Preferences(): JSX.Element {
                   <span className="text-xs text-[var(--on-surface-variant)]">Auto-reconnect SSH</span>
                   <Switch checked={terminal.autoReconnect} onCheckedChange={(v) => setTermPref('autoReconnect', v)} />
                 </label>
+                <label className="flex items-center justify-between col-span-2 cursor-pointer">
+                  <span className="text-xs text-[var(--on-surface-variant)]">Font Ligatures</span>
+                  <Switch checked={terminal.fontLigatures} onCheckedChange={(v) => setTermPref('fontLigatures', v)} />
+                </label>
+                <label className="flex items-center justify-between col-span-2 cursor-pointer">
+                  <span className="text-xs text-[var(--on-surface-variant)]">Copy on Select</span>
+                  <Switch checked={terminal.copyOnSelect} onCheckedChange={(v) => setTermPref('copyOnSelect', v)} />
+                </label>
               </div>
             </div>
             <div className={sectionCard}>
@@ -177,6 +187,10 @@ export function Preferences(): JSX.Element {
               </div>
             </div>
           </div>
+        )}
+
+        {activeTab === 'sync' && (
+          <ConfigSync />
         )}
       </div>
     </div>

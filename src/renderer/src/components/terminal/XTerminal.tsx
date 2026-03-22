@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react'
-import { Radio } from 'lucide-react'
+import { useState, useCallback, useEffect } from 'react'
+import { Radio, AlertTriangle } from 'lucide-react'
 import { useTerminal } from '@renderer/hooks/useTerminal'
 import { useSessionsStore } from '@renderer/stores/sessions.store'
 import { TerminalContextMenu } from './TerminalContextMenu'
@@ -15,11 +15,21 @@ interface XTerminalProps {
 }
 
 export function XTerminal({ paneId, tabId, connectionId, onTerminalCreated }: XTerminalProps): JSX.Element {
-  const { containerRef, pendingPaste, confirmPaste, cancelPaste } = useTerminal({
+  const { containerRef, pendingPaste, confirmPaste, cancelPaste, dynamicTitle, detectedErrors } = useTerminal({
     paneId,
     connectionId,
     onTerminalCreated
   })
+
+  // Update tab title from OSC sequences (#8)
+  const renameTab = useSessionsStore((s) => s.renameTab)
+  const tabs = useSessionsStore((s) => s.tabs)
+  useEffect(() => {
+    if (!tabId || !dynamicTitle) return
+    const tab = tabs.find((t) => t.id === tabId)
+    if (tab?.lockTitle) return
+    renameTab(tabId, dynamicTitle)
+  }, [dynamicTitle, tabId, renameTab, tabs])
   const broadcastMode = useSessionsStore((s) => s.broadcastMode)
   const [showSearch, setShowSearch] = useState(false)
 
@@ -62,6 +72,18 @@ export function XTerminal({ paneId, tabId, connectionId, onTerminalCreated }: XT
       />
       {showSearch && (
         <TerminalSearchBar paneId={paneId} onClose={() => setShowSearch(false)} />
+      )}
+
+      {/* Error indicator (#99) */}
+      {detectedErrors.length > 0 && (
+        <div
+          className="absolute bottom-2 right-2 z-10 flex items-center gap-1.5 bg-[var(--error)]/15 text-[var(--error)] px-2 py-1 rounded-[var(--radius)] text-[10px] font-semibold cursor-help"
+          title={detectedErrors[detectedErrors.length - 1]?.pattern.suggestion}
+          role="status"
+        >
+          <AlertTriangle size={11} />
+          {detectedErrors[detectedErrors.length - 1]?.pattern.label}
+        </div>
       )}
 
       {/* Paste warning dialog */}

@@ -7,6 +7,7 @@ import { WebglAddon } from '@xterm/addon-webgl'
 import { usePreferencesStore } from '@renderer/stores/preferences.store'
 import { useSessionsStore } from '@renderer/stores/sessions.store'
 import { getSchemeByName, getDefaultScheme } from '@renderer/lib/color-schemes'
+import { scanForErrors, type DetectedError } from '@renderer/lib/error-patterns'
 
 interface UseTerminalOptions {
   paneId: string
@@ -29,6 +30,8 @@ interface UseTerminalReturn {
   pendingPaste: PasteRequest | null
   confirmPaste: () => void
   cancelPaste: () => void
+  dynamicTitle: string | null
+  detectedErrors: DetectedError[]
 }
 
 const MIN_FONT_SIZE = 8
@@ -85,6 +88,12 @@ export function useTerminal({ paneId, connectionId, onTerminalCreated }: UseTerm
   const pasteWarningDismissed = usePreferencesStore((s) => s.pasteWarningDismissedForSession)
 
   const [pendingPaste, setPendingPaste] = useState<PasteRequest | null>(null)
+  const detectedErrorsRef = useRef<DetectedError[]>([])
+  const dynamicTitleRef = useRef<string | null>(null)
+  const errorBufferRef = useRef('')
+  const lastOutputTimeRef = useRef<number>(0)
+  const outputActiveRef = useRef<boolean>(false)
+  const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const fitToContainer = useCallback(() => {
     fitAddonRef.current?.fit()
@@ -174,6 +183,7 @@ export function useTerminal({ paneId, connectionId, onTerminalCreated }: UseTerm
       cursorBlink: prefs.cursorBlink,
       scrollback: prefs.scrollback,
       allowProposedApi: true,
+      fontLigatures: prefs.fontLigatures,
       theme
     })
 
@@ -197,6 +207,48 @@ export function useTerminal({ paneId, connectionId, onTerminalCreated }: UseTerm
 
     const resizeObserver = new ResizeObserver(() => fitAddon.fit())
     resizeObserver.observe(containerRef.current)
+
+    // ── Copy-on-select (#11) ──
+    terminal.onSelectionChange(() => {
+      const copyOnSelect = usePreferencesStore.getState().terminal.copyOnSelect
+      if (!copyOnSelect) return
+      const selection = terminal.getSelection()
+      if (selection && selection.length > 0) {
+        navigator.clipboard.writeText(selection)
+      }
+    })
+
+    // ── Dynamic tab titles via OSC 0/2 (#8) ──
+    terminal.onTitleChange((title: string) => {
+      dynamicTitleRef.current = title
+    })
+
+    // ── Progress detection (#14) ──
+    // Detect prompt reappearing after a period of output
+    const IDLE_THRESHOLD = 3000
+    let progressCheckTimer: ReturnType<typeof setInterval> | null = null
+
+    progressCheckTimer = setInterval(() => {
+      if (!outputActiveRef.current) return
+      const now = Date.now()
+      if (now - lastOutputTimeRef.current > IDLE_THRESHOLD && outputActiveRef.current) {
+        outputActiveRef.current = false
+        // Show desktop notification if window is not focused
+        if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+          const sessStore = useSessionsStore.getState()
+          const tab = sessStore.tabs.find((t) =>
+            t.id === sessStore.activeTabId
+          )
+          const tabName = tab?.title ?? 'Terminal'
+          new Notification('Process completed', {
+            body: `Process completed in ${tabName}`,
+            silent: false
+          })
+        }
+      }
+    }, 1000)
+
+    progressTimerRef.current = progressCheckTimer
 
     // ── Intelligent Ctrl+C: copy selection or send ^C ──
     terminal.attachCustomKeyEventHandler((event: KeyboardEvent) => {
@@ -343,10 +395,21 @@ export function useTerminal({ paneId, connectionId, onTerminalCreated }: UseTerm
           terminal.write(`\x1b[31mSSH connection failed: ${err.message}\x1b[0m\r\n`)
         })
 
-      // Wire SSH output -> xterm
+      // Wire SSH output -> xterm (with error detection #99)
       removeDataListener = window.bifrost.ssh.onData((id: string, data: string) => {
         if (id === sshSessionId) {
           terminal.write(data)
+          lastOutputTimeRef.current = Date.now()
+          outputActiveRef.current = true
+          // Error detection (#99)
+          errorBufferRef.current += data
+          if (errorBufferRef.current.length > 4096) {
+            errorBufferRef.current = errorBufferRef.current.slice(-2048)
+          }
+          const errors = scanForErrors(data)
+          if (errors.length > 0) {
+            detectedErrorsRef.current = [...detectedErrorsRef.current.slice(-9), ...errors]
+          }
         }
       })
 
@@ -389,6 +452,17 @@ export function useTerminal({ paneId, connectionId, onTerminalCreated }: UseTerm
       removeDataListener = window.bifrost.terminal.onData((id: string, data: string) => {
         if (id === terminalIdRef.current) {
           terminal.write(data)
+          lastOutputTimeRef.current = Date.now()
+          outputActiveRef.current = true
+          // Error detection (#99)
+          errorBufferRef.current += data
+          if (errorBufferRef.current.length > 4096) {
+            errorBufferRef.current = errorBufferRef.current.slice(-2048)
+          }
+          const errors = scanForErrors(data)
+          if (errors.length > 0) {
+            detectedErrorsRef.current = [...detectedErrorsRef.current.slice(-9), ...errors]
+          }
         }
       })
 
@@ -402,6 +476,7 @@ export function useTerminal({ paneId, connectionId, onTerminalCreated }: UseTerm
     return () => {
       userDisconnected = true
       if (reconnectTimerId) clearTimeout(reconnectTimerId)
+      if (progressCheckTimer) clearInterval(progressCheckTimer)
       resizeObserver.disconnect()
       removeDataListener?.()
       removeExitListener?.()
@@ -424,6 +499,8 @@ export function useTerminal({ paneId, connectionId, onTerminalCreated }: UseTerm
     resetZoom,
     pendingPaste,
     confirmPaste,
-    cancelPaste
+    cancelPaste,
+    dynamicTitle: dynamicTitleRef.current,
+    detectedErrors: detectedErrorsRef.current
   }
 }

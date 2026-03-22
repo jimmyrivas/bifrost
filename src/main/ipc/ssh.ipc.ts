@@ -1,7 +1,17 @@
 import { ipcMain, BrowserWindow } from 'electron'
-import { sshManager, type SshConnectionConfig } from '../services/ssh-manager'
+import { sshManager, type SshConnectionConfig, type SshAlgorithms, type HttpProxyConfig } from '../services/ssh-manager'
 import { getDatabase, schema } from '../db'
 import { eq } from 'drizzle-orm'
+import {
+  startRecording,
+  feedData as feedRecording,
+  stopRecording,
+  isRecording,
+  listRecordings,
+  getRecording,
+  deleteRecording
+} from '../services/session-recorder'
+import { auditLogger } from '../services/audit-log'
 
 export function registerSshIpc(mainWindow: BrowserWindow): void {
   ipcMain.handle(
@@ -164,6 +174,110 @@ export function registerSshIpc(mainWindow: BrowserWindow): void {
     'ssh:removeForward',
     (_event, sessionId: string, forwardId: string) => {
       sshManager.removeForward(sessionId, forwardId)
+    }
+  )
+
+  // === Algorithm Selection (#17) ===
+
+  ipcMain.handle('ssh:listSupportedAlgorithms', () => {
+    return sshManager.listSupportedAlgorithms()
+  })
+
+  // === Session Multiplexing (#23) ===
+
+  ipcMain.handle(
+    'ssh:findExistingSession',
+    (_event, config: SshConnectionConfig): string | undefined => {
+      return sshManager.findExistingSession(config)
+    }
+  )
+
+  ipcMain.handle(
+    'ssh:acquireSession',
+    (_event, sessionId: string): boolean => {
+      return sshManager.acquireSession(sessionId)
+    }
+  )
+
+  ipcMain.handle(
+    'ssh:releaseSession',
+    (_event, sessionId: string) => {
+      sshManager.releaseSession(sessionId)
+    }
+  )
+
+  // === MFA/2FA Keyboard Interactive (#96) ===
+
+  sshManager.on(
+    'keyboard-interactive',
+    (sessionId: string, prompts: Array<{ prompt: string; echo: boolean }>) => {
+      if (!mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('ssh:keyboardInteractive', sessionId, prompts)
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'ssh:respondKeyboardInteractive',
+    (_event, sessionId: string, responses: string[]) => {
+      sshManager.resolveKeyboardInteractive(sessionId, responses)
+    }
+  )
+
+  // === Session Recording (#93) ===
+
+  ipcMain.handle(
+    'ssh:startRecording',
+    (_event, sessionId: string, options?: { width?: number; height?: number; title?: string }): string => {
+      const recordingId = startRecording(sessionId, options)
+      auditLogger.log({
+        connectionId: sessionId,
+        connectionName: sessionId,
+        host: '',
+        event: 'recording_start',
+        details: { recordingId }
+      })
+      return recordingId
+    }
+  )
+
+  ipcMain.handle(
+    'ssh:stopRecording',
+    (_event, sessionId: string): string | null => {
+      const filePath = stopRecording(sessionId)
+      auditLogger.log({
+        connectionId: sessionId,
+        connectionName: sessionId,
+        host: '',
+        event: 'recording_stop',
+        details: { filePath }
+      })
+      return filePath
+    }
+  )
+
+  ipcMain.handle(
+    'ssh:isRecording',
+    (_event, sessionId: string): boolean => {
+      return isRecording(sessionId)
+    }
+  )
+
+  ipcMain.handle('ssh:listRecordings', () => {
+    return listRecordings()
+  })
+
+  ipcMain.handle(
+    'ssh:getRecording',
+    (_event, recordingId: string): string | null => {
+      return getRecording(recordingId)
+    }
+  )
+
+  ipcMain.handle(
+    'ssh:deleteRecording',
+    (_event, recordingId: string): boolean => {
+      return deleteRecording(recordingId)
     }
   )
 }

@@ -12,12 +12,33 @@ interface TerminalPaneProps {
   connectionId?: string | null
 }
 
+function isPaneVisible(pane: TerminalPaneType, targetId: string): boolean {
+  if (pane.id === targetId) return true
+  if (pane.split) {
+    return isPaneVisible(pane.split.panes[0], targetId) || isPaneVisible(pane.split.panes[1], targetId)
+  }
+  return false
+}
+
 export function TerminalPane({ pane, tabId, connectionId }: TerminalPaneProps): JSX.Element {
   const setTerminalId = useSessionsStore((s) => s.setTerminalId)
+  const maximizedPaneId = useSessionsStore((s) => s.maximizedPaneId)
 
   if (pane.split) {
     const { direction, panes } = pane.split
     const isHorizontal = direction === 'horizontal'
+
+    // If a pane is maximized and it's within this split, only show the maximized one
+    if (maximizedPaneId) {
+      const firstContains = isPaneVisible(panes[0], maximizedPaneId)
+      const secondContains = isPaneVisible(panes[1], maximizedPaneId)
+      if (firstContains && !secondContains) {
+        return <TerminalPane pane={panes[0]} tabId={tabId} connectionId={connectionId} />
+      }
+      if (secondContains && !firstContains) {
+        return <TerminalPane pane={panes[1]} tabId={tabId} connectionId={connectionId} />
+      }
+    }
 
     return (
       <PanelGroup direction={direction} className="h-full">

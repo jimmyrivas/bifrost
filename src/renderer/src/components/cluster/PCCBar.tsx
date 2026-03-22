@@ -2,7 +2,6 @@ import { useState, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Send, Radio, Monitor } from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
-import { Input } from '@renderer/components/ui/input'
 import { cn } from '@renderer/lib/utils'
 
 type SendMode = 'all' | 'cluster'
@@ -17,18 +16,19 @@ export function PCCBar({ active, onToggle, onSend }: PCCBarProps): JSX.Element {
   const { t } = useTranslation()
   const [text, setText] = useState('')
   const [mode, setMode] = useState<SendMode>('all')
-  const inputRef = useRef<HTMLInputElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const handleSend = useCallback(() => {
     const trimmed = text.trim()
     if (!trimmed) return
     onSend(trimmed, mode)
     setText('')
-    inputRef.current?.focus()
+    textareaRef.current?.focus()
   }, [text, mode, onSend])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    // Ctrl+Enter to send
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault()
       handleSend()
     }
@@ -76,19 +76,26 @@ export function PCCBar({ active, onToggle, onSend }: PCCBarProps): JSX.Element {
         </div>
       )}
 
-      {/* Command input */}
-      <Input
-        ref={inputRef}
+      {/* Command input - multi-line (#69) */}
+      <textarea
+        ref={textareaRef}
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={
           active
-            ? t('pcc.placeholder', 'Type command to broadcast...')
+            ? t('pcc.placeholder', 'Type command to broadcast... (Ctrl+Enter to send)')
             : t('pcc.disabled', 'Enable PCC to broadcast')
         }
         disabled={!active}
-        className="flex-1 h-8 text-xs"
+        rows={3}
+        className={cn(
+          'flex-1 min-h-[4.5rem] max-h-24 rounded-[var(--radius)] bg-[var(--surface-container-highest)] px-3 py-2',
+          'text-xs text-[var(--on-surface)] placeholder-[var(--on-surface-variant)]/40',
+          'ghost-border focus-visible:outline-none resize-none',
+          'font-[family-name:var(--font-mono)] leading-relaxed',
+          !active && 'opacity-40 cursor-not-allowed'
+        )}
         aria-label={t('pcc.input', 'Broadcast command')}
       />
 

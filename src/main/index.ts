@@ -1,5 +1,6 @@
-import { app, shell, BrowserWindow } from 'electron'
+import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
+import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerTerminalIpc, destroyAllSessions } from './ipc/terminal.ipc'
 import { registerConnectionsIpc } from './ipc/connections.ipc'
@@ -16,8 +17,13 @@ import { registerScriptsIpc } from './ipc/scripts.ipc'
 import { registerImportIpc } from './ipc/import.ipc'
 import { registerDiscoveryIpc } from './ipc/discovery.ipc'
 import { registerAuditIpc } from './ipc/audit.ipc'
+import { registerAiIpc } from './ipc/ai.ipc'
+import { registerConfigSyncIpc } from './ipc/config-sync.ipc'
+import { registerSshCaIpc } from './ipc/ssh-ca.ipc'
+import { macroExecutor } from './services/macro-executor'
 import { auditLogger } from './services/audit-log'
 import { sessionLogger } from './services/session-logger'
+import { stopAllRecordings } from './services/session-recorder'
 import { runMigrations } from './db/migrate'
 import { closeDatabase } from './db'
 import { sshManager } from './services/ssh-manager'
@@ -26,10 +32,54 @@ import { externalProtocolManager } from './services/external-protocol'
 import { trayManager } from './services/tray-manager'
 import { connectionHealthMonitor } from './services/connection-health'
 
+interface WindowState {
+  width: number
+  height: number
+  x?: number
+  y?: number
+  isMaximized?: boolean
+}
+
+function getWindowStatePath(): string {
+  return join(app.getPath('userData'), 'window-state.json')
+}
+
+function loadWindowState(): WindowState {
+  try {
+    const statePath = getWindowStatePath()
+    if (existsSync(statePath)) {
+      return JSON.parse(readFileSync(statePath, 'utf-8')) as WindowState
+    }
+  } catch {
+    // Ignore
+  }
+  return { width: 1280, height: 800 }
+}
+
+function saveWindowState(win: BrowserWindow): void {
+  try {
+    const bounds = win.getBounds()
+    const state: WindowState = {
+      width: bounds.width,
+      height: bounds.height,
+      x: bounds.x,
+      y: bounds.y,
+      isMaximized: win.isMaximized()
+    }
+    writeFileSync(getWindowStatePath(), JSON.stringify(state, null, 2), 'utf-8')
+  } catch {
+    // Non-critical
+  }
+}
+
 function createWindow(): BrowserWindow {
+  const savedState = loadWindowState()
+
   const mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
+    width: savedState.width,
+    height: savedState.height,
+    x: savedState.x,
+    y: savedState.y,
     minWidth: 800,
     minHeight: 600,
     show: false,
@@ -44,8 +94,17 @@ function createWindow(): BrowserWindow {
     }
   })
 
+  if (savedState.isMaximized) {
+    mainWindow.maximize()
+  }
+
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
+  })
+
+  // Save window state on close (#39)
+  mainWindow.on('close', () => {
+    saveWindowState(mainWindow)
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -83,6 +142,8 @@ app.whenReady().then(() => {
   registerImportIpc()
   registerDiscoveryIpc()
   registerAuditIpc()
+  registerConfigSyncIpc()
+  registerSshCaIpc()
 
   // Rotate audit log on startup (remove entries older than 30 days)
   try {
@@ -97,11 +158,43 @@ app.whenReady().then(() => {
 
   const mainWindow = createWindow()
 
+  // Fullscreen toggle (#73)
+  ipcMain.handle('window:toggleFullscreen', () => {
+    mainWindow.setFullScreen(!mainWindow.isFullScreen())
+  })
+
+  // Confirm dialog for pre/post exec commands (#55)
+  ipcMain.handle('window:confirmDialog', async (_event, message: string) => {
+    const { dialog } = await import('electron')
+    const result = await dialog.showMessageBox(mainWindow, {
+      type: 'question',
+      buttons: ['Cancel', 'Execute'],
+      defaultId: 1,
+      title: 'Confirm Execution',
+      message
+    })
+    return result.response === 1
+  })
+
+  // Wire macro executor confirm callback to IPC (#55)
+  macroExecutor.setConfirmCallback(async (message: string) => {
+    const { dialog } = await import('electron')
+    const result = await dialog.showMessageBox(mainWindow, {
+      type: 'question',
+      buttons: ['Cancel', 'Execute'],
+      defaultId: 1,
+      title: 'Confirm Execution',
+      message
+    })
+    return result.response === 1
+  })
+
   // Register window-dependent IPC handlers
   registerTerminalIpc(mainWindow)
   registerSshIpc(mainWindow)
   registerExpectIpc(mainWindow)
   registerProtocolsIpc(mainWindow)
+  registerAiIpc(mainWindow)
 
   try {
     trayManager.create()
@@ -125,6 +218,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  stopAllRecordings()
   destroyAllSessions()
   sftpManager.closeAll()
   sshManager.disconnectAll()

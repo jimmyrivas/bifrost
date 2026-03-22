@@ -2,6 +2,9 @@ import { ipcMain } from 'electron'
 import {
   onePassword,
   bitwarden,
+  vault,
+  awsSM,
+  azureKV,
   detectPasswordManagers,
   type PasswordManagerStatus,
   type PasswordManagerEntry
@@ -44,5 +47,72 @@ export function registerPasswordManagerIpc(): void {
 
   ipcMain.handle('pm:bw:getField', (_event, itemId: string, fieldName: string): string => {
     return bitwarden.getField(itemId, fieldName)
+  })
+
+  // === HashiCorp Vault (#78) ===
+
+  ipcMain.handle(
+    'pm:vault:signSSHKey',
+    (_event, pubKeyPath: string, role: string, addr: string, token: string): string => {
+      return vault.signSSHKey(pubKeyPath, role, addr, token)
+    }
+  )
+
+  ipcMain.handle(
+    'pm:vault:listRoles',
+    (_event, addr: string, token: string): string[] => {
+      return vault.listRoles(addr, token)
+    }
+  )
+
+  ipcMain.handle(
+    'pm:vault:getSecret',
+    (_event, path: string, addr: string, token: string): string => {
+      return vault.getSecret(path, addr, token)
+    }
+  )
+
+  ipcMain.handle('pm:vault:isAvailable', (): boolean => {
+    return vault.isAvailable()
+  })
+
+  // === AWS Secrets Manager (#79) ===
+
+  ipcMain.handle(
+    'pm:awsSM:getSecret',
+    (_event, secretId: string): string => {
+      return awsSM.getSecret(secretId)
+    }
+  )
+
+  ipcMain.handle(
+    'pm:awsSM:listSecrets',
+    (): Array<{ name: string; arn: string; description: string }> => {
+      return awsSM.listSecrets()
+    }
+  )
+
+  ipcMain.handle('pm:awsSM:isAvailable', (): boolean => {
+    return awsSM.isAvailable()
+  })
+
+  // === Azure Key Vault (#80) ===
+
+  ipcMain.handle(
+    'pm:azureKV:getSecret',
+    (_event, vaultName: string, secretName: string): string => {
+      return azureKV.getSecret(vaultName, secretName)
+    }
+  )
+
+  ipcMain.handle(
+    'pm:azureKV:listSecrets',
+    (_event, vaultName: string): Array<{ name: string; id: string; enabled: boolean }> => {
+      return azureKV.listSecrets(vaultName)
+    }
+  )
+
+  ipcMain.handle('pm:azureKV:isAvailable', (): boolean => {
+    return azureKV.isAvailable()
   })
 }

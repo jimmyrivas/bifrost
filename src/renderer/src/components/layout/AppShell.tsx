@@ -6,9 +6,12 @@ import { Sidebar } from './Sidebar'
 import { TabBar } from './TabBar'
 import { StatusBar } from './StatusBar'
 import { CommandPalette } from './CommandPalette'
+import { WorkspaceSelector } from './WorkspaceSelector'
 import { TerminalPane } from '@renderer/components/terminal/TerminalPane'
+import { AIAssistant } from '@renderer/components/terminal/AIAssistant'
 import { ClusterManagerUI } from '@renderer/components/cluster/ClusterManagerUI'
 import { ExpectEditor } from '@renderer/components/automation/ExpectEditor'
+import { ScriptEditor } from '@renderer/components/automation/ScriptEditor'
 import { VariableManager } from '@renderer/components/automation/VariableManager'
 import { Preferences } from '@renderer/components/settings/Preferences'
 import { KeyBindings } from '@renderer/components/settings/KeyBindings'
@@ -39,6 +42,7 @@ export function AppShell(): JSX.Element {
   const [activeView, setActiveView] = useState<ViewSection>('connections')
   const [editingConnectionId, setEditingConnectionId] = useState<string | null>(null)
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
+  const [aiAssistantOpen, setAiAssistantOpen] = useState(false)
 
   // Global Ctrl+K shortcut for command palette
   useEffect(() => {
@@ -51,6 +55,26 @@ export function AppShell(): JSX.Element {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [])
+
+  // AI assistant toggle (#97)
+  useEffect(() => {
+    const handler = (): void => setAiAssistantOpen((prev) => !prev)
+    document.addEventListener('toggle:ai-assistant', handler)
+    return () => document.removeEventListener('toggle:ai-assistant', handler)
+  }, [])
+
+  const handleInsertCommand = useCallback((command: string) => {
+    // Write to the active terminal pane
+    const tab = tabs.find((t) => t.id === activeTabId)
+    if (!tab) return
+    const termId = tab.rootPane.terminalId
+    if (!termId) return
+    if (termId.startsWith('ssh:')) {
+      window.bifrost?.ssh?.write(termId.slice(4), command)
+    } else {
+      window.bifrost?.terminal?.write(termId, command)
+    }
+  }, [tabs, activeTabId])
 
   const handleConnectSSH = useCallback(
     async (connectionId: string) => {
@@ -100,12 +124,14 @@ export function AppShell(): JSX.Element {
         return <ClusterManagerUI />
       case 'scripts':
         return (
-          <div className="flex flex-col gap-6 p-6 h-full overflow-y-auto">
-            <h2 className="text-lg font-semibold text-[var(--on-surface)]">Scripts & Automation</h2>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--on-surface-variant)]">
-              EXPECT RULES & MACROS
-            </p>
-            <ExpectEditor rules={[]} onChange={() => {}} />
+          <div className="flex flex-col gap-4 p-6 h-full overflow-y-auto">
+            <ScriptEditor />
+            <div className="mt-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--on-surface-variant)] mb-3">
+                EXPECT RULES & MACROS
+              </p>
+              <ExpectEditor rules={[]} onChange={() => {}} />
+            </div>
           </div>
         )
       case 'keys':
@@ -177,6 +203,9 @@ export function AppShell(): JSX.Element {
             </button>
           ))}
         </nav>
+        <div className="mx-3">
+          <WorkspaceSelector />
+        </div>
         <div className="flex-1" />
         <button
           className="flex items-center gap-2 px-2 py-1 rounded bg-[#1b1b1e] hover:bg-[#2a2a2d]/50 transition-colors cursor-pointer"
@@ -211,54 +240,68 @@ export function AppShell(): JSX.Element {
           )}
         />
         <Panel>
-          <div className="relative h-full bg-[#131316]">
-            {/*
-              Terminal layer — ALL tabs always mounted so PTY sessions persist.
-              Only the active tab is visible; others use visibility:hidden.
-            */}
-            <div
-              className="absolute inset-0 flex flex-col"
-              style={{ visibility: overlay ? 'hidden' : 'visible' }}
-            >
-              <TabBar />
-              <div className="relative flex-1 overflow-hidden">
-                {tabs.length === 0 && (
-                  <div className="flex items-center justify-center h-full">
-                    <div className="text-center">
-                      <p
-                        className="text-4xl font-semibold bg-clip-text text-transparent mb-2"
-                        style={{ backgroundImage: SPECTRAL_GRADIENT }}
-                      >
-                        Bifrost
-                      </p>
-                      <p className="text-sm text-[#c7c4d7]">Ctrl+T to open a new terminal</p>
+          <div className="relative h-full bg-[#131316] flex">
+            <div className="relative flex-1 min-w-0">
+              {/*
+                Terminal layer -- ALL tabs always mounted so PTY sessions persist.
+                Only the active tab is visible; others use visibility:hidden.
+              */}
+              <div
+                className="absolute inset-0 flex flex-col"
+                style={{ visibility: overlay ? 'hidden' : 'visible' }}
+              >
+                <TabBar />
+                <div className="relative flex-1 overflow-hidden">
+                  {tabs.length === 0 && (
+                    <div className="flex items-center justify-center h-full">
+                      <div className="text-center">
+                        <p
+                          className="text-4xl font-semibold bg-clip-text text-transparent mb-2"
+                          style={{ backgroundImage: SPECTRAL_GRADIENT }}
+                        >
+                          Bifrost
+                        </p>
+                        <p className="text-sm text-[#c7c4d7]">Ctrl+T to open a new terminal</p>
+                      </div>
                     </div>
-                  </div>
-                )}
-                {/* Render ALL tabs, show only active */}
-                {tabs.map((tab) => (
-                  <div
-                    key={tab.id}
-                    className="absolute inset-0"
-                    style={{
-                      visibility: tab.id === activeTabId && !overlay ? 'visible' : 'hidden',
-                      zIndex: tab.id === activeTabId ? 1 : 0
-                    }}
-                  >
-                    <TerminalPane
-                      pane={tab.rootPane}
-                      tabId={tab.id}
-                      connectionId={tab.connectionId}
-                    />
-                  </div>
-                ))}
+                  )}
+                  {/* Render ALL tabs, show only active */}
+                  {tabs.map((tab) => (
+                    <div
+                      key={tab.id}
+                      className="absolute inset-0"
+                      style={{
+                        visibility: tab.id === activeTabId && !overlay ? 'visible' : 'hidden',
+                        zIndex: tab.id === activeTabId ? 1 : 0
+                      }}
+                    >
+                      <TerminalPane
+                        pane={tab.rootPane}
+                        tabId={tab.id}
+                        connectionId={tab.connectionId}
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
+
+              {/* Overlay layer -- covers terminal area when navigating to other views */}
+              {overlay && (
+                <div className="absolute inset-0 z-10 bg-[#131316]">
+                  {overlay}
+                </div>
+              )}
             </div>
 
-            {/* Overlay layer — covers terminal area when navigating to other views */}
-            {overlay && (
-              <div className="absolute inset-0 z-10 bg-[#131316]">
-                {overlay}
+            {/* AI Assistant side panel (#97) */}
+            {aiAssistantOpen && (
+              <div className="w-72 shrink-0 border-l border-[#1b1b1e]">
+                <AIAssistant
+                  open={aiAssistantOpen}
+                  onClose={() => setAiAssistantOpen(false)}
+                  onInsertCommand={handleInsertCommand}
+                  connectionContext={activeTab?.connectionId}
+                />
               </div>
             )}
           </div>

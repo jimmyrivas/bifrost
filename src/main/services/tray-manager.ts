@@ -6,6 +6,8 @@ export interface TrayConnectionEntry {
   name: string
   protocol: string
   host: string
+  isFavorite?: boolean
+  lastUsed?: number
 }
 
 type ConnectCallback = (connectionId: string) => void
@@ -15,40 +17,58 @@ let connections: TrayConnectionEntry[] = []
 let connectCallback: ConnectCallback | null = null
 
 function buildContextMenu(): Menu {
-  const connectionItems: MenuItemConstructorOptions[] = connections.map((conn) => ({
-    label: `${conn.name} (${conn.protocol}://${conn.host})`,
+  const template: MenuItemConstructorOptions[] = []
+
+  // Favorites section
+  const favorites = connections.filter((c) => c.isFavorite)
+  if (favorites.length > 0) {
+    template.push({ label: 'Favorites', enabled: false })
+    for (const conn of favorites) {
+      template.push({
+        label: `${conn.name} (${conn.protocol}://${conn.host})`,
+        click: (): void => { connectCallback?.(conn.id) }
+      })
+    }
+    template.push({ type: 'separator' })
+  }
+
+  // Recent connections (last 5)
+  const recents = connections
+    .filter((c) => c.lastUsed != null)
+    .sort((a, b) => (b.lastUsed ?? 0) - (a.lastUsed ?? 0))
+    .slice(0, 5)
+
+  if (recents.length > 0) {
+    template.push({ label: 'Recent', enabled: false })
+    for (const conn of recents) {
+      template.push({
+        label: `${conn.name} (${conn.protocol}://${conn.host})`,
+        click: (): void => { connectCallback?.(conn.id) }
+      })
+    }
+    template.push({ type: 'separator' })
+  }
+
+  // If no favorites or recents, show placeholder
+  if (favorites.length === 0 && recents.length === 0) {
+    template.push({ label: 'No connections', enabled: false })
+    template.push({ type: 'separator' })
+  }
+
+  template.push({
+    label: 'Show Bifrost',
     click: (): void => {
-      if (connectCallback) {
-        connectCallback(conn.id)
+      const windows = BrowserWindow.getAllWindows()
+      if (windows.length > 0) {
+        const win = windows[0]
+        if (win.isMinimized()) win.restore()
+        win.show()
+        win.focus()
       }
     }
-  }))
+  })
 
-  const template: MenuItemConstructorOptions[] = [
-    {
-      label: 'Show Bifrost',
-      click: (): void => {
-        const windows = BrowserWindow.getAllWindows()
-        if (windows.length > 0) {
-          const win = windows[0]
-          if (win.isMinimized()) win.restore()
-          win.show()
-          win.focus()
-        }
-      }
-    },
-    { type: 'separator' }
-  ]
-
-  if (connectionItems.length > 0) {
-    template.push(
-      { label: 'Connections', enabled: false },
-      ...connectionItems,
-      { type: 'separator' }
-    )
-  } else {
-    template.push({ label: 'No connections', enabled: false }, { type: 'separator' })
-  }
+  template.push({ type: 'separator' })
 
   template.push({
     label: 'Quit',

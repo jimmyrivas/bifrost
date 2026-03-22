@@ -29,6 +29,9 @@ export function ClusterManagerUI(): JSX.Element {
   const [newName, setNewName] = useState('')
   const [selectedConnIds, setSelectedConnIds] = useState<Set<string>>(new Set())
   const [expandedTree, setExpandedTree] = useState<Set<string>>(new Set(['root']))
+  const [showAutoCluster, setShowAutoCluster] = useState(false)
+  const [autoPattern, setAutoPattern] = useState('')
+  const [autoClusterName, setAutoClusterName] = useState('')
   const connections = useConnectionsStore((s) => s.connections)
   const fetchConnections = useConnectionsStore((s) => s.fetchConnections)
 
@@ -52,6 +55,26 @@ export function ClusterManagerUI(): JSX.Element {
 
   const deleteCluster = (id: string): void => { setClusters(clusters.filter((c) => c.id !== id)) }
 
+  const createAutoCluster = (): void => {
+    if (!autoPattern.trim() || !autoClusterName.trim()) return
+    try {
+      const regex = new RegExp(autoPattern, 'i')
+      const matched = connections.filter((c) => regex.test(c.name) || (c.host && regex.test(c.host)))
+      if (matched.length === 0) return
+      setClusters([...clusters, {
+        id: `c-auto-${Date.now()}`,
+        name: autoClusterName,
+        memberCount: matched.length,
+        status: 'active'
+      }])
+      setAutoPattern('')
+      setAutoClusterName('')
+      setShowAutoCluster(false)
+    } catch {
+      // Invalid regex
+    }
+  }
+
   const toggleTree = (id: string): void => {
     setExpandedTree((prev) => {
       const next = new Set(prev)
@@ -68,9 +91,14 @@ export function ClusterManagerUI(): JSX.Element {
           <h2 className="text-lg font-semibold text-[var(--on-surface)]">{t('cluster.title', 'Cluster Manager')}</h2>
           <p className={sectionLabel}>{t('cluster.subtitle', 'AGGREGATE & ORCHESTRATE NODE GROUPS')}</p>
         </div>
-        <Button variant="spectral" size="sm" onClick={() => setShowCreate(!showCreate)}>
-          <Plus className="h-3 w-3" /> NEW CLUSTER
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setShowAutoCluster(!showAutoCluster)}>
+            AUTO-CLUSTER
+          </Button>
+          <Button variant="spectral" size="sm" onClick={() => setShowCreate(!showCreate)}>
+            <Plus className="h-3 w-3" /> NEW CLUSTER
+          </Button>
+        </div>
       </div>
 
       {/* Create form */}
@@ -89,6 +117,28 @@ export function ClusterManagerUI(): JSX.Element {
           <div className="flex gap-2">
             <Button variant="spectral" size="sm" onClick={createCluster} disabled={!newName.trim() || selectedConnIds.size === 0}>Create</Button>
             <Button variant="ghost" size="sm" onClick={() => setShowCreate(false)}>{t('actions.cancel', 'Cancel')}</Button>
+          </div>
+        </div>
+      )}
+
+      {/* Auto-cluster form (#56) */}
+      {showAutoCluster && (
+        <div className="surface-2 rounded-[var(--radius)] p-4 flex flex-col gap-3">
+          <p className={sectionLabel}>AUTO-CLUSTER BY PATTERN</p>
+          <div className="grid grid-cols-2 gap-3">
+            <Input value={autoClusterName} onChange={(e) => setAutoClusterName(e.target.value)} placeholder="Cluster name" />
+            <Input value={autoPattern} onChange={(e) => setAutoPattern(e.target.value)} placeholder="Regex pattern (e.g. prod-.*)" />
+          </div>
+          {autoPattern && (
+            <p className="text-[10px] text-[var(--on-surface-variant)]">
+              Matches: {connections.filter((c) => {
+                try { return new RegExp(autoPattern, 'i').test(c.name) || (c.host ? new RegExp(autoPattern, 'i').test(c.host) : false) } catch { return false }
+              }).length} connections
+            </p>
+          )}
+          <div className="flex gap-2">
+            <Button variant="spectral" size="sm" onClick={createAutoCluster} disabled={!autoPattern.trim() || !autoClusterName.trim()}>Create</Button>
+            <Button variant="ghost" size="sm" onClick={() => setShowAutoCluster(false)}>Cancel</Button>
           </div>
         </div>
       )}

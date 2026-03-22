@@ -14,6 +14,11 @@ export type AuditEventType =
   | 'host_key_verified'
   | 'host_key_rejected'
   | 'host_key_changed'
+  | 'recording_start'
+  | 'recording_stop'
+  | 'vault_password_changed'
+  | 'key_file_stored'
+  | 'mfa_prompt'
 
 export interface AuditEvent {
   timestamp: string

@@ -1,6 +1,8 @@
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useRef } from 'react'
 import { AppShell } from '@renderer/components/layout/AppShell'
 import { useSessionsStore } from '@renderer/stores/sessions.store'
+
+const CHORD_TIMEOUT = 1000
 
 export function App(): JSX.Element {
   const createTab = useSessionsStore((s) => s.createTab)
@@ -10,6 +12,11 @@ export function App(): JSX.Element {
   const setActiveTab = useSessionsStore((s) => s.setActiveTab)
   const splitPane = useSessionsStore((s) => s.splitPane)
   const cycleBroadcastMode = useSessionsStore((s) => s.cycleBroadcastMode)
+  const toggleMaximizePane = useSessionsStore((s) => s.toggleMaximizePane)
+
+  // Multi-chord hotkey state (#33)
+  const pendingChordRef = useRef<string | null>(null)
+  const chordTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Create initial tab on mount
   useEffect(() => {
@@ -19,9 +26,55 @@ export function App(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Global keybindings
+  const clearChord = useCallback(() => {
+    pendingChordRef.current = null
+    if (chordTimerRef.current) {
+      clearTimeout(chordTimerRef.current)
+      chordTimerRef.current = null
+    }
+  }, [])
+
+  const setChord = useCallback(
+    (chord: string) => {
+      pendingChordRef.current = chord
+      if (chordTimerRef.current) clearTimeout(chordTimerRef.current)
+      chordTimerRef.current = setTimeout(clearChord, CHORD_TIMEOUT)
+    },
+    [clearChord]
+  )
+
+  // Global keybindings with multi-chord support (#33)
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
+      const pending = pendingChordRef.current
+
+      // Multi-chord resolution: Ctrl+K was pressed previously
+      if (pending === 'ctrl+k') {
+        e.preventDefault()
+        clearChord()
+
+        if (e.ctrlKey && e.key === 's') {
+          document.dispatchEvent(new CustomEvent('chord:ctrl+k:ctrl+s'))
+          return
+        }
+        if (e.ctrlKey && e.key === 'p') {
+          document.dispatchEvent(new CustomEvent('chord:ctrl+k:ctrl+p'))
+          return
+        }
+        if (e.ctrlKey && e.key === 'w') {
+          document.dispatchEvent(new CustomEvent('chord:ctrl+k:ctrl+w'))
+          return
+        }
+        return
+      }
+
+      // Ctrl+Shift+A: Toggle AI assistant (#97)
+      if (e.ctrlKey && e.shiftKey && e.key === 'A') {
+        e.preventDefault()
+        document.dispatchEvent(new CustomEvent('toggle:ai-assistant'))
+        return
+      }
+
       // Ctrl+T: New tab
       if (e.ctrlKey && e.key === 't') {
         e.preventDefault()
@@ -78,8 +131,31 @@ export function App(): JSX.Element {
         e.preventDefault()
         document.dispatchEvent(new CustomEvent('terminal:zoom-reset'))
       }
+      // Ctrl+Shift+M: Maximize pane (#4)
+      if (e.ctrlKey && e.shiftKey && e.key === 'M') {
+        e.preventDefault()
+        const tab = tabs.find((t) => t.id === activeTabId)
+        if (tab) toggleMaximizePane(tab.rootPane.id)
+      }
+      // Ctrl+Shift+Arrow: Pane resize (#5)
+      if (e.ctrlKey && e.shiftKey && ['ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+        e.preventDefault()
+        document.dispatchEvent(new CustomEvent('terminal:pane-resize', { detail: e.key }))
+      }
+      // F11: Fullscreen (#73)
+      if (e.key === 'F11') {
+        e.preventDefault()
+        if (window.bifrost?.window) {
+          window.bifrost.window.toggleFullscreen()
+        }
+      }
+
+      // Ctrl+K: Begin chord (#33) - also handled by AppShell for command palette
+      if (e.ctrlKey && e.key === 'k' && !e.shiftKey && !e.altKey) {
+        setChord('ctrl+k')
+      }
     },
-    [activeTabId, tabs, createTab, closeTab, setActiveTab, splitPane, cycleBroadcastMode]
+    [activeTabId, tabs, createTab, closeTab, setActiveTab, splitPane, cycleBroadcastMode, toggleMaximizePane, clearChord, setChord]
   )
 
   useEffect(() => {
