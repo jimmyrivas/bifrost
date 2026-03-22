@@ -6,6 +6,7 @@ import { registerConnectionsIpc } from './ipc/connections.ipc'
 import { registerCredentialsIpc } from './ipc/credentials.ipc'
 import { registerSshIpc } from './ipc/ssh.ipc'
 import { registerExpectIpc } from './ipc/expect.ipc'
+import { registerClusterIpc } from './ipc/cluster.ipc'
 import { runMigrations } from './db/migrate'
 import { closeDatabase } from './db'
 import { sshManager } from './services/ssh-manager'
@@ -56,6 +57,7 @@ app.whenReady().then(() => {
   // Register IPC handlers (non-window-dependent)
   registerConnectionsIpc()
   registerCredentialsIpc()
+  registerClusterIpc()
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
