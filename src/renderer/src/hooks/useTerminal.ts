@@ -8,6 +8,7 @@ import { usePreferencesStore } from '@renderer/stores/preferences.store'
 import { useSessionsStore } from '@renderer/stores/sessions.store'
 import { getSchemeByName, getDefaultScheme } from '@renderer/lib/color-schemes'
 import { scanForErrors, type DetectedError } from '@renderer/lib/error-patterns'
+import { detectZmodem, notifyZmodemDetected } from '@renderer/lib/zmodem-handler'
 
 interface UseTerminalOptions {
   paneId: string
@@ -399,12 +400,16 @@ export function useTerminal({ paneId, connectionId, onTerminalCreated }: UseTerm
           terminal.write(`\x1b[31mSSH connection failed: ${err.message}\x1b[0m\r\n`)
         })
 
-      // Wire SSH output -> xterm (with error detection #99)
+      // Wire SSH output -> xterm (with error detection #99, zmodem detection #15)
       removeDataListener = window.bifrost.ssh.onData((id: string, data: string) => {
         if (id === sshSessionId) {
           terminal.write(data)
           lastOutputTimeRef.current = Date.now()
           outputActiveRef.current = true
+          // Zmodem detection (#15)
+          if (detectZmodem(data)) {
+            notifyZmodemDetected()
+          }
           // Error detection (#99)
           errorBufferRef.current += data
           if (errorBufferRef.current.length > 4096) {
@@ -458,6 +463,10 @@ export function useTerminal({ paneId, connectionId, onTerminalCreated }: UseTerm
           terminal.write(data)
           lastOutputTimeRef.current = Date.now()
           outputActiveRef.current = true
+          // Zmodem detection (#15)
+          if (detectZmodem(data)) {
+            notifyZmodemDetected()
+          }
           // Error detection (#99)
           errorBufferRef.current += data
           if (errorBufferRef.current.length > 4096) {

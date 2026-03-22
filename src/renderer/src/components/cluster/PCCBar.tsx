@@ -1,10 +1,13 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Send, Radio, Monitor } from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
 import { cn } from '@renderer/lib/utils'
+import { highlightPccInput } from '@renderer/lib/pcc-highlight'
 
 type SendMode = 'all' | 'cluster'
+
+const PCC_STORAGE_KEY = 'bifrost:pcc-input'
 
 interface PCCBarProps {
   active: boolean
@@ -14,9 +17,35 @@ interface PCCBarProps {
 
 export function PCCBar({ active, onToggle, onSend }: PCCBarProps): JSX.Element {
   const { t } = useTranslation()
-  const [text, setText] = useState('')
+  const [text, setText] = useState(() => {
+    // #70: Restore saved content
+    try {
+      return localStorage.getItem(PCC_STORAGE_KEY) ?? ''
+    } catch {
+      return ''
+    }
+  })
   const [mode, setMode] = useState<SendMode>('all')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // #70: Auto-save to localStorage (debounced 1s)
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      try {
+        localStorage.setItem(PCC_STORAGE_KEY, text)
+      } catch {
+        // Storage full or unavailable
+      }
+    }, 1000)
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [text])
+
+  // #71: Compute highlighted overlay content
+  const highlightedHtml = useMemo(() => highlightPccInput(text), [text])
 
   const handleSend = useCallback(() => {
     const trimmed = text.trim()
@@ -27,7 +56,6 @@ export function PCCBar({ active, onToggle, onSend }: PCCBarProps): JSX.Element {
   }, [text, mode, onSend])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    // Ctrl+Enter to send
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault()
       handleSend()
@@ -38,9 +66,7 @@ export function PCCBar({ active, onToggle, onSend }: PCCBarProps): JSX.Element {
     <div
       className={cn(
         'flex items-center gap-2 px-3 py-2 transition-colors',
-        active
-          ? 'bg-[#ffa36b]/5'
-          : 'bg-[var(--surface-container-low)]'
+        active ? 'bg-[#ffa36b]/5' : 'bg-[var(--surface-container-low)]'
       )}
       role="toolbar"
       aria-label={t('pcc.title', 'Power Cluster Controller')}
@@ -76,28 +102,40 @@ export function PCCBar({ active, onToggle, onSend }: PCCBarProps): JSX.Element {
         </div>
       )}
 
-      {/* Command input - multi-line (#69) */}
-      <textarea
-        ref={textareaRef}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder={
-          active
-            ? t('pcc.placeholder', 'Type command to broadcast... (Ctrl+Enter to send)')
-            : t('pcc.disabled', 'Enable PCC to broadcast')
-        }
-        disabled={!active}
-        rows={3}
-        className={cn(
-          'flex-1 min-h-[4.5rem] max-h-24 rounded-[var(--radius)] bg-[var(--surface-container-highest)] px-3 py-2',
-          'text-xs text-[var(--on-surface)] placeholder-[var(--on-surface-variant)]/40',
-          'ghost-border focus-visible:outline-none resize-none',
-          'font-[family-name:var(--font-mono)] leading-relaxed',
-          !active && 'opacity-40 cursor-not-allowed'
-        )}
-        aria-label={t('pcc.input', 'Broadcast command')}
-      />
+      {/* Command input with syntax highlighting (#69, #71) */}
+      <div className="relative flex-1 min-h-[4.5rem] max-h-24">
+        <div
+          className={cn(
+            'absolute inset-0 rounded-[var(--radius)] px-3 py-2 overflow-hidden pointer-events-none',
+            'text-xs whitespace-pre-wrap break-words leading-relaxed',
+            'font-[family-name:var(--font-mono)]',
+            !active && 'opacity-40'
+          )}
+          aria-hidden="true"
+          dangerouslySetInnerHTML={{ __html: highlightedHtml + '\n' }}
+        />
+        <textarea
+          ref={textareaRef}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={
+            active
+              ? t('pcc.placeholder', 'Type command to broadcast... (Ctrl+Enter to send)')
+              : t('pcc.disabled', 'Enable PCC to broadcast')
+          }
+          disabled={!active}
+          rows={3}
+          className={cn(
+            'relative w-full h-full min-h-[4.5rem] max-h-24 rounded-[var(--radius)] bg-[var(--surface-container-highest)] px-3 py-2',
+            'text-xs text-transparent caret-[var(--on-surface)] placeholder-[var(--on-surface-variant)]/40',
+            'ghost-border focus-visible:outline-none resize-none',
+            'font-[family-name:var(--font-mono)] leading-relaxed',
+            !active && 'opacity-40 cursor-not-allowed'
+          )}
+          aria-label={t('pcc.input', 'Broadcast command')}
+        />
+      </div>
 
       {/* Mode toggle */}
       <button

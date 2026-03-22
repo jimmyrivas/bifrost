@@ -17,11 +17,11 @@ export function registerProtocolsIpc(mainWindow: BrowserWindow): void {
     }
   )
 
-  // VNC
+  // VNC (#44: multi-viewer support)
   ipcMain.handle(
     'protocols:connectVNC',
-    (_event, host: string, port: number, password?: string): string => {
-      return externalProtocolManager.connectVNC(host, port, password)
+    (_event, host: string, port: number, password?: string, preferredViewer?: string): string => {
+      return externalProtocolManager.connectVNC(host, port, password, preferredViewer)
     }
   )
 
@@ -63,6 +63,30 @@ export function registerProtocolsIpc(mainWindow: BrowserWindow): void {
   ipcMain.on('protocols:resizePty', (_event, sessionId: string, cols: number, rows: number) => {
     externalProtocolManager.resizePty(sessionId, cols, rows)
   })
+
+  // === #42: FTP ===
+  ipcMain.handle(
+    'protocols:connectFTP',
+    (_event, host: string, port: number, user?: string, password?: string): string => {
+      return externalProtocolManager.connectFTP(host, port, user, password)
+    }
+  )
+
+  // === #43: TN3270 ===
+  ipcMain.handle(
+    'protocols:connect3270',
+    (_event, host: string, port: number): string => {
+      return externalProtocolManager.connect3270(host, port)
+    }
+  )
+
+  // === #45: WebDAV ===
+  ipcMain.handle(
+    'protocols:connectWebDAV',
+    (_event, host: string, port: number, user?: string, password?: string): string => {
+      return externalProtocolManager.connectWebDAV(host, port, user, password)
+    }
+  )
 
   // Disconnect
   ipcMain.handle('protocols:disconnect', (_event, sessionId: string) => {

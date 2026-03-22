@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Monitor, Globe, Network, KeyRound, GitBranch } from 'lucide-react'
+import { Monitor, Globe, Network, KeyRound, GitBranch, Puzzle } from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { Switch } from '@renderer/components/ui/switch'
@@ -8,8 +8,9 @@ import { cn } from '@renderer/lib/utils'
 import { usePreferencesStore, type TerminalPreferences } from '@renderer/stores/preferences.store'
 import { ColorSchemeSelector } from './ColorSchemeSelector'
 import { ConfigSync } from './ConfigSync'
+import { PluginManager } from './PluginManager'
 
-type PrefsTab = 'terminal' | 'language' | 'network' | 'keepass' | 'sync'
+type PrefsTab = 'terminal' | 'language' | 'network' | 'keepass' | 'sync' | 'plugins'
 
 const tabConfig: Array<{ id: PrefsTab; icon: typeof Monitor; labelKey: string; fallback: string }> = [
   { id: 'terminal', icon: Monitor, labelKey: 'prefs.terminal', fallback: 'Terminal' },
@@ -17,6 +18,7 @@ const tabConfig: Array<{ id: PrefsTab; icon: typeof Monitor; labelKey: string; f
   { id: 'network', icon: Network, labelKey: 'prefs.network', fallback: 'Network' },
   { id: 'keepass', icon: KeyRound, labelKey: 'prefs.keepass', fallback: 'KeePass' },
   { id: 'sync', icon: GitBranch, labelKey: 'prefs.sync', fallback: 'Sync' },
+  { id: 'plugins', icon: Puzzle, labelKey: 'prefs.plugins', fallback: 'Plugins' },
 ]
 
 const selectClass = cn(
@@ -191,6 +193,10 @@ export function Preferences(): JSX.Element {
 
         {activeTab === 'sync' && (
           <ConfigSync />
+        )}
+
+        {activeTab === 'plugins' && (
+          <PluginManager />
         )}
       </div>
     </div>

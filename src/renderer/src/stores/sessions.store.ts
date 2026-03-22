@@ -47,6 +47,10 @@ interface SessionsState {
   resetReconnectAttempts: (sessionId: string) => void
   getAllTerminalIds: () => string[]
   getActiveTabTerminalIds: () => string[]
+  /** #6: Explode a tab with splits into separate tabs, one per leaf pane */
+  explodePanes: (tabId: string) => void
+  /** #7: Combine all open tabs into one tab with vertical splits */
+  combineTabs: () => void
 }
 
 let paneIdCounter = 0
@@ -129,6 +133,16 @@ function setTerminalInPane(
     }
   }
   return pane
+}
+
+function collectLeafPanes(pane: TerminalPane): TerminalPane[] {
+  if (pane.split) {
+    return [
+      ...collectLeafPanes(pane.split.panes[0]),
+      ...collectLeafPanes(pane.split.panes[1])
+    ]
+  }
+  return [pane]
 }
 
 function collectTerminalIds(pane: TerminalPane): string[] {
@@ -284,5 +298,91 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
     const activeTab = tabs.find((t) => t.id === activeTabId)
     if (!activeTab) return []
     return collectTerminalIds(activeTab.rootPane)
+  },
+
+  explodePanes: (tabId: string) => {
+    const { tabs } = get()
+    const tab = tabs.find((t) => t.id === tabId)
+    if (!tab || !tab.rootPane.split) return
+
+    const leaves = collectLeafPanes(tab.rootPane)
+    if (leaves.length <= 1) return
+
+    const newTabs: Tab[] = leaves.map((leaf, idx) => {
+      const newId = newTabId()
+      return {
+        id: newId,
+        title: leaf.title || `${tab.title} (${idx + 1})`,
+        rootPane: { id: leaf.id, terminalId: leaf.terminalId, title: leaf.title },
+        isActive: false,
+        connectionId: tab.connectionId,
+        lockTitle: false
+      }
+    })
+
+    const firstNewId = newTabs[0].id
+    newTabs[0].isActive = true
+
+    set((state) => ({
+      tabs: state.tabs
+        .filter((t) => t.id !== tabId)
+        .map((t) => ({ ...t, isActive: false }))
+        .concat(newTabs),
+      activeTabId: firstNewId
+    }))
+  },
+
+  combineTabs: () => {
+    const { tabs } = get()
+    if (tabs.length <= 1) return
+
+    const allLeaves: TerminalPane[] = []
+    for (const tab of tabs) {
+      allLeaves.push(...collectLeafPanes(tab.rootPane))
+    }
+
+    if (allLeaves.length === 0) return
+
+    // Build a vertical split tree from all leaf panes
+    let rootPane: TerminalPane = {
+      id: allLeaves[0].id,
+      terminalId: allLeaves[0].terminalId,
+      title: allLeaves[0].title
+    }
+
+    for (let i = 1; i < allLeaves.length; i++) {
+      const containerId = newPaneId()
+      rootPane = {
+        id: containerId,
+        terminalId: null,
+        title: '',
+        split: {
+          direction: 'vertical',
+          panes: [
+            rootPane,
+            {
+              id: allLeaves[i].id,
+              terminalId: allLeaves[i].terminalId,
+              title: allLeaves[i].title
+            }
+          ]
+        }
+      }
+    }
+
+    const combinedId = newTabId()
+    const combinedTab: Tab = {
+      id: combinedId,
+      title: 'Combined',
+      rootPane,
+      isActive: true,
+      connectionId: null,
+      lockTitle: false
+    }
+
+    set({
+      tabs: [combinedTab],
+      activeTabId: combinedId
+    })
   }
 }))

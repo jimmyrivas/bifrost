@@ -154,13 +154,19 @@ export interface BifrostApi {
       password?: string,
       options?: RdpOptions
     ) => Promise<string>
-    connectVNC: (host: string, port: number, password?: string) => Promise<string>
+    connectVNC: (host: string, port: number, password?: string, preferredViewer?: string) => Promise<string>
     connectTelnet: (host: string, port: number) => Promise<string>
     writeTelnet: (sessionId: string, data: string) => void
     // #41: Mosh
     connectMosh: (host: string, user?: string, port?: number, extraArgs?: string[]) => Promise<string>
     // #89: AWS SSM
     connectSSM: (instanceId: string, region: string) => Promise<string>
+    // #42: FTP
+    connectFTP: (host: string, port: number, user?: string, password?: string) => Promise<string>
+    // #43: TN3270
+    connect3270: (host: string, port: number) => Promise<string>
+    // #45: WebDAV
+    connectWebDAV: (host: string, port: number, user?: string, password?: string) => Promise<string>
     writePty: (sessionId: string, data: string) => void
     resizePty: (sessionId: string, cols: number, rows: number) => void
     disconnect: (sessionId: string) => Promise<void>
@@ -251,6 +257,12 @@ export interface BifrostApi {
     update: (id: string, updates: Record<string, unknown>) => Promise<void>
     delete: (id: string) => Promise<void>
     validate: (code: string) => Promise<string | null>
+  }
+  // #29-31: Plugin system
+  plugins: {
+    list: () => Promise<Array<{ name: string; version: string; description: string; path: string; valid: boolean }>>
+    install: (packageName: string) => Promise<{ name: string; version: string; description: string; path: string; valid: boolean }>
+    uninstall: (pluginName: string) => Promise<void>
   }
   window: {
     toggleFullscreen: () => Promise<void>
@@ -403,14 +415,20 @@ const api: BifrostApi = {
   protocols: {
     connectRDP: (host, port, username, password, options) =>
       ipcRenderer.invoke('protocols:connectRDP', host, port, username, password, options),
-    connectVNC: (host, port, password) =>
-      ipcRenderer.invoke('protocols:connectVNC', host, port, password),
+    connectVNC: (host, port, password, preferredViewer?) =>
+      ipcRenderer.invoke('protocols:connectVNC', host, port, password, preferredViewer),
     connectTelnet: (host, port) => ipcRenderer.invoke('protocols:connectTelnet', host, port),
     writeTelnet: (sessionId, data) => ipcRenderer.send('protocols:writeTelnet', sessionId, data),
     connectMosh: (host, user?, port?, extraArgs?) =>
       ipcRenderer.invoke('protocols:connectMosh', host, user, port, extraArgs),
     connectSSM: (instanceId, region) =>
       ipcRenderer.invoke('protocols:connectSSM', instanceId, region),
+    connectFTP: (host, port, user?, password?) =>
+      ipcRenderer.invoke('protocols:connectFTP', host, port, user, password),
+    connect3270: (host, port) =>
+      ipcRenderer.invoke('protocols:connect3270', host, port),
+    connectWebDAV: (host, port, user?, password?) =>
+      ipcRenderer.invoke('protocols:connectWebDAV', host, port, user, password),
     writePty: (sessionId, data) => ipcRenderer.send('protocols:writePty', sessionId, data),
     resizePty: (sessionId, cols, rows) =>
       ipcRenderer.send('protocols:resizePty', sessionId, cols, rows),
@@ -513,6 +531,11 @@ const api: BifrostApi = {
       ipcRenderer.invoke('scripts:update', id, updates),
     delete: (id: string) => ipcRenderer.invoke('scripts:delete', id),
     validate: (code: string) => ipcRenderer.invoke('scripts:validate', code) as Promise<string | null>
+  },
+  plugins: {
+    list: () => ipcRenderer.invoke('plugins:list'),
+    install: (packageName: string) => ipcRenderer.invoke('plugins:install', packageName),
+    uninstall: (pluginName: string) => ipcRenderer.invoke('plugins:uninstall', pluginName)
   },
   window: {
     toggleFullscreen: () => ipcRenderer.invoke('window:toggleFullscreen'),

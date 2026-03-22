@@ -19,7 +19,7 @@ export interface RdpOptions {
 
 export interface ExternalProtocolSession {
   id: string
-  protocol: 'rdp' | 'vnc' | 'telnet' | 'mosh' | 'ssm'
+  protocol: 'rdp' | 'vnc' | 'telnet' | 'mosh' | 'ssm' | 'ftp' | 'tn3270' | 'webdav'
   host: string
   port: number
   process: ChildProcess | null
@@ -137,7 +137,7 @@ class ExternalProtocolManager extends EventEmitter {
     return id
   }
 
-  connectVNC(host: string, port: number, password?: string): string {
+  connectVNC(host: string, port: number, password?: string, preferredViewer?: string): string {
     const id = `vnc-${++idCounter}`
 
     const args: string[] = [`${host}:${port}`]
@@ -146,10 +146,35 @@ class ExternalProtocolManager extends EventEmitter {
       args.push(`-passwd`, `/dev/stdin`)
     }
 
-    const child = spawn('vncviewer', args, {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      detached: false
-    })
+    // #44: Try preferred viewer, then fall back through options
+    const viewers = preferredViewer
+      ? [preferredViewer, 'vncviewer', 'tigervnc', 'xtigervncviewer', 'realvnc']
+      : ['vncviewer', 'tigervnc', 'xtigervncviewer', 'realvnc']
+    // Deduplicate
+    const uniqueViewers = [...new Set(viewers)]
+
+    let child: ChildProcess | null = null
+    let lastError: Error | null = null
+
+    for (const viewer of uniqueViewers) {
+      try {
+        child = spawn(viewer, args, {
+          stdio: ['pipe', 'pipe', 'pipe'],
+          detached: false
+        })
+        // Test if spawn succeeded by checking pid
+        if (child.pid) break
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err))
+        child = null
+      }
+    }
+
+    if (!child) {
+      const errMsg = lastError?.message ?? 'No VNC viewer found'
+      this.emit('error', id, errMsg)
+      return id
+    }
 
     // If password provided, write it to stdin
     if (password && child.stdin) {
@@ -430,6 +455,252 @@ class ExternalProtocolManager extends EventEmitter {
     if (session?.ptyProcess) {
       (session.ptyProcess as { resize: (cols: number, rows: number) => void }).resize(cols, rows)
     }
+  }
+
+  /**
+   * #42: Connect via FTP client.
+   * Spawns `lftp` or falls back to `ftp` via node-pty.
+   */
+  connectFTP(host: string, port: number, user?: string, password?: string): string {
+    const id = `ftp-${++idCounter}`
+
+    // Try lftp first, then fall back to ftp
+    const lftpArgs = user && password
+      ? ['-u', `${user},${password}`, `${host}:${port}`]
+      : [`${host}:${port}`]
+
+    const ftpArgs = [host, String(port)]
+
+    try {
+      const pty = require('node-pty') as typeof import('node-pty')
+      let proc: ReturnType<typeof pty.spawn>
+
+      try {
+        proc = pty.spawn('lftp', lftpArgs, {
+          name: 'xterm-256color',
+          cols: 80,
+          rows: 24,
+          env: process.env as Record<string, string>
+        })
+      } catch {
+        // Fall back to ftp
+        proc = pty.spawn('ftp', ftpArgs, {
+          name: 'xterm-256color',
+          cols: 80,
+          rows: 24,
+          env: process.env as Record<string, string>
+        })
+      }
+
+      const session: ExternalProtocolSession = {
+        id,
+        protocol: 'ftp',
+        host,
+        port,
+        process: null,
+        socket: null,
+        ptyProcess: proc
+      }
+      sessions.set(id, session)
+
+      proc.onData((data: string) => {
+        this.emit('data', id, data)
+      })
+
+      proc.onExit(({ exitCode }: { exitCode: number }) => {
+        sessions.delete(id)
+        this.emit('close', id, exitCode)
+      })
+    } catch {
+      // Fallback without PTY
+      let child: ChildProcess
+      try {
+        child = spawn('lftp', lftpArgs, { stdio: ['pipe', 'pipe', 'pipe'] })
+      } catch {
+        child = spawn('ftp', ftpArgs, { stdio: ['pipe', 'pipe', 'pipe'] })
+      }
+
+      const session: ExternalProtocolSession = {
+        id,
+        protocol: 'ftp',
+        host,
+        port,
+        process: child,
+        socket: null
+      }
+      sessions.set(id, session)
+
+      child.stdout?.on('data', (data: Buffer) => this.emit('data', id, data.toString()))
+      child.stderr?.on('data', (data: Buffer) => this.emit('data', id, data.toString()))
+      child.on('close', (code) => { sessions.delete(id); this.emit('close', id, code ?? 0) })
+      child.on('error', (err) => { sessions.delete(id); this.emit('error', id, err.message) })
+    }
+
+    return id
+  }
+
+  /**
+   * #43: Connect via TN3270 terminal emulator.
+   * Tries c3270, x3270, then tn3270.
+   */
+  connect3270(host: string, port: number): string {
+    const id = `tn3270-${++idCounter}`
+    const target = `${host}:${port}`
+
+    const emulators: Array<{ cmd: string; args: string[] }> = [
+      { cmd: 'c3270', args: [target] },
+      { cmd: 'x3270', args: [target] },
+      { cmd: 'tn3270', args: [host, String(port)] }
+    ]
+
+    try {
+      const pty = require('node-pty') as typeof import('node-pty')
+      let proc: ReturnType<typeof pty.spawn> | null = null
+
+      for (const { cmd, args } of emulators) {
+        try {
+          proc = pty.spawn(cmd, args, {
+            name: 'xterm-256color',
+            cols: 80,
+            rows: 24,
+            env: process.env as Record<string, string>
+          })
+          if (proc) break
+        } catch {
+          proc = null
+        }
+      }
+
+      if (!proc) {
+        this.emit('error', id, 'No TN3270 emulator found (tried c3270, x3270, tn3270)')
+        return id
+      }
+
+      const session: ExternalProtocolSession = {
+        id,
+        protocol: 'tn3270',
+        host,
+        port,
+        process: null,
+        socket: null,
+        ptyProcess: proc
+      }
+      sessions.set(id, session)
+
+      proc.onData((data: string) => this.emit('data', id, data))
+      proc.onExit(({ exitCode }: { exitCode: number }) => {
+        sessions.delete(id)
+        this.emit('close', id, exitCode)
+      })
+    } catch {
+      // Fallback without PTY
+      let child: ChildProcess | null = null
+      for (const { cmd, args } of emulators) {
+        try {
+          child = spawn(cmd, args, { stdio: ['pipe', 'pipe', 'pipe'] })
+          if (child.pid) break
+        } catch {
+          child = null
+        }
+      }
+
+      if (!child) {
+        this.emit('error', id, 'No TN3270 emulator found')
+        return id
+      }
+
+      const session: ExternalProtocolSession = {
+        id,
+        protocol: 'tn3270',
+        host,
+        port,
+        process: child,
+        socket: null
+      }
+      sessions.set(id, session)
+
+      child.stdout?.on('data', (data: Buffer) => this.emit('data', id, data.toString()))
+      child.stderr?.on('data', (data: Buffer) => this.emit('data', id, data.toString()))
+      child.on('close', (code) => { sessions.delete(id); this.emit('close', id, code ?? 0) })
+      child.on('error', (err) => { sessions.delete(id); this.emit('error', id, err.message) })
+    }
+
+    return id
+  }
+
+  /**
+   * #45: Connect via WebDAV using cadaver.
+   */
+  connectWebDAV(host: string, port: number, user?: string, password?: string): string {
+    const id = `webdav-${++idCounter}`
+    const url = `https://${host}:${port}/`
+
+    try {
+      const pty = require('node-pty') as typeof import('node-pty')
+      const env: Record<string, string> = { ...process.env as Record<string, string> }
+
+      // cadaver uses ~/.netrc for auth, but we can also pipe credentials
+      const proc = pty.spawn('cadaver', [url], {
+        name: 'xterm-256color',
+        cols: 80,
+        rows: 24,
+        env
+      })
+
+      const session: ExternalProtocolSession = {
+        id,
+        protocol: 'webdav',
+        host,
+        port,
+        process: null,
+        socket: null,
+        ptyProcess: proc
+      }
+      sessions.set(id, session)
+
+      // Send credentials if provided (cadaver will prompt)
+      if (user) {
+        setTimeout(() => proc.write(user + '\n'), 500)
+        if (password) {
+          setTimeout(() => proc.write(password + '\n'), 1000)
+        }
+      }
+
+      proc.onData((data: string) => this.emit('data', id, data))
+      proc.onExit(({ exitCode }: { exitCode: number }) => {
+        sessions.delete(id)
+        this.emit('close', id, exitCode)
+      })
+    } catch {
+      // Fallback without PTY
+      const child = spawn('cadaver', [url], {
+        stdio: ['pipe', 'pipe', 'pipe']
+      })
+
+      const session: ExternalProtocolSession = {
+        id,
+        protocol: 'webdav',
+        host,
+        port,
+        process: child,
+        socket: null
+      }
+      sessions.set(id, session)
+
+      if (user && child.stdin) {
+        setTimeout(() => { child.stdin?.write(user + '\n') }, 500)
+        if (password) {
+          setTimeout(() => { child.stdin?.write(password + '\n') }, 1000)
+        }
+      }
+
+      child.stdout?.on('data', (data: Buffer) => this.emit('data', id, data.toString()))
+      child.stderr?.on('data', (data: Buffer) => this.emit('data', id, data.toString()))
+      child.on('close', (code) => { sessions.delete(id); this.emit('close', id, code ?? 0) })
+      child.on('error', (err) => { sessions.delete(id); this.emit('error', id, err.message) })
+    }
+
+    return id
   }
 
   disconnect(sessionId: string): void {
