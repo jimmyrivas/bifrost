@@ -185,7 +185,8 @@ app.whenReady().then(() => {
     } else {
       detachedWindow.loadFile(join(__dirname, '../renderer/index.html'))
     }
-    registerTerminalIpc(detachedWindow)
+    // IPC handlers are already registered globally — no need to re-register.
+    // The detached window shares the same IPC channels as the main window.
   })
 
   // Confirm dialog for pre/post exec commands (#55)
