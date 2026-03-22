@@ -353,7 +353,6 @@ export function useTerminal({ paneId, connectionId, onTerminalCreated }: UseTerm
       removeExitListener = window.bifrost.ssh.onClose((id: string) => {
         if (id === sshSessionId) {
           terminal.write('\r\n\x1b[90m[SSH connection closed]\x1b[0m\r\n')
-          const prevSessionId = sshSessionId
           sshSessionId = null
 
           // Auto-reconnect if enabled and not user-initiated
