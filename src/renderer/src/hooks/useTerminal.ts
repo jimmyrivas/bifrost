@@ -260,11 +260,16 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
     const resizeObserver = new ResizeObserver(() => fitAddon.fit())
     resizeObserver.observe(containerRef.current)
 
-    // ── Copy-on-select (#11) ──
+    // ── Copy-on-select (#11) + expose selection to context menu ──
     terminal.onSelectionChange(() => {
+      const selection = terminal.getSelection()
+      // Store selection on the pane element so context menu can access it
+      const paneEl = containerRef.current?.closest('[data-pane-id]') ?? containerRef.current
+      if (paneEl) {
+        (paneEl as HTMLElement).dataset.terminalSelection = selection ?? ''
+      }
       const copyOnSelect = usePreferencesStore.getState().terminal.copyOnSelect
       if (!copyOnSelect) return
-      const selection = terminal.getSelection()
       if (selection && selection.length > 0) {
         navigator.clipboard.writeText(selection)
       }

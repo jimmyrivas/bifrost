@@ -71,8 +71,14 @@ export function TerminalContextMenu({
   const explodePanes = useSessionsStore((s) => s.explodePanes)
   const combineTabs = useSessionsStore((s) => s.combineTabs)
 
+  /** Get xterm selection from data attribute (canvas doesn't support document.getSelection) */
+  const getTerminalSelection = useCallback((): string => {
+    const paneEl = document.querySelector(`[data-pane-id="${paneId}"]`)
+    return (paneEl as HTMLElement)?.dataset?.terminalSelection?.trim() ?? ''
+  }, [paneId])
+
   const handleCopy = useCallback(async () => {
-    const selection = document.getSelection()?.toString()
+    const selection = getTerminalSelection()
     if (selection) {
       await navigator.clipboard.writeText(selection)
     }
@@ -321,7 +327,7 @@ export function TerminalContextMenu({
   // #98 Explain Command
   const [explanation, setExplanation] = useState<string | null>(null)
   const handleExplainCommand = useCallback(async () => {
-    const selection = document.getSelection()?.toString()?.trim()
+    const selection = getTerminalSelection()
     if (!selection) {
       setExplanation('Select a command first, then right-click and choose Explain Command.')
       setTimeout(() => setExplanation(null), 3000)
@@ -341,7 +347,7 @@ export function TerminalContextMenu({
   // Save as Note
   const [noteSaved, setNoteSaved] = useState<string | null>(null)
   const handleSaveAsNote = useCallback(async (tag: string) => {
-    const selection = document.getSelection()?.toString()?.trim()
+    const selection = getTerminalSelection()
     if (!selection) {
       setNoteSaved('Select text first')
       setTimeout(() => setNoteSaved(null), 2000)
