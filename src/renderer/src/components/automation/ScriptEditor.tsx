@@ -178,6 +178,10 @@ export function ScriptEditor(): JSX.Element {
 
           {/* Actions */}
           <div className="flex items-center gap-2 shrink-0">
+            <select className="h-8 rounded-[var(--radius)] bg-[var(--surface-container-highest)] px-2 text-[10px] text-[var(--on-surface)] ghost-border">
+              <option value="active">Active Terminal</option>
+              <option value="all">All Tabs</option>
+            </select>
             <Button variant="spectral" size="sm" onClick={handleRun} disabled={!code.trim()}>
               <Play className="h-3 w-3" /> RUN
             </Button>

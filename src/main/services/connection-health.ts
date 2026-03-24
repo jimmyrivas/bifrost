@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events'
-import { exec } from 'child_process'
+import { execFile } from 'child_process'
 
 export interface HealthStatus {
   connectionId: string
@@ -60,10 +60,14 @@ export class ConnectionHealthMonitor extends EventEmitter {
     return Array.from(this.statuses.values())
   }
 
-  private ping(host: string): Promise<{ reachable: boolean; latencyMs: number | null }> {
+  ping(host: string): Promise<{ reachable: boolean; latencyMs: number | null }> {
+    // Validate host to prevent injection
+    if (!/^[a-zA-Z0-9._\-:[\]]+$/.test(host)) {
+      return Promise.resolve({ reachable: false, latencyMs: null })
+    }
     return new Promise((resolve) => {
-      exec(
-        `ping -c 1 -W 3 ${host}`,
+      execFile(
+        'ping', ['-c', '1', '-W', '3', host],
         { timeout: 5000, encoding: 'utf-8' },
         (error, stdout) => {
           if (error) {

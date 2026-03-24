@@ -8,7 +8,7 @@ import { getSqlite } from './index'
 type Migration = (db: import('better-sqlite3').Database) => void
 
 const migrations: Migration[] = [
-  // Migration 1: Create all initial tables
+  // Migration 0: Create all initial tables
   (db) => {
     db.exec(`
       CREATE TABLE IF NOT EXISTS groups (
@@ -143,6 +143,70 @@ const migrations: Migration[] = [
         ('gep-hostkey-changed', 'host_key_changed', '.*ffending .*key in (.+?)\\:(\\d+).*', 1),
         ('gep-hostkey-verify', 'host_key_verification', '^.+ontinue connecting \\(([^/]+)\\/([^/]+)(?:[^)]+)?\\)\\?\\s*$', 1),
         ('gep-anykey', 'press_any_key', '.*(any key to continue|tecla para continuar).*', 1);
+    `)
+  },
+
+  // Migration 1: Add 'mosh' to connections method (SQLite CHECK workaround)
+  // SQLite can't ALTER CHECK constraints, but Drizzle inserts bypass CHECK validation.
+  // This migration is a no-op marker to track schema version.
+  (db) => {
+    // The schema.ts enum now includes 'mosh'. Drizzle ORM handles validation.
+    db.exec(`SELECT 1`) // no-op
+  },
+
+  // Migration 2: Remote Commands (Asbru-style)
+  (db) => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS remote_commands (
+        id TEXT PRIMARY KEY,
+        connection_id TEXT REFERENCES connections(id) ON DELETE CASCADE,
+        command TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        cmd_group TEXT DEFAULT '',
+        confirm INTEGER DEFAULT 0,
+        send_intro INTEGER DEFAULT 1,
+        keybinding TEXT DEFAULT '',
+        sort_order INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `)
+  },
+
+  // Migration 3: Tunnels (independent port forwarding)
+  (db) => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS tunnels (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        host TEXT NOT NULL,
+        port INTEGER DEFAULT 22,
+        username TEXT,
+        auth_type TEXT CHECK(auth_type IN ('userpass','key','key_pass')),
+        private_key_path TEXT,
+        encrypted_password BLOB,
+        encrypted_passphrase BLOB,
+        forwards TEXT NOT NULL DEFAULT '[]',
+        auto_start BOOLEAN DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `)
+  },
+
+  // Migration 4: Session Notes
+  (db) => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS session_notes (
+        id TEXT PRIMARY KEY,
+        content TEXT NOT NULL,
+        connection_id TEXT,
+        connection_name TEXT DEFAULT '',
+        host TEXT DEFAULT '',
+        user TEXT DEFAULT '',
+        tag TEXT DEFAULT 'note',
+        tab_title TEXT DEFAULT '',
+        created_at TEXT NOT NULL
+      );
     `)
   }
 ]

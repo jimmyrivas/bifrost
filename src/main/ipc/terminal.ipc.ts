@@ -1,6 +1,7 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import * as pty from 'node-pty'
-import { platform } from 'os'
+import { platform, homedir } from 'os'
+import { execFileSync } from 'child_process'
 import {
   setMainWindow,
   setOwner,
@@ -16,26 +17,82 @@ interface PtySession {
   id: string
 }
 
+export interface ShellInfo {
+  name: string        // Display name: "Bash", "PowerShell", etc.
+  path: string        // Binary path: "/bin/bash", "/usr/bin/pwsh"
+  id: string          // Identifier: "bash", "zsh", "pwsh", "fish"
+}
+
 const sessions = new Map<string, PtySession>()
 let idCounter = 0
+let cachedShells: ShellInfo[] | null = null
 
 function getDefaultShell(): string {
   if (platform() === 'win32') return 'powershell.exe'
   return process.env.SHELL || '/bin/bash'
 }
 
+/** Detect all available shells on the system */
+function detectShells(): ShellInfo[] {
+  if (cachedShells) return cachedShells
+
+  const candidates: Array<{ id: string; name: string; bins: string[] }> = [
+    { id: 'bash', name: 'Bash', bins: ['/bin/bash', '/usr/bin/bash'] },
+    { id: 'zsh', name: 'Zsh', bins: ['/bin/zsh', '/usr/bin/zsh'] },
+    { id: 'fish', name: 'Fish', bins: ['/usr/bin/fish', '/usr/local/bin/fish'] },
+    { id: 'pwsh', name: 'PowerShell', bins: ['/usr/bin/pwsh', '/usr/local/bin/pwsh', '/snap/bin/pwsh'] },
+    { id: 'sh', name: 'POSIX sh', bins: ['/bin/sh'] }
+  ]
+
+  if (platform() === 'win32') {
+    cachedShells = [
+      { id: 'pwsh', name: 'PowerShell 7', path: 'pwsh.exe' },
+      { id: 'powershell', name: 'Windows PowerShell', path: 'powershell.exe' },
+      { id: 'cmd', name: 'Command Prompt', path: 'cmd.exe' }
+    ]
+    return cachedShells
+  }
+
+  const shells: ShellInfo[] = []
+  const { existsSync } = require('fs') as typeof import('fs')
+
+  for (const candidate of candidates) {
+    // Check known paths first
+    for (const bin of candidate.bins) {
+      if (existsSync(bin)) {
+        shells.push({ id: candidate.id, name: candidate.name, path: bin })
+        break
+      }
+    }
+    // If not found via paths, try `which`
+    if (!shells.find((s) => s.id === candidate.id)) {
+      try {
+        const path = execFileSync('which', [candidate.id], {
+          encoding: 'utf-8', timeout: 2000, stdio: 'pipe'
+        }).trim()
+        if (path) {
+          shells.push({ id: candidate.id, name: candidate.name, path })
+        }
+      } catch { /* not installed */ }
+    }
+  }
+
+  cachedShells = shells
+  return shells
+}
+
 export function registerTerminalIpc(mainWindow: BrowserWindow): void {
   setMainWindow(mainWindow)
 
-  ipcMain.handle('terminal:create', (_event, cols: number, rows: number) => {
+  ipcMain.handle('terminal:create', (_event, cols: number, rows: number, shell?: string) => {
     const id = `terminal-${++idCounter}`
-    const shell = getDefaultShell()
+    const shellPath = shell || getDefaultShell()
 
-    const ptyProcess = pty.spawn(shell, [], {
+    const ptyProcess = pty.spawn(shellPath, [], {
       name: 'xterm-256color',
       cols,
       rows,
-      cwd: process.env.HOME || '/',
+      cwd: process.env.HOME || homedir() || '/',
       env: process.env as Record<string, string>
     })
 
@@ -78,6 +135,8 @@ export function registerTerminalIpc(mainWindow: BrowserWindow): void {
   })
 
   ipcMain.handle('terminal:getDefaultShell', () => getDefaultShell())
+
+  ipcMain.handle('terminal:listShells', () => detectShells())
 
   // Transfer terminal ownership to the calling window (for detach/reattach)
   ipcMain.handle('terminal:transferOwnership', (_event, terminalId: string) => {

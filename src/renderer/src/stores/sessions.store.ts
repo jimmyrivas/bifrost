@@ -28,9 +28,11 @@ export interface Tab {
   connectionId: string | null // null = local terminal, string = SSH connection ID
   lockTitle: boolean
   terminalStyle?: TerminalStyle
+  shell?: string // shell path override for local terminals (e.g. /usr/bin/pwsh)
+  aiDetected?: string // AI tool name detected in session (e.g. "claude", "ollama")
 }
 
-export type BroadcastMode = 'off' | 'panes' | 'all-tabs'
+export type BroadcastMode = 'hidden' | 'off' | 'panes' | 'all-tabs'
 
 interface SessionsState {
   tabs: Tab[]
@@ -40,7 +42,7 @@ interface SessionsState {
   maxReconnectAttempts: number
   maximizedPaneId: string | null
 
-  createTab: (title?: string, connectionId?: string, terminalStyle?: TerminalStyle) => string
+  createTab: (title?: string, connectionId?: string, terminalStyle?: TerminalStyle, shell?: string) => string
   closeTab: (tabId: string) => void
   setActiveTab: (tabId: string) => void
   renameTab: (tabId: string, title: string) => void
@@ -49,6 +51,7 @@ interface SessionsState {
   closeSplitPane: (tabId: string, paneId: string) => void
   setBroadcastMode: (mode: BroadcastMode) => void
   cycleBroadcastMode: () => void
+  setAiDetected: (tabId: string, tool: string) => void
   toggleLockTitle: (tabId: string) => void
   toggleMaximizePane: (paneId: string) => void
   getReconnectAttempts: (sessionId: string) => number
@@ -58,6 +61,8 @@ interface SessionsState {
   getActiveTabTerminalIds: () => string[]
   markTabDetaching: (tabId: string) => void
   isTabDetaching: (tabId: string) => boolean
+  toggleSftp: (tabId: string) => void
+  isSftpOpen: (tabId: string) => boolean
   /** #6: Explode a tab with splits into separate tabs, one per leaf pane */
   explodePanes: (tabId: string) => void
   /** #7: Combine all open tabs into one tab with vertical splits */
@@ -169,13 +174,14 @@ function collectTerminalIds(pane: TerminalPane): string[] {
 export const useSessionsStore = create<SessionsState>((set, get) => ({
   tabs: [],
   activeTabId: null,
-  broadcastMode: 'off',
+  broadcastMode: 'hidden',
   reconnectAttempts: new Map(),
   maxReconnectAttempts: 50,
   maximizedPaneId: null,
   _detachingTabs: new Set<string>(),
+  sftpOpenTabIds: [] as string[],
 
-  createTab: (title?: string, connectionId?: string, terminalStyle?: TerminalStyle) => {
+  createTab: (title?: string, connectionId?: string, terminalStyle?: TerminalStyle, shell?: string) => {
     const tabId = newTabId()
     const label = title ?? `Terminal ${tabIdCounter}`
     const tab: Tab = {
@@ -185,7 +191,8 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
       isActive: true,
       connectionId: connectionId ?? null,
       lockTitle: false,
-      terminalStyle
+      terminalStyle,
+      shell
     }
     set((state) => ({
       tabs: state.tabs.map((t) => ({ ...t, isActive: false })).concat(tab),
@@ -260,8 +267,16 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
   cycleBroadcastMode: () => {
     const current = get().broadcastMode
     const next: BroadcastMode =
-      current === 'off' ? 'panes' : current === 'panes' ? 'all-tabs' : 'off'
+      current === 'hidden' ? 'off' : current === 'off' ? 'panes' : current === 'panes' ? 'all-tabs' : 'hidden'
     set({ broadcastMode: next })
+  },
+
+  setAiDetected: (tabId: string, tool: string) => {
+    set((state) => ({
+      tabs: state.tabs.map((t) =>
+        t.id === tabId ? { ...t, aiDetected: t.aiDetected || tool } : t
+      )
+    }))
   },
 
   toggleLockTitle: (tabId: string) => {
@@ -275,6 +290,19 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
   toggleMaximizePane: (paneId: string) => {
     const current = get().maximizedPaneId
     set({ maximizedPaneId: current === paneId ? null : paneId })
+  },
+
+  toggleSftp: (tabId: string) => {
+    const current = get().sftpOpenTabIds
+    if (current.includes(tabId)) {
+      set({ sftpOpenTabIds: current.filter((id) => id !== tabId) })
+    } else {
+      set({ sftpOpenTabIds: [...current, tabId] })
+    }
+  },
+
+  isSftpOpen: (tabId: string) => {
+    return get().sftpOpenTabIds.includes(tabId)
   },
 
   getReconnectAttempts: (sessionId: string) => {

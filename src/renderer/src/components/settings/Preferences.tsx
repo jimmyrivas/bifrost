@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Monitor, Globe, Network, KeyRound, GitBranch, Puzzle } from 'lucide-react'
+import { Monitor, Globe, Network, KeyRound, GitBranch, Puzzle, Shield, Lock, Bot } from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { Switch } from '@renderer/components/ui/switch'
@@ -9,11 +9,16 @@ import { usePreferencesStore, type TerminalPreferences } from '@renderer/stores/
 import { ColorSchemeSelector } from './ColorSchemeSelector'
 import { ConfigSync } from './ConfigSync'
 import { PluginManager } from './PluginManager'
+import { KnownHostsPanel } from './KnownHostsPanel'
+import { setSecretRedactionEnabled, isSecretRedactionEnabled } from '@renderer/lib/secret-redactor'
 
-type PrefsTab = 'terminal' | 'language' | 'network' | 'keepass' | 'sync' | 'plugins'
+type PrefsTab = 'terminal' | 'ai' | 'ssh' | 'security' | 'language' | 'network' | 'keepass' | 'sync' | 'plugins'
 
 const tabConfig: Array<{ id: PrefsTab; icon: typeof Monitor; labelKey: string; fallback: string }> = [
   { id: 'terminal', icon: Monitor, labelKey: 'prefs.terminal', fallback: 'Terminal' },
+  { id: 'ai', icon: Bot, labelKey: 'prefs.ai', fallback: 'AI' },
+  { id: 'ssh', icon: Shield, labelKey: 'prefs.ssh', fallback: 'SSH' },
+  { id: 'security', icon: Lock, labelKey: 'prefs.security', fallback: 'Security' },
   { id: 'language', icon: Globe, labelKey: 'prefs.language', fallback: 'Language' },
   { id: 'network', icon: Network, labelKey: 'prefs.network', fallback: 'Network' },
   { id: 'keepass', icon: KeyRound, labelKey: 'prefs.keepass', fallback: 'KeePass' },
@@ -91,6 +96,7 @@ export function Preferences(): JSX.Element {
                     id="pref-font"
                     value={terminal.fontFamily}
                     fonts={systemFonts}
+                    fontSize={terminal.fontSize}
                     onChange={(v) => setTermPref('fontFamily', v)}
                   />
                 </div>
@@ -137,10 +143,91 @@ export function Preferences(): JSX.Element {
                   <span className="text-xs text-[var(--on-surface-variant)]">Copy on Select</span>
                   <Switch checked={terminal.copyOnSelect} onCheckedChange={(v) => setTermPref('copyOnSelect', v)} />
                 </label>
+                <div className="col-span-2">
+                  <label className={fieldLabel} htmlFor="pref-tab-title">DEFAULT TAB TITLE TEMPLATE</label>
+                  <Input
+                    id="pref-tab-title"
+                    value={terminal.tabTitleTemplate}
+                    onChange={(e) => setTermPref('tabTitleTemplate', e.target.value)}
+                    placeholder="<USER>@<IP> - <NAME>"
+                    className="font-['JetBrains_Mono'] text-xs"
+                  />
+                  <span className="text-[9px] text-[var(--on-surface-variant)] mt-0.5 block">
+                    Used when a connection has no custom tab title. Variables: &lt;USER&gt; &lt;IP&gt; &lt;PORT&gt; &lt;NAME&gt; &lt;ENV:name&gt;
+                  </span>
+                </div>
               </div>
             </div>
             <div className={sectionCard}>
               <ColorSchemeSelector />
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'ai' && (
+          <AiSettingsPanel />
+        )}
+
+        {activeTab === 'ssh' && (
+          <div className="flex flex-col gap-5 max-w-2xl">
+            <h3 className="text-sm font-semibold text-[var(--on-surface)]">SSH Settings</h3>
+            <div className={sectionCard}>
+              <KnownHostsPanel />
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'security' && (
+          <div className="flex flex-col gap-5 max-w-lg">
+            <h3 className="text-sm font-semibold text-[var(--on-surface)]">Security</h3>
+            <div className={sectionCard}>
+              <div className="flex flex-col gap-4">
+                <div>
+                  <label className={fieldLabel}>CREDENTIAL VAULT</label>
+                  <p className="text-xs text-[var(--on-surface-variant)] mb-3">
+                    Passwords and passphrases are encrypted using the system keychain (gnome-keyring/kwallet).
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      const available = await window.bifrost?.credentials?.isAvailable()
+                      if (available) {
+                        window.alert('Credential vault is available and using system keychain encryption.')
+                      } else {
+                        window.alert('System keychain not available. Credentials are stored with base64 encoding (less secure).')
+                      }
+                    }}
+                  >
+                    Check Vault Status
+                  </Button>
+                </div>
+                <div className="h-[1px] bg-[var(--surface-container-highest)]" />
+                <div>
+                  <label className={fieldLabel}>CONFIGURATION ENCRYPTION</label>
+                  <p className="text-xs text-[var(--on-surface-variant)] mb-3">
+                    Database stores connection passwords and passphrases encrypted. SSH keys are referenced by path (not stored in DB).
+                  </p>
+                  <label className="flex items-center justify-between cursor-pointer">
+                    <span className="text-xs text-[var(--on-surface-variant)]">Encrypt exported configurations</span>
+                    <Switch checked={false} onCheckedChange={() => window.alert('Feature in development')} />
+                  </label>
+                </div>
+                <div className="h-[1px] bg-[var(--surface-container-highest)]" />
+                <div>
+                  <label className={fieldLabel}>SECRET REDACTION</label>
+                  <p className="text-xs text-[var(--on-surface-variant)] mb-3">
+                    Automatically mask API keys, tokens, and passwords in terminal output. Prevents accidental exposure.
+                  </p>
+                  <label className="flex items-center justify-between cursor-pointer">
+                    <span className="text-xs text-[var(--on-surface-variant)]">Redact secrets in terminal output</span>
+                    <Switch
+                      checked={isSecretRedactionEnabled()}
+                      onCheckedChange={(v) => setSecretRedactionEnabled(v)}
+                    />
+                  </label>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -214,15 +301,104 @@ export function Preferences(): JSX.Element {
 }
 
 /** Searchable font family dropdown with preview */
+function AiSettingsPanel(): JSX.Element {
+  const [provider, setProvider] = useState('ollama')
+  const [apiKey, setApiKey] = useState('')
+  const [model, setModel] = useState('')
+  const [ollamaUrl, setOllamaUrl] = useState('http://localhost:11434')
+  const [status, setStatus] = useState<string | null>(null)
+
+  useEffect(() => {
+    window.bifrost?.ai?.getConfig?.().then((cfg) => {
+      if (cfg) {
+        setProvider(cfg.provider)
+        setApiKey(cfg.apiKey)
+        setModel(cfg.model)
+        setOllamaUrl(cfg.ollamaUrl)
+      }
+    }).catch(() => {})
+  }, [])
+
+  const handleSave = async (): Promise<void> => {
+    await window.bifrost?.ai?.setConfig?.({ provider, apiKey, model, ollamaUrl })
+    setStatus('Saved')
+    setTimeout(() => setStatus(null), 2000)
+  }
+
+  const handleTest = async (): Promise<void> => {
+    setStatus('Testing...')
+    try {
+      await window.bifrost?.ai?.setConfig?.({ provider, apiKey, model, ollamaUrl })
+      const ok = await window.bifrost?.ai?.checkAvailable?.()
+      setStatus(ok ? 'Connected!' : 'Connection failed')
+    } catch { setStatus('Connection failed') }
+    setTimeout(() => setStatus(null), 3000)
+  }
+
+  return (
+    <div className="flex flex-col gap-5 max-w-lg">
+      <h3 className="text-sm font-semibold text-[var(--on-surface)]">AI Assistant</h3>
+      <div className={sectionCard}>
+        <div className="flex flex-col gap-4">
+          <div>
+            <label className={fieldLabel}>PROVIDER</label>
+            <select className={selectClass} value={provider} onChange={(e) => setProvider(e.target.value)}>
+              <option value="ollama">Ollama (Local)</option>
+              <option value="openrouter">OpenRouter</option>
+              <option value="openai">OpenAI</option>
+              <option value="deepseek">DeepSeek</option>
+            </select>
+          </div>
+          {provider === 'ollama' ? (
+            <div>
+              <label className={fieldLabel}>OLLAMA URL</label>
+              <Input value={ollamaUrl} onChange={(e) => setOllamaUrl(e.target.value)} placeholder="http://localhost:11434" />
+              <span className="text-[9px] text-[var(--on-surface-variant)] mt-0.5 block">Install: curl -fsSL https://ollama.com/install.sh | sh</span>
+            </div>
+          ) : (
+            <div>
+              <label className={fieldLabel}>API KEY</label>
+              <Input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder={provider === 'openrouter' ? 'sk-or-...' : provider === 'deepseek' ? 'sk-...' : 'sk-...'} />
+              <span className="text-[9px] text-[var(--on-surface-variant)] mt-0.5 block">
+                {provider === 'openrouter' && 'Get key at openrouter.ai/keys'}
+                {provider === 'openai' && 'Get key at platform.openai.com/api-keys'}
+                {provider === 'deepseek' && 'Get key at platform.deepseek.com/api_keys'}
+              </span>
+            </div>
+          )}
+          <div>
+            <label className={fieldLabel}>MODEL (optional)</label>
+            <Input value={model} onChange={(e) => setModel(e.target.value)} placeholder={provider === 'ollama' ? 'Auto-detect' : provider === 'openrouter' ? 'anthropic/claude-3.5-haiku' : provider === 'deepseek' ? 'deepseek-chat' : 'gpt-4o-mini'} />
+            <span className="text-[9px] text-[var(--on-surface-variant)] mt-0.5 block">Leave empty for default model</span>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="spectral" size="sm" onClick={handleSave}>Save</Button>
+            <Button variant="outline" size="sm" onClick={handleTest}>Test Connection</Button>
+            {status && <span className="text-[10px] text-[var(--on-surface-variant)] self-center">{status}</span>}
+          </div>
+        </div>
+      </div>
+      <div className={sectionCard}>
+        <p className="text-xs text-[var(--on-surface-variant)]">
+          AI powers: command suggestions, error explanations, proactive fix suggestions, and the AI Assistant panel.
+          API keys are stored locally and never shared. For maximum privacy use Ollama (runs 100% locally).
+        </p>
+      </div>
+    </div>
+  )
+}
+
 function FontFamilyPicker({
   id,
   value,
   fonts,
+  fontSize,
   onChange
 }: {
   id: string
   value: string
   fonts: string[]
+  fontSize?: number
   onChange: (font: string) => void
 }): JSX.Element {
   const [open, setOpen] = useState(false)
@@ -245,8 +421,10 @@ function FontFamilyPicker({
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
 
+  const previewSize = fontSize ?? 14
+
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className="relative flex flex-col gap-2">
       <Input
         id={id}
         value={open ? search : value}
@@ -260,9 +438,22 @@ function FontFamilyPicker({
         }}
         placeholder="Search fonts..."
       />
+      {/* Live terminal preview of selected font */}
+      <div
+        className="rounded-[var(--radius)] p-3 leading-relaxed overflow-hidden bg-[#0d0d0f]"
+        style={{
+          fontFamily: `'${value}', monospace`,
+          fontSize: `${previewSize}px`
+        }}
+      >
+        <div style={{ color: '#22c55e' }}>user@bifrost<span style={{ color: '#c7c4d7' }}>:</span><span style={{ color: '#3b82f6' }}>~</span><span style={{ color: '#c7c4d7' }}>$</span> <span style={{ color: '#e4e4e7' }}>echo &quot;Hello Bifrost&quot;</span></div>
+        <div style={{ color: '#e4e4e7' }}>Hello Bifrost</div>
+        <div style={{ color: '#71717a' }}>0123456789 !@#$%^&amp;*() {'{}'} [] &lt;&gt; =&gt; -&gt; != &lt;= &gt;= === !==</div>
+        <div style={{ color: '#22c55e' }}>user@bifrost<span style={{ color: '#c7c4d7' }}>:</span><span style={{ color: '#3b82f6' }}>~</span><span style={{ color: '#c7c4d7' }}>$</span> <span style={{ color: '#71717a' }}>▊</span></div>
+      </div>
       {open && (
         <div
-          className="absolute z-50 top-full left-0 right-0 mt-1 max-h-56 overflow-y-auto rounded-[var(--radius)] bg-[var(--surface-container-high)] shadow-lg"
+          className="absolute z-50 top-10 left-0 right-0 mt-1 max-h-64 overflow-y-auto rounded-[var(--radius)] bg-[var(--surface-container-high)] shadow-lg border border-[rgba(199,196,215,0.1)]"
           role="listbox"
           aria-label="Font families"
         >
@@ -275,7 +466,7 @@ function FontFamilyPicker({
               role="option"
               aria-selected={value === font}
               className={cn(
-                'w-full text-left px-3 py-1.5 text-xs hover:bg-[var(--surface-container-highest)] transition-colors flex items-center justify-between gap-2',
+                'w-full text-left px-3 py-2 hover:bg-[var(--surface-container-highest)] transition-colors flex flex-col gap-0.5',
                 value === font && 'bg-[var(--surface-container-highest)] text-[var(--on-surface)]'
               )}
               onClick={() => {
@@ -284,12 +475,12 @@ function FontFamilyPicker({
                 setSearch('')
               }}
             >
-              <span className="truncate">{font}</span>
+              <span className="text-xs truncate text-[var(--on-surface)]">{font}</span>
               <span
-                className="text-[10px] text-[var(--on-surface-variant)] shrink-0"
+                className="text-[13px] text-[var(--on-surface-variant)] leading-tight"
                 style={{ fontFamily: `'${font}', monospace` }}
               >
-                AaBbCc 01234
+                The quick brown fox jumps 0123456789 =&gt; != {}
               </span>
             </button>
           ))}

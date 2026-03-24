@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react'
 import { Input } from '@renderer/components/ui/input'
+import { Switch } from '@renderer/components/ui/switch'
 import { cn } from '@renderer/lib/utils'
 
 const SSH_OPTIONS: Array<{ key: string; description: string; defaultValue: string }> = [
@@ -77,8 +78,28 @@ export function SshOptionsPanel({ options, onChange }: SshOptionsPanelProps): JS
       o.description.toLowerCase().includes(lowerSearch)
   )
 
+  const reuseConnection = options['__reuseConnection'] === 'true'
+  const handleReuseToggle = useCallback((checked: boolean) => {
+    const next = { ...options }
+    if (checked) {
+      next['__reuseConnection'] = 'true'
+    } else {
+      delete next['__reuseConnection']
+    }
+    onChange(next)
+  }, [options, onChange])
+
   return (
     <div className="flex flex-col gap-3">
+      {/* Session multiplexing toggle */}
+      <label className="flex items-center justify-between cursor-pointer p-2 rounded-[var(--radius)] bg-[var(--surface-container-high)]">
+        <div>
+          <span className="text-xs text-[var(--on-surface)]">Reuse SSH Connection</span>
+          <span className="text-[9px] text-[var(--on-surface-variant)] block">Share one SSH session across multiple terminals to the same host</span>
+        </div>
+        <Switch checked={reuseConnection} onCheckedChange={handleReuseToggle} />
+      </label>
+
       <button
         className="flex items-center gap-2 text-left"
         onClick={() => setExpanded(!expanded)}

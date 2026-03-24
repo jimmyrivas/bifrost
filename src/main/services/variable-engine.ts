@@ -133,8 +133,13 @@ export class VariableEngine {
 
   resolveCmd(input: string): string {
     return input.replace(/<CMD:([^>]+)>/g, (_match, command: string) => {
+      // Security: reject shell metacharacters to prevent injection
+      if (/[;&|`$(){}]/.test(command)) return '[CMD:blocked]'
       try {
-        return execSync(command, { encoding: 'utf-8', timeout: 5000 }).trim()
+        const parts = command.trim().split(/\s+/)
+        const cmd = parts[0]
+        const args = parts.slice(1)
+        return require('child_process').execFileSync(cmd, args, { encoding: 'utf-8', timeout: 5000 }).trim()
       } catch {
         return ''
       }

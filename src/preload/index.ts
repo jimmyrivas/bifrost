@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { IpcRendererEvent } from 'electron'
 import type { ConnectionData, GroupData } from '../main/ipc/connections.ipc'
+import type { RemoteCommandData } from '../main/ipc/remote-commands.ipc'
+import type { TunnelData } from '../main/ipc/tunnels.ipc'
 import type { SftpFileEntry, SftpFileStat } from '../main/services/sftp-manager'
 import type { RdpOptions } from '../main/services/external-protocol'
 import type { SshConfigEntry } from '../main/services/ssh-config-parser'
@@ -18,11 +20,12 @@ export interface AiChunkCallback {
 
 export interface BifrostApi {
   terminal: {
-    create: (cols: number, rows: number) => Promise<string>
+    create: (cols: number, rows: number, shell?: string) => Promise<string>
     write: (id: string, data: string) => void
     resize: (id: string, cols: number, rows: number) => void
     destroy: (id: string) => Promise<void>
     getDefaultShell: () => Promise<string>
+    listShells: () => Promise<Array<{ id: string; name: string; path: string }>>
     onData: (callback: (id: string, data: string) => void) => () => void
     onExit: (callback: (id: string, exitCode: number) => void) => () => void
     transferOwnership: (terminalId: string) => Promise<void>
@@ -39,6 +42,11 @@ export interface BifrostApi {
     createGroup: (data: GroupData) => Promise<string>
     updateGroup: (id: string, data: Partial<GroupData>) => Promise<void>
     deleteGroup: (id: string) => Promise<void>
+    resolveTabTitle: (template: string, connectionId?: string) => Promise<string>
+  }
+  execCommands: {
+    list: (connectionId: string) => Promise<Array<{ id: string; phase: string; command: string; ask: boolean; isDefault: boolean; sortOrder: number }>>
+    save: (connectionId: string, commands: Array<{ phase: string; command: string; ask: boolean; isDefault: boolean; sortOrder: number }>) => Promise<void>
   }
   credentials: {
     isAvailable: () => Promise<boolean>
@@ -64,7 +72,7 @@ export interface BifrostApi {
   }
   ssh: {
     connect: (connectionId: string) => Promise<string>
-    openShell: (sessionId: string, cols: number, rows: number) => Promise<void>
+    openShell: (sessionId: string, cols: number, rows: number, connectionId?: string) => Promise<void>
     write: (sessionId: string, data: string) => void
     resize: (sessionId: string, cols: number, rows: number) => void
     disconnect: (sessionId: string) => Promise<void>
@@ -187,6 +195,7 @@ export interface BifrostApi {
     logData: (sessionId: string, data: string) => void
     stopLogging: (sessionId: string) => Promise<void>
     getLogDir: () => Promise<string>
+    healthPing: (connectionId: string, host: string) => Promise<{ connectionId: string; host: string; reachable: boolean; latencyMs: number | null }>
   }
   import: {
     sshConfig: (configPath?: string) => Promise<SshConfigEntry[]>
@@ -222,6 +231,8 @@ export interface BifrostApi {
     generate: (prompt: string, context?: string) => Promise<string>
     explain: (command: string) => Promise<string>
     onChunk: (callback: (text: string, done: boolean) => void) => () => void
+    getConfig: () => Promise<{ provider: string; apiKey: string; model: string; ollamaUrl: string }>
+    setConfig: (cfg: { provider?: string; apiKey?: string; model?: string; ollamaUrl?: string }) => Promise<void>
   }
   configSync: {
     exportToGit: (repoPath: string) => Promise<{ exported: number }>
@@ -259,9 +270,44 @@ export interface BifrostApi {
     update: (id: string, updates: Record<string, unknown>) => Promise<void>
     delete: (id: string) => Promise<void>
     validate: (code: string) => Promise<string | null>
+    execute: (code: string) => Promise<void>
+    onOutput: (callback: (msg: { type: string; text?: string; message?: string }) => void) => () => void
   }
   fonts: {
     listMonospace: () => Promise<string[]>
+  }
+  notes: {
+    list: (tag?: string) => Promise<Array<{ id: string; content: string; connectionId: string | null; connectionName: string; host: string; user: string; tag: string; tabTitle: string; createdAt: string }>>
+    search: (query: string) => Promise<Array<{ id: string; content: string; connectionId: string | null; connectionName: string; host: string; user: string; tag: string; tabTitle: string; createdAt: string }>>
+    create: (data: { content: string; connectionId?: string; connectionName?: string; host?: string; user?: string; tag?: string; tabTitle?: string }) => Promise<string>
+    delete: (id: string) => Promise<void>
+  }
+  remoteCommands: {
+    list: (connectionId?: string) => Promise<RemoteCommandData[]>
+    create: (data: RemoteCommandData) => Promise<string>
+    update: (id: string, data: Partial<RemoteCommandData>) => Promise<void>
+    delete: (id: string) => Promise<void>
+  }
+  templates: {
+    list: () => Promise<Array<{ id: string; name: string; config: string }>>
+    create: (name: string, config: string) => Promise<string>
+    delete: (id: string) => Promise<void>
+  }
+  expect: {
+    setDebug: (sessionId: string, enabled: boolean) => Promise<void>
+    getStatus: (sessionId: string) => Promise<{ active: boolean; rulesCount: number; currentRule: { id: string; pattern: string } | null; debug: boolean; log: string[] }>
+  }
+  tunnels: {
+    list: () => Promise<TunnelData[]>
+    get: (id: string) => Promise<TunnelData | undefined>
+    create: (data: TunnelData) => Promise<string>
+    update: (id: string, data: Partial<TunnelData>) => Promise<void>
+    delete: (id: string) => Promise<void>
+    start: (id: string) => Promise<{ ok: boolean; message: string }>
+    stop: (id: string) => Promise<{ ok: boolean; message: string }>
+    stopAll: () => Promise<{ ok: boolean; message: string }>
+    status: (id: string) => Promise<{ active: boolean; uptime: number }>
+    listActive: () => Promise<Array<{ tunnelId: string; sessionId: string; uptime: number }>>
   }
   // #29-31: Plugin system
   plugins: {
@@ -272,6 +318,8 @@ export interface BifrostApi {
   window: {
     toggleFullscreen: () => Promise<void>
     showConfirmDialog: (message: string) => Promise<boolean>
+    showSaveDialog: (defaultName: string) => Promise<string | null>
+    showOpenDialog: () => Promise<string[]>
     detachTab: (tabId: string, title: string, connectionId?: string, sessionId?: string) => Promise<void>
     reattachTab: (tabId: string) => Promise<void>
     onTabReattached: (callback: (tabId: string) => void) => () => void
@@ -280,11 +328,12 @@ export interface BifrostApi {
 
 const api: BifrostApi = {
   terminal: {
-    create: (cols, rows) => ipcRenderer.invoke('terminal:create', cols, rows),
+    create: (cols, rows, shell?) => ipcRenderer.invoke('terminal:create', cols, rows, shell),
     write: (id, data) => ipcRenderer.send('terminal:write', id, data),
     resize: (id, cols, rows) => ipcRenderer.send('terminal:resize', id, cols, rows),
     destroy: (id) => ipcRenderer.invoke('terminal:destroy', id),
     getDefaultShell: () => ipcRenderer.invoke('terminal:getDefaultShell'),
+    listShells: () => ipcRenderer.invoke('terminal:listShells'),
     onData: (callback) => {
       const handler = (_e: IpcRendererEvent, id: string, data: string): void => callback(id, data)
       ipcRenderer.on('terminal:data', handler)
@@ -308,7 +357,12 @@ const api: BifrostApi = {
     listGroups: () => ipcRenderer.invoke('connections:listGroups'),
     createGroup: (data) => ipcRenderer.invoke('connections:createGroup', data),
     updateGroup: (id, data) => ipcRenderer.invoke('connections:updateGroup', id, data),
-    deleteGroup: (id) => ipcRenderer.invoke('connections:deleteGroup', id)
+    deleteGroup: (id) => ipcRenderer.invoke('connections:deleteGroup', id),
+    resolveTabTitle: (template, connectionId) => ipcRenderer.invoke('connections:resolveTabTitle', template, connectionId)
+  },
+  execCommands: {
+    list: (connectionId) => ipcRenderer.invoke('execCommands:list', connectionId),
+    save: (connectionId, commands) => ipcRenderer.invoke('execCommands:save', connectionId, commands)
   },
   credentials: {
     isAvailable: () => ipcRenderer.invoke('credentials:isAvailable'),
@@ -328,7 +382,7 @@ const api: BifrostApi = {
   },
   ssh: {
     connect: (connectionId) => ipcRenderer.invoke('ssh:connect', connectionId),
-    openShell: (sessionId, cols, rows) => ipcRenderer.invoke('ssh:openShell', sessionId, cols, rows),
+    openShell: (sessionId, cols, rows, connectionId?) => ipcRenderer.invoke('ssh:openShell', sessionId, cols, rows, connectionId),
     write: (sessionId, data) => ipcRenderer.send('ssh:write', sessionId, data),
     resize: (sessionId, cols, rows) => ipcRenderer.send('ssh:resize', sessionId, cols, rows),
     disconnect: (sessionId) => ipcRenderer.invoke('ssh:disconnect', sessionId),
@@ -467,7 +521,8 @@ const api: BifrostApi = {
       ipcRenderer.invoke('system:startLogging', sessionId, pattern, context),
     logData: (sessionId, data) => ipcRenderer.send('system:logData', sessionId, data),
     stopLogging: (sessionId) => ipcRenderer.invoke('system:stopLogging', sessionId),
-    getLogDir: () => ipcRenderer.invoke('system:getLogDir')
+    getLogDir: () => ipcRenderer.invoke('system:getLogDir'),
+    healthPing: (connectionId, host) => ipcRenderer.invoke('health:ping', connectionId, host)
   },
   import: {
     sshConfig: (configPath?) => ipcRenderer.invoke('import:sshConfig', configPath),
@@ -499,6 +554,8 @@ const api: BifrostApi = {
     listModels: () => ipcRenderer.invoke('ai:listModels'),
     generate: (prompt, context?) => ipcRenderer.invoke('ai:generate', prompt, context),
     explain: (command) => ipcRenderer.invoke('ai:explain', command),
+    getConfig: () => ipcRenderer.invoke('ai:getConfig'),
+    setConfig: (cfg) => ipcRenderer.invoke('ai:setConfig', cfg),
     onChunk: (callback) => {
       const handler = (_e: IpcRendererEvent, text: string, done: boolean): void =>
         callback(text, done)
@@ -540,10 +597,52 @@ const api: BifrostApi = {
     update: (id: string, updates: Record<string, unknown>) =>
       ipcRenderer.invoke('scripts:update', id, updates),
     delete: (id: string) => ipcRenderer.invoke('scripts:delete', id),
-    validate: (code: string) => ipcRenderer.invoke('scripts:validate', code) as Promise<string | null>
+    validate: (code: string) => ipcRenderer.invoke('scripts:validate', code) as Promise<string | null>,
+    execute: (code: string) => ipcRenderer.invoke('scripts:execute', code) as Promise<void>,
+    onOutput: (callback: (msg: { type: string; text?: string; message?: string }) => void) => {
+      const handler = (_event: unknown, msg: { type: string; text?: string; message?: string }): void => {
+        callback(msg)
+      }
+      ipcRenderer.on('script:output', handler)
+      return () => { ipcRenderer.removeListener('script:output', handler) }
+    }
   },
   fonts: {
     listMonospace: () => ipcRenderer.invoke('fonts:listMonospace') as Promise<string[]>
+  },
+  notes: {
+    list: (tag?: string) => ipcRenderer.invoke('notes:list', tag),
+    search: (query: string) => ipcRenderer.invoke('notes:search', query),
+    create: (data: { content: string; connectionId?: string; connectionName?: string; host?: string; user?: string; tag?: string; tabTitle?: string }) =>
+      ipcRenderer.invoke('notes:create', data),
+    delete: (id: string) => ipcRenderer.invoke('notes:delete', id)
+  },
+  remoteCommands: {
+    list: (connectionId?: string) => ipcRenderer.invoke('remoteCommands:list', connectionId),
+    create: (data) => ipcRenderer.invoke('remoteCommands:create', data),
+    update: (id, data) => ipcRenderer.invoke('remoteCommands:update', id, data),
+    delete: (id) => ipcRenderer.invoke('remoteCommands:delete', id)
+  },
+  templates: {
+    list: () => ipcRenderer.invoke('templates:list'),
+    create: (name, config) => ipcRenderer.invoke('templates:create', name, config),
+    delete: (id) => ipcRenderer.invoke('templates:delete', id)
+  },
+  expect: {
+    setDebug: (sessionId, enabled) => ipcRenderer.invoke('expect:setDebug', sessionId, enabled),
+    getStatus: (sessionId) => ipcRenderer.invoke('expect:getStatus', sessionId)
+  },
+  tunnels: {
+    list: () => ipcRenderer.invoke('tunnels:list'),
+    get: (id) => ipcRenderer.invoke('tunnels:get', id),
+    create: (data) => ipcRenderer.invoke('tunnels:create', data),
+    update: (id, data) => ipcRenderer.invoke('tunnels:update', id, data),
+    delete: (id) => ipcRenderer.invoke('tunnels:delete', id),
+    start: (id) => ipcRenderer.invoke('tunnels:start', id),
+    stop: (id) => ipcRenderer.invoke('tunnels:stop', id),
+    stopAll: () => ipcRenderer.invoke('tunnels:stopAll'),
+    status: (id) => ipcRenderer.invoke('tunnels:status', id),
+    listActive: () => ipcRenderer.invoke('tunnels:listActive')
   },
   plugins: {
     list: () => ipcRenderer.invoke('plugins:list'),
@@ -553,6 +652,8 @@ const api: BifrostApi = {
   window: {
     toggleFullscreen: () => ipcRenderer.invoke('window:toggleFullscreen'),
     showConfirmDialog: (message: string) => ipcRenderer.invoke('window:confirmDialog', message),
+    showSaveDialog: (defaultName: string) => ipcRenderer.invoke('system:showSaveDialog', defaultName),
+    showOpenDialog: () => ipcRenderer.invoke('system:showOpenDialog'),
     detachTab: (tabId: string, title: string, connectionId?: string, sessionId?: string) => ipcRenderer.invoke('window:detachTab', tabId, title, connectionId, sessionId),
     reattachTab: (tabId: string) => ipcRenderer.invoke('window:reattachTab', tabId),
     onTabReattached: (callback: (tabId: string) => void) => {

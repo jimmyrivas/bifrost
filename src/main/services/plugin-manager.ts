@@ -8,7 +8,7 @@
 import { app } from 'electron'
 import { join } from 'path'
 import { readdirSync, readFileSync, existsSync, mkdirSync, rmSync } from 'fs'
-import { execSync } from 'child_process'
+import { execSync, execFileSync } from 'child_process'
 
 export interface PluginManifest {
   name: string
@@ -26,10 +26,20 @@ export interface PluginInfo {
   valid: boolean
 }
 
+export interface PluginHooks {
+  onConnect?: (connectionId: string, sessionId: string) => void
+  onDisconnect?: (connectionId: string, sessionId: string) => void
+  onData?: (sessionId: string, data: string) => string | void // return modified data or void
+  onTabCreate?: (tabId: string, connectionId?: string) => void
+  onTabClose?: (tabId: string) => void
+}
+
 export interface PluginApi {
   registerCommand: (name: string, handler: () => void) => void
   registerTheme: (name: string, theme: Record<string, string>) => void
   registerProfileProvider: (name: string, provider: () => unknown) => void
+  registerHooks: (hooks: PluginHooks) => void
+  registerContextMenuItem: (label: string, handler: (context: { sessionId?: string; connectionId?: string }) => void) => void
 }
 
 export interface PluginExports {
@@ -38,6 +48,37 @@ export interface PluginExports {
   description?: string
   activate?: (api: PluginApi) => void
   deactivate?: () => void
+}
+
+// Global hooks registry
+const registeredHooks: PluginHooks[] = []
+const contextMenuItems: Array<{ label: string; handler: (ctx: { sessionId?: string; connectionId?: string }) => void }> = []
+
+export function getRegisteredHooks(): PluginHooks[] { return registeredHooks }
+export function getContextMenuItems(): typeof contextMenuItems { return contextMenuItems }
+
+export function dispatchHook<K extends keyof PluginHooks>(
+  hookName: K,
+  ...args: Parameters<NonNullable<PluginHooks[K]>>
+): void {
+  for (const hooks of registeredHooks) {
+    try {
+      const fn = hooks[hookName] as ((...a: unknown[]) => unknown) | undefined
+      fn?.(...args)
+    } catch (err) {
+      console.warn(`[plugin] Hook ${hookName} error:`, err)
+    }
+  }
+}
+
+function createPluginApi(): PluginApi {
+  return {
+    registerCommand: (name, handler) => { console.log(`[plugin] Command registered: ${name}`) },
+    registerTheme: (name, theme) => { console.log(`[plugin] Theme registered: ${name}`) },
+    registerProfileProvider: (name, provider) => { console.log(`[plugin] Profile provider: ${name}`) },
+    registerHooks: (hooks) => { registeredHooks.push(hooks) },
+    registerContextMenuItem: (label, handler) => { contextMenuItems.push({ label, handler }) }
+  }
 }
 
 function getPluginsDir(): string {
@@ -111,7 +152,11 @@ export function installPlugin(packageName: string): PluginInfo {
     writeFileSync(rootPkg, pkg, 'utf-8')
   }
 
-  execSync(`npm install ${packageName}`, {
+  // Validate package name to prevent injection
+  if (!/^[@a-z0-9][-a-z0-9._/]*$/i.test(packageName)) {
+    throw new Error(`Invalid package name: ${packageName}`)
+  }
+  execFileSync('npm', ['install', packageName], {
     cwd: pluginsDir,
     timeout: 60000,
     stdio: 'pipe'

@@ -1,4 +1,4 @@
-import { exec } from 'child_process'
+import { execFile } from 'child_process'
 import { variableEngine, type VariableContext } from './variable-engine'
 
 export interface MacroDefinition {
@@ -21,6 +21,37 @@ export interface ExecCommandDefinition {
 type ConfirmCallback = (message: string) => Promise<boolean>
 type RemoteSendCallback = (data: string) => void
 
+/**
+ * Parse a command string into [program, ...args].
+ * Handles simple quoting (single and double quotes).
+ */
+function parseCommand(command: string): [string, string[]] {
+  const tokens: string[] = []
+  let current = ''
+  let inSingle = false
+  let inDouble = false
+
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i]
+    if (ch === "'" && !inDouble) {
+      inSingle = !inSingle
+    } else if (ch === '"' && !inSingle) {
+      inDouble = !inDouble
+    } else if (ch === ' ' && !inSingle && !inDouble) {
+      if (current.length > 0) {
+        tokens.push(current)
+        current = ''
+      }
+    } else {
+      current += ch
+    }
+  }
+  if (current.length > 0) tokens.push(current)
+
+  if (tokens.length === 0) return ['', []]
+  return [tokens[0], tokens.slice(1)]
+}
+
 export class MacroExecutor {
   private confirmCallback: ConfirmCallback | null = null
   private remoteSendCallback: RemoteSendCallback | null = null
@@ -35,12 +66,18 @@ export class MacroExecutor {
 
   /**
    * Execute a local command and return its output.
+   * Uses execFile with parsed arguments to prevent shell injection.
    */
   async executeLocal(command: string, context: VariableContext): Promise<string> {
     const resolved = await variableEngine.resolve(command, context)
+    const [program, args] = parseCommand(resolved)
+
+    if (!program) {
+      throw new Error('Empty command')
+    }
 
     return new Promise((resolve, reject) => {
-      exec(resolved, { timeout: 30000, encoding: 'utf-8' }, (error, stdout, stderr) => {
+      execFile(program, args, { timeout: 30000, encoding: 'utf-8' }, (error, stdout, stderr) => {
         if (error) {
           reject(new Error(`Command failed: ${stderr || error.message}`))
           return

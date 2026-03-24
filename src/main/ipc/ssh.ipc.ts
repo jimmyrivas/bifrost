@@ -1,6 +1,7 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { sendToOwner, bufferOutput, setOwner, removeOwner } from '../services/window-router'
 import { sshManager, type SshConnectionConfig, type SshAlgorithms, type HttpProxyConfig } from '../services/ssh-manager'
+import { generateTOTP } from '../services/totp'
 import { getDatabase, schema } from '../db'
 import { eq } from 'drizzle-orm'
 import {
@@ -35,31 +36,65 @@ export function registerSshIpc(mainWindow: BrowserWindow): void {
         authType: (conn.authType as SshConnectionConfig['authType']) ?? 'manual',
         encryptedPassword: conn.encryptedPassword,
         privateKeyPath: conn.privateKeyPath,
-        encryptedPassphrase: conn.encryptedPassphrase
+        encryptedPassphrase: conn.encryptedPassphrase,
+        useFido2: conn.authType === 'fido2'
       }
 
       return sshManager.connect(config)
     }
   )
 
+  // Track TOTP secrets per session for auto-injection
+  const totpSecrets = new Map<string, string>()
+
   ipcMain.handle(
     'ssh:openShell',
-    async (_event, sessionId: string, cols: number, rows: number): Promise<void> => {
+    async (_event, sessionId: string, cols: number, rows: number, connectionId?: string): Promise<void> => {
       const stream = await sshManager.openShell(sessionId, cols, rows)
 
       // Set owner to the window that opened the shell
       const senderWin = BrowserWindow.fromWebContents(_event.sender)
       if (senderWin) setOwner(sessionId, senderWin)
 
+      // Load TOTP secret if configured for this connection
+      if (connectionId) {
+        try {
+          const db = getDatabase()
+          const conn = db.select().from(schema.connections).where(eq(schema.connections.id, connectionId)).get()
+          if (conn?.sshConfig) {
+            const cfg = JSON.parse(conn.sshConfig)
+            if (cfg.totpSecret) totpSecrets.set(sessionId, cfg.totpSecret)
+          }
+        } catch { /* ok */ }
+      }
+
+      let totpBuffer = ''
+
       stream.on('data', (data: Buffer) => {
         const str = data.toString()
         bufferOutput(sessionId, str)
         sendToOwner(sessionId, 'ssh:data', sessionId, str)
+
+        // TOTP auto-inject: detect verification prompts
+        const secret = totpSecrets.get(sessionId)
+        if (secret) {
+          totpBuffer += str
+          if (totpBuffer.length > 512) totpBuffer = totpBuffer.slice(-256)
+          const totpPattern = /(?:verification code|otp|token|2fa|two.factor|authenticator).*?[:>]\s*$/i
+          if (totpPattern.test(totpBuffer)) {
+            const code = generateTOTP(secret)
+            setTimeout(() => sshManager.write(sessionId, code + '\n'), 200)
+            // Security: remove secret after single use to prevent replay by malicious server
+            totpSecrets.delete(sessionId)
+            totpBuffer = ''
+          }
+        }
       })
 
       stream.on('close', () => {
         sendToOwner(sessionId, 'ssh:close', sessionId)
         removeOwner(sessionId)
+        totpSecrets.delete(sessionId)
         sshManager.disconnect(sessionId)
       })
     }
@@ -284,4 +319,5 @@ export function registerSshIpc(mainWindow: BrowserWindow): void {
       return deleteRecording(recordingId)
     }
   )
+
 }

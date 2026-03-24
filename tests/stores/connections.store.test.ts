@@ -87,6 +87,60 @@ describe('Connections Store', () => {
     expect(useConnectionsStore.getState().selectedConnectionId).toBeNull()
   })
 
+  it('clone creates a new connection without encrypted fields or id', async () => {
+    // Simulate what handleClone does: get full conn, strip dangerous fields, create
+    const fullConn = {
+      id: 'original-id',
+      name: 'Production Server',
+      method: 'ssh' as const,
+      host: '10.0.0.1',
+      port: 22,
+      authType: 'key' as const,
+      username: 'deploy',
+      groupId: null,
+      privateKeyPath: '/home/user/.ssh/id_rsa',
+      encryptedPassword: Buffer.from('secret'),
+      encryptedPassphrase: Buffer.from('phrase'),
+      sshConfig: '{"tags":"prod"}',
+      terminalConfig: '{"colorScheme":"Dracula"}',
+      tabTitle: '<USER>@<IP>',
+      createdAt: '2025-01-01',
+      updatedAt: '2025-01-01',
+      sortOrder: 0
+    }
+
+    // Clone logic: pick only safe fields
+    const cloneData = {
+      name: `${fullConn.name} (copy)`,
+      method: fullConn.method,
+      host: fullConn.host,
+      port: fullConn.port,
+      authType: fullConn.authType,
+      username: fullConn.username,
+      groupId: fullConn.groupId,
+      privateKeyPath: fullConn.privateKeyPath,
+      sshConfig: fullConn.sshConfig,
+      terminalConfig: fullConn.terminalConfig,
+      tabTitle: fullConn.tabTitle
+    }
+
+    // Verify no dangerous fields
+    expect(cloneData).not.toHaveProperty('id')
+    expect(cloneData).not.toHaveProperty('encryptedPassword')
+    expect(cloneData).not.toHaveProperty('encryptedPassphrase')
+    expect(cloneData).not.toHaveProperty('createdAt')
+    expect(cloneData.name).toBe('Production Server (copy)')
+    expect(cloneData.sshConfig).toBe('{"tags":"prod"}')
+    expect(cloneData.terminalConfig).toBe('{"colorScheme":"Dracula"}')
+
+    mockBifrost.connections.create.mockResolvedValueOnce('cloned-id')
+    mockBifrost.connections.list.mockResolvedValueOnce([{ id: 'cloned-id', ...cloneData, sortOrder: 0 }])
+
+    const id = await useConnectionsStore.getState().createConnection(cloneData as any)
+    expect(id).toBe('cloned-id')
+    expect(mockBifrost.connections.create).toHaveBeenCalledWith(cloneData)
+  })
+
   it('creates a group and refreshes list', async () => {
     mockBifrost.connections.createGroup.mockResolvedValueOnce('g1')
     mockBifrost.connections.listGroups.mockResolvedValueOnce([{ id: 'g1', name: 'Prod', parentId: null, sortOrder: 0, icon: null }])

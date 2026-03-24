@@ -17,7 +17,9 @@ interface ExportedEntry {
 }
 
 function runGit(repoPath: string, args: string): string {
-  return execSync(`git -C "${repoPath}" ${args}`, { encoding: 'utf-8', timeout: 15000 }).trim()
+  const { execFileSync } = require('child_process')
+  const argList = ['-C', repoPath, ...args.split(/\s+/).filter(Boolean)]
+  return execFileSync('git', argList, { encoding: 'utf-8', timeout: 15000 }).trim()
 }
 
 function isGitRepo(repoPath: string): boolean {

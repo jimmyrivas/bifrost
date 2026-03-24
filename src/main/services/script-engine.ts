@@ -1,5 +1,5 @@
 import { app } from 'electron'
-import { join } from 'path'
+import { join, resolve } from 'path'
 import {
   readFileSync,
   writeFileSync,
@@ -9,6 +9,8 @@ import {
   unlinkSync
 } from 'fs'
 import { EventEmitter } from 'events'
+import { Worker } from 'worker_threads'
+import { compileFunction } from 'vm'
 
 export interface BifrostScript {
   id: string
@@ -26,6 +28,12 @@ export interface ScriptContext {
   user?: string
   terminalWrite?: (data: string) => void
   terminalRead?: () => Promise<string>
+}
+
+export interface ScriptOutputMessage {
+  type: 'send' | 'log' | 'complete' | 'error'
+  text?: string
+  message?: string
 }
 
 const SAMPLE_SCRIPTS: Array<{ name: string; description: string; code: string }> = [
@@ -83,16 +91,99 @@ async function run(ctx) {
   }
 ]
 
+/**
+ * Worker code executed in an isolated thread with vm sandbox.
+ * No access to require, process, fs, child_process, or any Node.js globals.
+ */
+const WORKER_CODE = `
+const { parentPort } = require('worker_threads');
+const vm = require('vm');
+
+parentPort.on('message', async (msg) => {
+  if (msg.type !== 'execute') return;
+
+  try {
+    const ctx = {
+      send: (text) => { parentPort.postMessage({ type: 'send', text: String(text) }); },
+      sleep: (ms) => new Promise((resolve) => setTimeout(resolve, Math.min(Number(ms) || 0, 60000))),
+      log: (msg) => { parentPort.postMessage({ type: 'log', text: String(msg) }); }
+    };
+
+    const sandbox = vm.createContext({
+      ctx,
+      setTimeout: setTimeout,
+      clearTimeout: clearTimeout,
+      Promise: Promise,
+      console: { log: ctx.log, warn: ctx.log, error: ctx.log },
+      Math: Math,
+      JSON: JSON,
+      Date: Date,
+      Array: Array,
+      Object: Object,
+      String: String,
+      Number: Number,
+      Boolean: Boolean,
+      RegExp: RegExp,
+      Map: Map,
+      Set: Set,
+      Error: Error
+    });
+
+    const wrappedCode = '(async function() { const { send, sleep, log } = ctx;\\n' + msg.code + '\\n})()';
+    const result = vm.runInNewContext(wrappedCode, sandbox, {
+      timeout: 120000,
+      filename: 'bifrost-script.js'
+    });
+    await result;
+    parentPort.postMessage({ type: 'complete' });
+  } catch (err) {
+    parentPort.postMessage({ type: 'error', message: err.message || String(err) });
+  }
+});
+`
+
 export class ScriptEngine extends EventEmitter {
   private scriptsDir: string | null = null
+
+  /** Validate script ID to prevent path traversal */
+  private safePath(dir: string, id: string): string {
+    if (!/^script-[\d]+-[a-z0-9]+$/.test(id)) throw new Error('Invalid script ID')
+    const filePath = join(dir, `${id}.json`)
+    const resolved = resolve(filePath)
+    if (!resolved.startsWith(resolve(dir))) throw new Error('Path traversal detected')
+    return resolved
+  }
 
   private ensureDir(): string {
     if (!this.scriptsDir) {
       this.scriptsDir = join(app.getPath('userData'), 'scripts')
       mkdirSync(this.scriptsDir, { recursive: true })
 
-      // Create sample scripts if directory is empty
-      const files = readdirSync(this.scriptsDir).filter((f) => f.endsWith('.js'))
+      const files = readdirSync(this.scriptsDir).filter((f) => f.endsWith('.json'))
+
+      // Deduplicate: if multiple scripts share the same name, keep the oldest
+      if (files.length > 0) {
+        const byName = new Map<string, Array<{ file: string; script: BifrostScript }>>()
+        for (const f of files) {
+          try {
+            const script = JSON.parse(readFileSync(join(this.scriptsDir, f), 'utf-8')) as BifrostScript
+            const entries = byName.get(script.name) ?? []
+            entries.push({ file: f, script })
+            byName.set(script.name, entries)
+          } catch { /* skip malformed */ }
+        }
+        for (const [, entries] of byName) {
+          if (entries.length > 1) {
+            // Sort by createdAt ascending, keep the first (oldest)
+            entries.sort((a, b) => a.script.createdAt.localeCompare(b.script.createdAt))
+            for (let i = 1; i < entries.length; i++) {
+              unlinkSync(join(this.scriptsDir, entries[i].file))
+            }
+          }
+        }
+      }
+
+      // Create sample scripts only if directory has no .json files
       if (files.length === 0) {
         const now = new Date().toISOString()
         for (const sample of SAMPLE_SCRIPTS) {
@@ -127,7 +218,7 @@ export class ScriptEngine extends EventEmitter {
 
   getScript(id: string): BifrostScript | null {
     const dir = this.ensureDir()
-    const filePath = join(dir, `${id}.json`)
+    const filePath = this.safePath(dir, id)
     if (!existsSync(filePath)) return null
     return JSON.parse(readFileSync(filePath, 'utf-8')) as BifrostScript
   }
@@ -148,7 +239,7 @@ export class ScriptEngine extends EventEmitter {
 
   updateScript(id: string, updates: Partial<BifrostScript>): void {
     const dir = this.ensureDir()
-    const filePath = join(dir, `${id}.json`)
+    const filePath = this.safePath(dir, id)
     if (!existsSync(filePath)) return
     const script = JSON.parse(readFileSync(filePath, 'utf-8')) as BifrostScript
     const updated = { ...script, ...updates, updatedAt: new Date().toISOString() }
@@ -157,7 +248,7 @@ export class ScriptEngine extends EventEmitter {
 
   deleteScript(id: string): void {
     const dir = this.ensureDir()
-    const filePath = join(dir, `${id}.json`)
+    const filePath = this.safePath(dir, id)
     if (existsSync(filePath)) {
       unlinkSync(filePath)
     }
@@ -165,16 +256,86 @@ export class ScriptEngine extends EventEmitter {
 
   /**
    * Validate script syntax without executing.
-   * Returns null if valid, error message if invalid.
+   * Uses vm.compileFunction for safe parsing — never executes the code.
    */
   validateScript(code: string): string | null {
     try {
-      // Try to parse as JavaScript
-      new Function('ctx', code)
+      const wrappedCode = '(async function() { const { send, sleep, log } = ctx;\n' + code + '\n})()'
+      compileFunction(wrappedCode, ['ctx'])
       return null
     } catch (err) {
       return err instanceof Error ? err.message : String(err)
     }
+  }
+
+  /**
+   * Execute a script in an isolated Worker thread with a vm sandbox.
+   * The worker has no access to require, process, fs, child_process, etc.
+   * Returns a controller with a message callback and a completion promise.
+   */
+  executeScript(
+    code: string,
+    onOutput: (msg: ScriptOutputMessage) => void
+  ): { promise: Promise<void>; cancel: () => void } {
+    const worker = new Worker(WORKER_CODE, { eval: true })
+    let settled = false
+
+    const promise = new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        if (!settled) {
+          settled = true
+          worker.terminate()
+          reject(new Error('Script execution timed out (120s)'))
+        }
+      }, 125000)
+
+      worker.on('message', (msg: ScriptOutputMessage) => {
+        if (msg.type === 'complete') {
+          settled = true
+          clearTimeout(timeout)
+          worker.terminate()
+          resolve()
+        } else if (msg.type === 'error') {
+          settled = true
+          clearTimeout(timeout)
+          worker.terminate()
+          reject(new Error(msg.message ?? 'Script execution failed'))
+        } else {
+          onOutput(msg)
+        }
+      })
+
+      worker.on('error', (err) => {
+        if (!settled) {
+          settled = true
+          clearTimeout(timeout)
+          reject(err)
+        }
+      })
+
+      worker.on('exit', (exitCode) => {
+        if (!settled) {
+          settled = true
+          clearTimeout(timeout)
+          if (exitCode !== 0) {
+            reject(new Error(`Worker exited with code ${exitCode}`))
+          } else {
+            resolve()
+          }
+        }
+      })
+
+      worker.postMessage({ type: 'execute', code })
+    })
+
+    const cancel = (): void => {
+      if (!settled) {
+        settled = true
+        worker.terminate()
+      }
+    }
+
+    return { promise, cancel }
   }
 }
 

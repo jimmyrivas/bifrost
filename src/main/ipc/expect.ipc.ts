@@ -100,6 +100,18 @@ export function registerExpectIpc(mainWindow: BrowserWindow): void {
     engines.get(sessionId)?.setDebug(enabled)
   })
 
+  ipcMain.handle('expect:getStatus', (_event, sessionId: string) => {
+    const engine = engines.get(sessionId)
+    if (!engine) return { active: false, rulesCount: 0, currentRule: null, debug: false }
+    return {
+      active: engine.isRunning(),
+      rulesCount: engine.getRulesCount(),
+      currentRule: engine.getCurrentRule(),
+      debug: engine.isDebug(),
+      log: engine.getDebugLog()
+    }
+  })
+
   ipcMain.handle('expect:destroy', (_event, sessionId: string) => {
     const engine = engines.get(sessionId)
     if (engine) {

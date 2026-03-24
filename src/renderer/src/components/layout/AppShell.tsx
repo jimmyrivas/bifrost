@@ -9,14 +9,23 @@ import { CommandPalette } from './CommandPalette'
 import { WorkspaceSelector } from './WorkspaceSelector'
 import { TerminalPane } from '@renderer/components/terminal/TerminalPane'
 import { AIAssistant } from '@renderer/components/terminal/AIAssistant'
+import { SftpPanel } from '@renderer/components/terminal/SftpPanel'
 import { ClusterManagerUI } from '@renderer/components/cluster/ClusterManagerUI'
+import { PCCBar } from '@renderer/components/cluster/PCCBar'
+import { TmuxManager } from '@renderer/components/terminal/TmuxManager'
 import { ExpectEditor } from '@renderer/components/automation/ExpectEditor'
 import { ScriptEditor } from '@renderer/components/automation/ScriptEditor'
+import { RemoteCommandsEditor } from '@renderer/components/automation/RemoteCommandsEditor'
+import { SnippetBrowser } from '@renderer/components/automation/SnippetBrowser'
+import { RunbookEditor } from '@renderer/components/automation/RunbookEditor'
+import { TunnelManager } from '@renderer/components/tunnels/TunnelManager'
 import { VariableManager } from '@renderer/components/automation/VariableManager'
 import { Preferences } from '@renderer/components/settings/Preferences'
+import { NotesPanel } from '@renderer/components/settings/NotesPanel'
 import { KeyBindings } from '@renderer/components/settings/KeyBindings'
 import { ConnectionForm } from '@renderer/components/connections/ConnectionForm'
 import { useSessionsStore } from '@renderer/stores/sessions.store'
+import { usePreferencesStore } from '@renderer/stores/preferences.store'
 
 export type ViewSection =
   | 'connections'
@@ -28,6 +37,10 @@ export type ViewSection =
   | 'new-connection'
   | 'preferences'
   | 'keybindings'
+  | 'remote-commands'
+  | 'tunnels'
+  | 'runbooks'
+  | 'notes'
 
 const SPECTRAL_GRADIENT =
   'linear-gradient(135deg, #ff6b6b, #ffa36b, #ffd56b, #6bff6b, #6bd5ff, #6b6bff, #d56bff)'
@@ -43,6 +56,9 @@ export function AppShell(): JSX.Element {
   const [editingConnectionId, setEditingConnectionId] = useState<string | null>(null)
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false)
+  const sftpOpenTabIds = useSessionsStore((s) => s.sftpOpenTabIds)
+  const broadcastMode = useSessionsStore((s) => s.broadcastMode)
+  const cycleBroadcastMode = useSessionsStore((s) => s.cycleBroadcastMode)
 
   // Global Ctrl+K shortcut for command palette
   useEffect(() => {
@@ -81,7 +97,16 @@ export function AppShell(): JSX.Element {
       setActiveView('connections')
       try {
         const conn = await window.bifrost.connections.get(connectionId)
-        const label = conn?.name ?? `SSH: ${connectionId.slice(0, 8)}`
+        let label = conn?.name ?? `SSH: ${connectionId.slice(0, 8)}`
+
+        // Resolve tab title template if configured (per-connection or global default)
+        const template = conn?.tabTitle || usePreferencesStore.getState().terminal.tabTitleTemplate
+        if (template && conn) {
+          try {
+            label = await window.bifrost.connections.resolveTabTitle(template, connectionId)
+          } catch { /* fallback to connection name */ }
+        }
+
         // Parse per-connection terminal style overrides from terminalConfig JSON
         let terminalStyle: import('@renderer/stores/sessions.store').TerminalStyle | undefined
         if (conn?.terminalConfig) {
@@ -134,23 +159,71 @@ export function AppShell(): JSX.Element {
   const renderOverlay = (): JSX.Element | null => {
     switch (activeView) {
       case 'clusters':
-        return <ClusterManagerUI />
+        return (
+          <div className="flex flex-col gap-6 h-full overflow-y-auto">
+            <ClusterManagerUI />
+            <div className="px-6 pb-6">
+              <TmuxManager
+                onSendCommand={(cmd) => {
+                  const tab = tabs.find((t) => t.id === activeTabId)
+                  const termId = tab?.rootPane.terminalId
+                  if (!termId) return
+                  if (termId.startsWith('ssh:')) {
+                    window.bifrost?.ssh?.write(termId.slice(4), cmd + '\n')
+                  } else {
+                    window.bifrost?.terminal?.write(termId, cmd + '\n')
+                  }
+                }}
+                isSSH={!!tabs.find((t) => t.id === activeTabId)?.connectionId}
+              />
+            </div>
+          </div>
+        )
       case 'scripts':
         return (
-          <div className="flex flex-col gap-4 p-6 h-full overflow-y-auto">
-            <ScriptEditor />
-            <div className="mt-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--on-surface-variant)] mb-3">
-                EXPECT RULES & MACROS
-              </p>
-              <ExpectEditor rules={[]} onChange={() => {}} />
+          <div className="flex gap-4 p-6 h-full overflow-hidden">
+            <div className="flex-1 flex flex-col gap-4 overflow-y-auto min-w-0">
+              <ScriptEditor />
+              <div className="mt-4">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--on-surface-variant)] mb-3">
+                  EXPECT RULES & MACROS
+                </p>
+                <ExpectEditor rules={[]} onChange={() => {}} />
+              </div>
             </div>
+            <div className="w-72 shrink-0 overflow-y-auto">
+              <SnippetBrowser />
+            </div>
+          </div>
+        )
+      case 'remote-commands':
+        return (
+          <div className="flex flex-col gap-4 p-6 h-full overflow-y-auto">
+            <RemoteCommandsEditor />
+          </div>
+        )
+      case 'tunnels':
+        return (
+          <div className="flex flex-col gap-4 p-6 h-full overflow-y-auto">
+            <TunnelManager />
+          </div>
+        )
+      case 'runbooks':
+        return (
+          <div className="flex flex-col gap-4 p-6 h-full overflow-y-auto">
+            <RunbookEditor />
           </div>
         )
       case 'keys':
         return (
           <div className="p-6 h-full overflow-y-auto">
             <VariableManager variables={[]} onChange={() => {}} />
+          </div>
+        )
+      case 'notes':
+        return (
+          <div className="p-6 h-full overflow-y-auto">
+            <NotesPanel />
           </div>
         )
       case 'logs':
@@ -226,7 +299,7 @@ export function AppShell(): JSX.Element {
           aria-label="Open command palette"
         >
           <Search size={14} className="text-[#c7c4d7]" />
-          <span className="text-sm text-[#c7c4d7]/50 font-['Inter'] w-40 text-left">
+          <span className="text-sm text-[#c7c4d7]/50 font-[var(--font-ui)] w-40 text-left">
             Search connections...
           </span>
           <kbd className="text-[10px] text-[#c7c4d7]/60 font-mono">Ctrl+K</kbd>
@@ -264,6 +337,25 @@ export function AppShell(): JSX.Element {
                 style={{ visibility: overlay ? 'hidden' : 'visible' }}
               >
                 <TabBar />
+                {broadcastMode !== 'hidden' && (
+                  <PCCBar
+                    active={broadcastMode === 'panes' || broadcastMode === 'all-tabs'}
+                    onToggle={() => cycleBroadcastMode()}
+                    onSend={(text, mode) => {
+                      // Send text to all terminals based on mode
+                      const ids = mode === 'all'
+                        ? useSessionsStore.getState().getAllTerminalIds()
+                        : useSessionsStore.getState().getActiveTabTerminalIds()
+                      for (const id of ids) {
+                        if (id.startsWith('ssh:')) {
+                          window.bifrost?.ssh?.write(id.slice(4), text)
+                        } else {
+                          window.bifrost?.terminal?.write(id, text)
+                        }
+                      }
+                    }}
+                  />
+                )}
                 <div className="relative flex-1 overflow-hidden">
                   {tabs.length === 0 && (
                     <div className="flex items-center justify-center h-full">
@@ -279,23 +371,45 @@ export function AppShell(): JSX.Element {
                     </div>
                   )}
                   {/* Render ALL tabs, show only active */}
-                  {tabs.map((tab) => (
-                    <div
-                      key={tab.id}
-                      className="absolute inset-0"
-                      style={{
-                        visibility: tab.id === activeTabId && !overlay ? 'visible' : 'hidden',
-                        zIndex: tab.id === activeTabId ? 1 : 0
-                      }}
-                    >
-                      <TerminalPane
-                        pane={tab.rootPane}
-                        tabId={tab.id}
-                        connectionId={tab.connectionId}
-                        terminalStyle={tab.terminalStyle}
-                      />
-                    </div>
-                  ))}
+                  {tabs.map((tab) => {
+                    const sftpOpen = sftpOpenTabIds.includes(tab.id)
+                    // Extract SSH session ID from the first terminal pane
+                    const termId = tab.rootPane.terminalId
+                    const sshSessionId = termId?.startsWith('ssh:') ? termId.slice(4) : null
+                    return (
+                      <div
+                        key={tab.id}
+                        className="absolute inset-0 flex"
+                        style={{
+                          visibility: tab.id === activeTabId && !overlay ? 'visible' : 'hidden',
+                          zIndex: tab.id === activeTabId ? 1 : 0
+                        }}
+                      >
+                        <div className="flex-1 min-w-0 h-full relative">
+                          <TerminalPane
+                            pane={tab.rootPane}
+                            tabId={tab.id}
+                            connectionId={tab.connectionId}
+                            terminalStyle={tab.terminalStyle}
+                            shell={tab.shell}
+                          />
+                        </div>
+                        {sftpOpen && tab.connectionId && (
+                          <div
+                            className="shrink-0 h-full border-l border-[#1b1b1e] overflow-hidden"
+                            style={{ width: 320, resize: 'horizontal', direction: 'rtl', minWidth: 200, maxWidth: 600 }}
+                          >
+                            <div style={{ direction: 'ltr' }} className="h-full">
+                              <SftpPanel
+                                sshSessionId={sshSessionId}
+                                onClose={() => useSessionsStore.getState().toggleSftp(tab.id)}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
 

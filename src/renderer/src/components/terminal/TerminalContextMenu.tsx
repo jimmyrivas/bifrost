@@ -17,7 +17,18 @@ import {
   Camera,
   ExternalLink,
   ScrollText,
-  Play
+  Play,
+  Lock,
+  LockOpen,
+  PenLine,
+  Zap,
+  FolderOpen,
+  Layers,
+  Merge,
+  Circle,
+  Radio,
+  FileText,
+  StickyNote
 } from 'lucide-react'
 import {
   ContextMenu,
@@ -31,7 +42,8 @@ import {
   ContextMenuSubContent
 } from '@renderer/components/ui/context-menu'
 import { useSessionsStore } from '@renderer/stores/sessions.store'
-import { executeScript, type ScriptContext } from '@renderer/lib/script-runner'
+import type { ScriptContext } from '@renderer/lib/script-runner'
+import { hasParams, promptForParams } from '@renderer/lib/workflow-params'
 
 interface TerminalContextMenuProps {
   children: React.ReactNode
@@ -53,6 +65,11 @@ export function TerminalContextMenu({
   const closeTab = useSessionsStore((s) => s.closeTab)
   const createTab = useSessionsStore((s) => s.createTab)
   const toggleMaximizePane = useSessionsStore((s) => s.toggleMaximizePane)
+  const toggleLockTitle = useSessionsStore((s) => s.toggleLockTitle)
+  const renameTab = useSessionsStore((s) => s.renameTab)
+  const toggleSftp = useSessionsStore((s) => s.toggleSftp)
+  const explodePanes = useSessionsStore((s) => s.explodePanes)
+  const combineTabs = useSessionsStore((s) => s.combineTabs)
 
   const handleCopy = useCallback(async () => {
     const selection = document.getSelection()?.toString()
@@ -141,6 +158,24 @@ export function TerminalContextMenu({
     toggleMaximizePane(paneId)
   }, [toggleMaximizePane, paneId])
 
+  const handleToggleLockTitle = useCallback(() => {
+    toggleLockTitle(tabId)
+  }, [toggleLockTitle, tabId])
+
+  const handleRenameTab = useCallback(() => {
+    const { tabs } = useSessionsStore.getState()
+    const tab = tabs.find((t) => t.id === tabId)
+    const current = tab?.title ?? ''
+    const newTitle = window.prompt('Tab title:', current)
+    if (newTitle !== null && newTitle.trim()) {
+      renameTab(tabId, newTitle.trim())
+      // Auto-lock after manual rename
+      if (tab && !tab.lockTitle) {
+        toggleLockTitle(tabId)
+      }
+    }
+  }, [tabId, renameTab, toggleLockTitle])
+
   // Scripts menu (#3)
   interface ScriptEntry { id: string; name: string; description?: string; code: string }
   const [scripts, setScripts] = useState<ScriptEntry[]>([])
@@ -157,33 +192,131 @@ export function TerminalContextMenu({
     const termId = paneEl?.getAttribute('data-terminal-id') ?? ''
     if (!termId) return
 
-    const ctx: ScriptContext = {
-      send: (text: string) => {
-        if (termId.startsWith('ssh:')) {
-          const sshSessionId = termId.slice(4)
-          window.bifrost.ssh.write(sshSessionId, text)
-        } else {
-          window.bifrost.terminal.write(termId, text)
-        }
-      },
-      sleep: (ms: number) => new Promise((resolve) => setTimeout(resolve, ms)),
-      log: (msg: string) => {
-        // Write colored log line visible in terminal output
-        ctx.send(`\x1b[36m[bifrost]\x1b[0m ${msg}\r\n`)
+    const writeToTerminal = (text: string): void => {
+      if (termId.startsWith('ssh:')) {
+        const sshSessionId = termId.slice(4)
+        window.bifrost.ssh.write(sshSessionId, text)
+      } else {
+        window.bifrost.terminal.write(termId, text)
       }
     }
 
+    // Listen for worker output messages (send/log) from the isolated worker
+    const removeListener = window.bifrost.scripts.onOutput((msg) => {
+      if (msg.type === 'send' && msg.text) {
+        writeToTerminal(msg.text)
+      } else if (msg.type === 'log' && msg.text) {
+        writeToTerminal(`\x1b[36m[bifrost]\x1b[0m ${msg.text}\r\n`)
+      }
+    })
+
     try {
       setScriptStatus(`Running: ${script.name}...`)
-      await executeScript(script.code, ctx)
+      await window.bifrost.scripts.execute(script.code)
       setScriptStatus(`Completed: ${script.name}`)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       setScriptStatus(`Failed: ${msg}`)
-      ctx.send(`\r\n\x1b[31m[bifrost] Script error: ${msg}\x1b[0m\r\n`)
+      writeToTerminal(`\r\n\x1b[31m[bifrost] Script error: ${msg}\x1b[0m\r\n`)
+    } finally {
+      removeListener()
     }
     setTimeout(() => setScriptStatus(null), 3000)
   }, [paneId])
+
+  // Runbooks from localStorage
+  interface RunbookEntry { id: string; name: string; content: string }
+  const [runbooks, setRunbooks] = useState<RunbookEntry[]>([])
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('bifrost:runbooks')
+      if (raw) setRunbooks(JSON.parse(raw) ?? [])
+    } catch { /* ignore */ }
+  }, [])
+
+  const handleRunRunbook = useCallback((rb: RunbookEntry) => {
+    const paneEl = document.querySelector(`[data-pane-id="${paneId}"]`)
+    const termId = paneEl?.getAttribute('data-terminal-id') ?? ''
+    if (!termId) return
+
+    const writeCmd = (cmd: string): void => {
+      if (termId.startsWith('ssh:')) {
+        window.bifrost.ssh.write(termId.slice(4), cmd + '\n')
+      } else {
+        window.bifrost.terminal.write(termId, cmd + '\n')
+      }
+    }
+
+    // Parse code blocks and execute non-commented lines
+    const lines = rb.content.split('\n')
+    let inCode = false
+    const commands: string[] = []
+    for (const line of lines) {
+      if (line.startsWith('```') && !inCode) { inCode = true; continue }
+      if (line.startsWith('```') && inCode) { inCode = false; continue }
+      if (inCode && line.trim() && !line.trimStart().startsWith('#')) {
+        commands.push(line)
+      }
+    }
+
+    if (commands.length === 0) return
+
+    // Execute with delay between commands
+    let i = 0
+    const next = (): void => {
+      if (i < commands.length) {
+        writeCmd(commands[i])
+        i++
+        setTimeout(next, 800)
+      }
+    }
+    next()
+  }, [paneId])
+
+  // Remote Commands (Asbru-style)
+  interface RemoteCmd { id: string; command: string; description: string; cmdGroup?: string; confirm?: boolean; sendIntro?: boolean; keybinding?: string; connectionId?: string | null }
+  const [remoteCmds, setRemoteCmds] = useState<RemoteCmd[]>([])
+
+  useEffect(() => {
+    window.bifrost?.remoteCommands?.list(connectionId ?? undefined)
+      .then((list: RemoteCmd[]) => setRemoteCmds(list ?? []))
+      .catch(() => {})
+  }, [connectionId])
+
+  const handleRunRemoteCommand = useCallback(async (cmd: RemoteCmd) => {
+    if (cmd.confirm) {
+      const ok = window.confirm(`Execute: ${cmd.command}?`)
+      if (!ok) return
+    }
+
+    const paneEl = document.querySelector(`[data-pane-id="${paneId}"]`)
+    const termId = paneEl?.getAttribute('data-terminal-id') ?? ''
+    if (!termId) return
+
+    // Resolve variables if the command contains variable placeholders
+    let resolved = cmd.command
+    if (resolved.includes('<') && connectionId) {
+      try {
+        resolved = await window.bifrost.connections.resolveTabTitle(resolved, connectionId)
+      } catch { /* use raw command */ }
+    }
+
+    // Resolve {{param}} placeholders
+    if (hasParams(resolved)) {
+      const paramResolved = promptForParams(resolved)
+      if (!paramResolved) return // cancelled
+      resolved = paramResolved
+    }
+
+    const payload = cmd.sendIntro !== false ? resolved + '\n' : resolved
+
+    if (termId.startsWith('ssh:')) {
+      window.bifrost.ssh.write(termId.slice(4), payload)
+    } else {
+      window.bifrost.terminal.write(termId, payload)
+    }
+  }, [paneId, connectionId])
 
   // #98 Explain Command
   const [explanation, setExplanation] = useState<string | null>(null)
@@ -204,6 +337,51 @@ export function TerminalContextMenu({
       setTimeout(() => setExplanation(null), 3000)
     }
   }, [])
+
+  // Save as Note
+  const [noteSaved, setNoteSaved] = useState<string | null>(null)
+  const handleSaveAsNote = useCallback(async (tag: string) => {
+    const selection = document.getSelection()?.toString()?.trim()
+    if (!selection) {
+      setNoteSaved('Select text first')
+      setTimeout(() => setNoteSaved(null), 2000)
+      return
+    }
+
+    // Gather context
+    const { tabs, activeTabId } = useSessionsStore.getState()
+    const tab = tabs.find((t) => t.id === (tabId || activeTabId))
+    let connName = ''
+    let host = ''
+    let user = ''
+    if (connectionId) {
+      try {
+        const conn = await window.bifrost.connections.get(connectionId)
+        if (conn) {
+          connName = conn.name ?? ''
+          host = conn.host ?? ''
+          user = conn.username ?? ''
+        }
+      } catch { /* skip */ }
+    }
+
+    try {
+      await window.bifrost.notes.create({
+        content: selection,
+        connectionId: connectionId ?? undefined,
+        connectionName: connName,
+        host,
+        user,
+        tag,
+        tabTitle: tab?.title ?? ''
+      })
+      setNoteSaved('Saved!')
+      setTimeout(() => setNoteSaved(null), 2000)
+    } catch {
+      setNoteSaved('Failed to save')
+      setTimeout(() => setNoteSaved(null), 2000)
+    }
+  }, [tabId, connectionId])
 
   // #61 Terminal Screenshot
   const handleScreenshot = useCallback(async () => {
@@ -284,6 +462,18 @@ export function TerminalContextMenu({
           <X size={14} strokeWidth={1.5} />
           Close Split Pane
         </ContextMenuItem>
+        {useSessionsStore.getState().tabs.find((t) => t.id === tabId)?.rootPane.split && (
+          <ContextMenuItem onClick={() => explodePanes(tabId)} className="gap-2">
+            <Layers size={14} strokeWidth={1.5} />
+            Explode to Tabs
+          </ContextMenuItem>
+        )}
+        {useSessionsStore.getState().tabs.length > 1 && (
+          <ContextMenuItem onClick={() => combineTabs()} className="gap-2">
+            <Merge size={14} strokeWidth={1.5} />
+            Combine All Tabs
+          </ContextMenuItem>
+        )}
 
         <ContextMenuSeparator />
 
@@ -295,6 +485,12 @@ export function TerminalContextMenu({
           <Copy size={14} strokeWidth={1.5} />
           {connectionId ? 'Duplicate Connection' : 'Duplicate Terminal'}
         </ContextMenuItem>
+        {connectionId && (
+          <ContextMenuItem onClick={() => toggleSftp(tabId)} className="gap-2">
+            <FolderOpen size={14} strokeWidth={1.5} />
+            {useSessionsStore.getState().isSftpOpen(tabId) ? 'Close SFTP' : 'Open SFTP'}
+          </ContextMenuItem>
+        )}
         <ContextMenuItem onClick={handleSaveLog} className="gap-2">
           <Save size={14} strokeWidth={1.5} />
           Save Session Log
@@ -312,6 +508,54 @@ export function TerminalContextMenu({
           <Bot size={14} strokeWidth={1.5} />
           Explain Command
         </ContextMenuItem>
+        <ContextMenuItem
+          onClick={() => document.dispatchEvent(new CustomEvent('toggle:ai-assistant'))}
+          className="gap-2"
+        >
+          <Bot size={14} strokeWidth={1.5} className="text-[#6bd5ff]" />
+          AI Assistant
+          <ContextMenuShortcut>Ctrl+Shift+A</ContextMenuShortcut>
+        </ContextMenuItem>
+        <ContextMenuItem
+          onClick={() => useSessionsStore.getState().cycleBroadcastMode()}
+          className="gap-2"
+        >
+          {(() => {
+            const mode = useSessionsStore.getState().broadcastMode
+            const color = mode === 'hidden' || mode === 'off' ? '' : mode === 'panes' ? 'text-[#eab308]' : 'text-[#ef4444]'
+            const label = mode === 'hidden' ? 'Broadcast: Hidden' : mode === 'off' ? 'Broadcast: Off' : mode === 'panes' ? 'Broadcast: Panes' : 'Broadcast: All'
+            return (
+              <>
+                <Radio size={14} strokeWidth={1.5} className={color} />
+                <span className={color}>{label}</span>
+              </>
+            )
+          })()}
+        </ContextMenuItem>
+
+        <ContextMenuSub>
+          <ContextMenuSubTrigger className="gap-2">
+            <StickyNote size={14} strokeWidth={1.5} />
+            Save as Note
+          </ContextMenuSubTrigger>
+          <ContextMenuSubContent className="w-44">
+            <ContextMenuItem onClick={() => handleSaveAsNote('note')} className="gap-2 text-xs">
+              <StickyNote size={12} /> Note
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => handleSaveAsNote('evidence')} className="gap-2 text-xs">
+              <Camera size={12} /> Evidence
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => handleSaveAsNote('command')} className="gap-2 text-xs">
+              <Play size={12} /> Command
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => handleSaveAsNote('error')} className="gap-2 text-xs">
+              <X size={12} className="text-[var(--error)]" /> Error
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => handleSaveAsNote('prompt')} className="gap-2 text-xs">
+              <Bot size={12} /> AI Prompt
+            </ContextMenuItem>
+          </ContextMenuSubContent>
+        </ContextMenuSub>
 
         {scripts.length > 0 && (
           <ContextMenuSub>
@@ -341,13 +585,144 @@ export function TerminalContextMenu({
           </ContextMenuSub>
         )}
 
+        {remoteCmds.length > 0 && (
+          <ContextMenuSub>
+            <ContextMenuSubTrigger className="gap-2">
+              <Zap size={14} strokeWidth={1.5} />
+              Remote Commands
+            </ContextMenuSubTrigger>
+            <ContextMenuSubContent className="w-56">
+              {(() => {
+                // Group commands by cmdGroup
+                const grouped = new Map<string, RemoteCmd[]>()
+                const ungrouped: RemoteCmd[] = []
+                for (const cmd of remoteCmds) {
+                  const g = cmd.cmdGroup?.trim()
+                  if (g) {
+                    const list = grouped.get(g) ?? []
+                    list.push(cmd)
+                    grouped.set(g, list)
+                  } else {
+                    ungrouped.push(cmd)
+                  }
+                }
+
+                const items: JSX.Element[] = []
+
+                // Grouped commands first
+                for (const [group, cmds] of Array.from(grouped.entries()).sort((a, b) => a[0].localeCompare(b[0]))) {
+                  items.push(
+                    <ContextMenuSub key={`grp-${group}`}>
+                      <ContextMenuSubTrigger className="text-xs">{group}</ContextMenuSubTrigger>
+                      <ContextMenuSubContent className="w-52">
+                        {cmds.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)).map((cmd) => (
+                          <ContextMenuItem
+                            key={cmd.id}
+                            onClick={() => handleRunRemoteCommand(cmd)}
+                            className="gap-2 flex-col items-start"
+                          >
+                            <span className="text-xs truncate w-full">{cmd.description || cmd.command}</span>
+                            {cmd.keybinding && (
+                              <ContextMenuShortcut>{cmd.keybinding}</ContextMenuShortcut>
+                            )}
+                          </ContextMenuItem>
+                        ))}
+                      </ContextMenuSubContent>
+                    </ContextMenuSub>
+                  )
+                }
+
+                // Ungrouped commands
+                if (grouped.size > 0 && ungrouped.length > 0) {
+                  items.push(<ContextMenuSeparator key="rc-sep" />)
+                }
+                for (const cmd of ungrouped.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))) {
+                  items.push(
+                    <ContextMenuItem
+                      key={cmd.id}
+                      onClick={() => handleRunRemoteCommand(cmd)}
+                      className="gap-2"
+                    >
+                      <Zap size={12} strokeWidth={1.5} />
+                      <span className="truncate text-xs">{cmd.description || cmd.command}</span>
+                      {cmd.keybinding && (
+                        <ContextMenuShortcut>{cmd.keybinding}</ContextMenuShortcut>
+                      )}
+                    </ContextMenuItem>
+                  )
+                }
+
+                return items
+              })()}
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+        )}
+
+        {runbooks.length > 0 && (
+          <ContextMenuSub>
+            <ContextMenuSubTrigger className="gap-2">
+              <FileText size={14} strokeWidth={1.5} />
+              Runbooks
+            </ContextMenuSubTrigger>
+            <ContextMenuSubContent className="w-52">
+              {runbooks.map((rb) => (
+                <ContextMenuItem
+                  key={rb.id}
+                  onClick={() => handleRunRunbook(rb)}
+                  className="gap-2"
+                >
+                  <Play size={12} strokeWidth={1.5} />
+                  <span className="truncate text-xs">{rb.name}</span>
+                </ContextMenuItem>
+              ))}
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+        )}
+
         <ContextMenuItem onClick={handleScreenshot} className="gap-2">
           <Camera size={14} strokeWidth={1.5} />
           Take Screenshot
         </ContextMenuItem>
+        {connectionId && (() => {
+          const paneEl = document.querySelector(`[data-pane-id="${paneId}"]`)
+          const termId = paneEl?.getAttribute('data-terminal-id') ?? ''
+          const sshId = termId.startsWith('ssh:') ? termId.slice(4) : null
+          if (!sshId) return null
+          return (
+            <ContextMenuItem
+              onClick={async () => {
+                try {
+                  const isRec = await window.bifrost.ssh.isRecording(sshId)
+                  if (isRec) {
+                    await window.bifrost.ssh.stopRecording(sshId)
+                  } else {
+                    await window.bifrost.ssh.startRecording(sshId, {})
+                  }
+                } catch (err) { console.error('Recording toggle failed:', err) }
+              }}
+              className="gap-2"
+            >
+              <Circle size={14} strokeWidth={1.5} className="text-[var(--error)]" />
+              Toggle Recording
+            </ContextMenuItem>
+          )
+        })()}
         <ContextMenuItem onClick={handleDetach} className="gap-2">
           <ExternalLink size={14} strokeWidth={1.5} />
           Detach to Window
+        </ContextMenuItem>
+
+        <ContextMenuSeparator />
+
+        <ContextMenuItem onClick={handleRenameTab} className="gap-2">
+          <PenLine size={14} strokeWidth={1.5} />
+          Rename Tab
+        </ContextMenuItem>
+        <ContextMenuItem onClick={handleToggleLockTitle} className="gap-2">
+          {useSessionsStore.getState().tabs.find((t) => t.id === tabId)?.lockTitle
+            ? <><LockOpen size={14} strokeWidth={1.5} />Unlock Title</>
+            : <><Lock size={14} strokeWidth={1.5} />Lock Title</>
+          }
         </ContextMenuItem>
 
         <ContextMenuSeparator />
@@ -386,6 +761,19 @@ export function TerminalContextMenu({
           <div className="flex items-start gap-2">
             <Bot size={14} className="text-[#6bd5ff] shrink-0 mt-0.5" />
             <p className="whitespace-pre-wrap">{explanation}</p>
+          </div>
+        </div>
+      )}
+      {/* Note saved notification */}
+      {noteSaved && (
+        <div
+          className="fixed bottom-36 right-4 z-50 p-3 rounded-[var(--radius)] bg-[var(--surface-bright)] text-xs text-[var(--on-surface)] shadow-lg backdrop-blur-[12px]"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex items-center gap-2">
+            <StickyNote size={14} className="text-[#22c55e] shrink-0" />
+            <p>{noteSaved}</p>
           </div>
         </div>
       )}

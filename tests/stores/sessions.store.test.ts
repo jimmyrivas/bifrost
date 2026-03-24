@@ -142,4 +142,78 @@ describe('Sessions Store', () => {
     const result = useSessionsStore.getState().tabs[0].rootPane
     expect(result.split).toBeUndefined()
   })
+
+  it('explodes a split tab into separate tabs', () => {
+    const { createTab } = useSessionsStore.getState()
+    const tabId = createTab('Split Tab')
+
+    const paneId = useSessionsStore.getState().tabs[0].rootPane.id
+    useSessionsStore.getState().splitPane(tabId, paneId, 'horizontal')
+
+    useSessionsStore.getState().explodePanes(tabId)
+
+    const { tabs } = useSessionsStore.getState()
+    expect(tabs.length).toBe(2)
+    expect(tabs[0].rootPane.split).toBeUndefined()
+    expect(tabs[1].rootPane.split).toBeUndefined()
+  })
+
+  it('does nothing when exploding a tab without splits', () => {
+    const { createTab } = useSessionsStore.getState()
+    createTab('No Split')
+
+    useSessionsStore.getState().explodePanes(useSessionsStore.getState().tabs[0].id)
+
+    expect(useSessionsStore.getState().tabs.length).toBe(1)
+  })
+
+  it('combines multiple tabs into one with splits', () => {
+    const { createTab } = useSessionsStore.getState()
+    createTab('Tab 1')
+    createTab('Tab 2')
+    createTab('Tab 3')
+
+    useSessionsStore.getState().combineTabs()
+
+    const { tabs } = useSessionsStore.getState()
+    expect(tabs.length).toBe(1)
+    expect(tabs[0].title).toBe('Combined')
+    expect(tabs[0].rootPane.split).toBeDefined()
+  })
+
+  it('does nothing when combining with only one tab', () => {
+    const { createTab } = useSessionsStore.getState()
+    createTab('Only Tab')
+
+    useSessionsStore.getState().combineTabs()
+
+    expect(useSessionsStore.getState().tabs.length).toBe(1)
+    expect(useSessionsStore.getState().tabs[0].title).toBe('Only Tab')
+  })
+
+  it('toggles SFTP open state for a tab', () => {
+    const { createTab, toggleSftp, isSftpOpen } = useSessionsStore.getState()
+    const tabId = createTab('SSH Tab')
+
+    expect(isSftpOpen(tabId)).toBe(false)
+
+    toggleSftp(tabId)
+    expect(useSessionsStore.getState().isSftpOpen(tabId)).toBe(true)
+
+    useSessionsStore.getState().toggleSftp(tabId)
+    expect(useSessionsStore.getState().isSftpOpen(tabId)).toBe(false)
+  })
+
+  it('toggles lock title on a tab', () => {
+    const { createTab } = useSessionsStore.getState()
+    const tabId = createTab('Tab')
+
+    expect(useSessionsStore.getState().tabs[0].lockTitle).toBe(false)
+
+    useSessionsStore.getState().toggleLockTitle(tabId)
+    expect(useSessionsStore.getState().tabs[0].lockTitle).toBe(true)
+
+    useSessionsStore.getState().toggleLockTitle(tabId)
+    expect(useSessionsStore.getState().tabs[0].lockTitle).toBe(false)
+  })
 })

@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect } from 'react'
-import { Radio, AlertTriangle } from 'lucide-react'
+import { useState, useCallback, useEffect, useRef } from 'react'
+import { Radio, AlertTriangle, Clock, Bot, X as XIcon, Loader2 } from 'lucide-react'
 import { useTerminal } from '@renderer/hooks/useTerminal'
 import { useSessionsStore, type TerminalStyle } from '@renderer/stores/sessions.store'
 import { TerminalContextMenu } from './TerminalContextMenu'
@@ -12,14 +12,17 @@ interface XTerminalProps {
   tabId?: string
   connectionId?: string | null
   terminalStyle?: TerminalStyle
+  shell?: string
   onTerminalCreated?: (terminalId: string) => void
 }
 
-export function XTerminal({ paneId, tabId, connectionId, terminalStyle, onTerminalCreated }: XTerminalProps): JSX.Element {
+export function XTerminal({ paneId, tabId, connectionId, terminalStyle, shell, onTerminalCreated }: XTerminalProps): JSX.Element {
   const { containerRef, terminalIdRef, pendingPaste, confirmPaste, cancelPaste, dynamicTitle, detectedErrors } = useTerminal({
     paneId,
+    tabId,
     connectionId,
     terminalStyle,
+    shell,
     onTerminalCreated
   })
 
@@ -44,10 +47,156 @@ export function XTerminal({ paneId, tabId, connectionId, terminalStyle, onTermin
     }
   }, [paneId])
 
+  // Session resume: idle detection
+  const IDLE_THRESHOLD = 5 * 60 * 1000 // 5 minutes
+  const lastActivityRef = useRef(Date.now())
+  const [idleBanner, setIdleBanner] = useState<{ duration: string } | null>(null)
+  const [aiSummary, setAiSummary] = useState<string | null>(null)
+  const [summaryLoading, setSummaryLoading] = useState(false)
+
+  // Track activity: any data from terminal = active
+  useEffect(() => {
+    const paneEl = document.querySelector(`[data-pane-id="${paneId}"]`)
+    if (!paneEl) return
+    const observer = new MutationObserver(() => { lastActivityRef.current = Date.now() })
+    observer.observe(paneEl, { childList: true, subtree: true, characterData: true })
+    return () => observer.disconnect()
+  }, [paneId])
+
+  // Track user interaction (keypress, click)
+  useEffect(() => {
+    const markActive = (): void => {
+      const idleTime = Date.now() - lastActivityRef.current
+      if (idleTime > IDLE_THRESHOLD) {
+        const mins = Math.floor(idleTime / 60000)
+        const display = mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`
+        setIdleBanner({ duration: display })
+      }
+      lastActivityRef.current = Date.now()
+    }
+    const container = document.querySelector(`[data-pane-id="${paneId}"]`)
+    container?.addEventListener('mousedown', markActive)
+    container?.addEventListener('keydown', markActive)
+    return () => {
+      container?.removeEventListener('mousedown', markActive)
+      container?.removeEventListener('keydown', markActive)
+    }
+  }, [paneId])
+
+  const dismissIdleBanner = useCallback(() => {
+    setIdleBanner(null)
+    setAiSummary(null)
+  }, [])
+
+  const requestAiSummary = useCallback(async () => {
+    setSummaryLoading(true)
+    try {
+      const termId = terminalIdRef.current
+      if (!termId) { setSummaryLoading(false); return }
+      const buffer = await window.bifrost.terminal.getBuffer(termId)
+      if (!buffer) { setAiSummary('No terminal output available.'); setSummaryLoading(false); return }
+
+      const lastLines = buffer.split('\n').filter((l: string) => l.trim()).slice(-40).join('\n')
+      const available = await window.bifrost.ai.checkAvailable()
+      if (!available) {
+        setAiSummary('AI provider not available. Recent output:\n\n' + lastLines.slice(-500))
+        setSummaryLoading(false)
+        return
+      }
+
+      const result = await window.bifrost.ai.generate(
+        'Summarize what happened in this terminal session concisely. Focus on: commands executed, results, errors, and current state. Be brief (3-5 bullet points).',
+        'Terminal output:\n' + lastLines.slice(-1500)
+      )
+      setAiSummary(result || 'Could not generate summary.')
+    } catch {
+      setAiSummary('Failed to generate summary.')
+    }
+    setSummaryLoading(false)
+  }, [])
+
+  // Save summary as note
+  const saveSummaryAsNote = useCallback(async () => {
+    if (!aiSummary) return
+    const { tabs, activeTabId } = useSessionsStore.getState()
+    const tab = tabs.find((t) => t.id === (tabId || activeTabId))
+    try {
+      let connName = ''
+      let host = ''
+      let user = ''
+      if (connectionId) {
+        const conn = await window.bifrost.connections.get(connectionId)
+        if (conn) { connName = conn.name ?? ''; host = conn.host ?? ''; user = conn.username ?? '' }
+      }
+      await window.bifrost.notes.create({
+        content: aiSummary,
+        connectionId: connectionId ?? undefined,
+        connectionName: connName,
+        host,
+        user,
+        tag: 'session-summary',
+        tabTitle: tab?.title ?? ''
+      })
+    } catch { /* ignore */ }
+    dismissIdleBanner()
+  }, [aiSummary, tabId, connectionId, dismissIdleBanner])
+
   const content = (
     <div className="relative w-full h-full">
+      {/* Idle resume banner */}
+      {idleBanner && (
+        <div className="absolute top-0 left-0 right-0 z-20 bg-[#1b1b1e] border-b border-[rgba(199,196,215,0.08)]">
+          <div className="flex items-center gap-3 px-3 py-2">
+            <Clock size={14} className="text-[#ffa36b] shrink-0" />
+            <span className="text-[11px] text-[#c7c4d7]">
+              Idle for <strong className="text-[#ffa36b]">{idleBanner.duration}</strong>
+            </span>
+            {!aiSummary && !summaryLoading && (
+              <button
+                onClick={requestAiSummary}
+                className="flex items-center gap-1 px-2 py-0.5 rounded-[var(--radius)] text-[10px] font-semibold bg-[#6bd5ff]/10 text-[#6bd5ff] hover:bg-[#6bd5ff]/20 transition-colors"
+              >
+                <Bot size={10} /> AI Summary
+              </button>
+            )}
+            {summaryLoading && (
+              <span className="flex items-center gap-1 text-[10px] text-[#6bd5ff]">
+                <Loader2 size={10} className="animate-spin" /> Summarizing...
+              </span>
+            )}
+            <button
+              onClick={dismissIdleBanner}
+              className="ml-auto p-0.5 text-[#c7c4d7]/40 hover:text-[#c7c4d7] transition-colors"
+            >
+              <XIcon size={12} />
+            </button>
+          </div>
+          {aiSummary && (
+            <div className="px-3 pb-2">
+              <pre className="text-[10px] text-[#c7c4d7]/80 whitespace-pre-wrap leading-relaxed max-h-32 overflow-y-auto">
+                {aiSummary}
+              </pre>
+              <div className="flex gap-2 mt-1.5">
+                <button
+                  onClick={saveSummaryAsNote}
+                  className="text-[9px] text-[#22c55e] hover:text-[#22c55e]/80 font-semibold uppercase tracking-wider"
+                >
+                  Save as Note
+                </button>
+                <button
+                  onClick={dismissIdleBanner}
+                  className="text-[9px] text-[#c7c4d7]/40 hover:text-[#c7c4d7] font-semibold uppercase tracking-wider"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Broadcast banner */}
-      {broadcastMode !== 'off' && (
+      {(broadcastMode === 'panes' || broadcastMode === 'all-tabs') && (
         <div
           className={cn(
             'absolute top-0 left-0 right-0 z-10 flex items-center justify-center gap-2',
@@ -160,7 +309,7 @@ function TerminalSearchBar({
         onChange={(e) => handleSearch(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder="Find..."
-        className="bg-transparent text-xs text-[#e6e1e5] placeholder-[#c7c4d7]/40 outline-none w-40 font-['Inter']"
+        className="bg-transparent text-xs text-[#e6e1e5] placeholder-[#c7c4d7]/40 outline-none w-40 font-[var(--font-ui)]"
         autoFocus
       />
       <button

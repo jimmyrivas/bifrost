@@ -1,4 +1,4 @@
-import { execSync } from 'child_process'
+import { execFileSync } from 'child_process'
 
 export interface KeePassConfig {
   databasePath: string
@@ -25,7 +25,7 @@ export class KeePassBridge {
    */
   isAvailable(): boolean {
     try {
-      execSync('which keepassxc-cli', { encoding: 'utf-8', timeout: 5000 })
+      execFileSync('which', ['keepassxc-cli'], { encoding: 'utf-8', timeout: 5000, stdio: 'pipe' })
       return true
     } catch {
       return false
@@ -48,7 +48,7 @@ export class KeePassBridge {
       }
       args.push(this.config.databasePath, entryPath)
 
-      const result = execSync(`keepassxc-cli ${args.join(' ')}`, {
+      const result = execFileSync('keepassxc-cli', args, {
         encoding: 'utf-8',
         timeout: 10000,
         stdio: ['pipe', 'pipe', 'pipe']
@@ -73,7 +73,7 @@ export class KeePassBridge {
       }
       args.push(this.config.databasePath, path)
 
-      const result = execSync(`keepassxc-cli ${args.join(' ')}`, {
+      const result = execFileSync('keepassxc-cli', args, {
         encoding: 'utf-8',
         timeout: 10000,
         stdio: ['pipe', 'pipe', 'pipe']

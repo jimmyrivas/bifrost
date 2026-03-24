@@ -1,10 +1,15 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
+export interface SavedLayout {
+  tabs: Array<{ title: string; connectionId: string | null }>
+}
+
 export interface Workspace {
   id: string
   name: string
   connectionIds: string[]
+  layout?: SavedLayout
 }
 
 interface WorkspaceState {
@@ -18,6 +23,8 @@ interface WorkspaceState {
   addConnectionToWorkspace: (workspaceId: string, connectionId: string) => void
   removeConnectionFromWorkspace: (workspaceId: string, connectionId: string) => void
   getActiveConnectionFilter: () => string[] | null
+  saveLayout: (workspaceId: string, layout: SavedLayout) => void
+  getLayout: (workspaceId: string) => SavedLayout | undefined
 }
 
 let idCounter = 0
@@ -81,6 +88,18 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         if (!activeWorkspaceId) return null
         const ws = workspaces.find((w) => w.id === activeWorkspaceId)
         return ws?.connectionIds ?? null
+      },
+
+      saveLayout: (workspaceId: string, layout: SavedLayout) => {
+        set((state) => ({
+          workspaces: state.workspaces.map((w) =>
+            w.id === workspaceId ? { ...w, layout } : w
+          )
+        }))
+      },
+
+      getLayout: (workspaceId: string) => {
+        return get().workspaces.find((w) => w.id === workspaceId)?.layout
       }
     }),
     {

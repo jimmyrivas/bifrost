@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ChevronRight,
@@ -19,10 +19,12 @@ import {
   FolderPlus,
   FolderOpen,
   Plus,
-  Type
+  Type,
+  Briefcase
 } from 'lucide-react'
 import { cn } from '@renderer/lib/utils'
 import { useConnectionsStore, type Connection, type Group } from '@renderer/stores/connections.store'
+import { useWorkspaceStore } from '@renderer/stores/workspace.store'
 import {
   ContextMenu,
   ContextMenuTrigger,
@@ -89,6 +91,8 @@ function MethodIcon({ method }: { method: string }): JSX.Element {
   switch (method) {
     case 'ssh':
       return <Terminal {...props} />
+    case 'mosh':
+      return <Terminal {...props} className="shrink-0 text-[#22c55e]/60" />
     case 'rdp':
       return <Monitor {...props} />
     case 'vnc':
@@ -124,12 +128,14 @@ function GroupNode({
   depth,
   selectedId,
   callbacks,
-  searchFilter
+  searchFilter,
+  healthMap
 }: {
   node: TreeNode
   depth: number
   selectedId: string | null
   callbacks: TreeCallbacks
+  healthMap?: Map<string, boolean>
   searchFilter?: string
 }): JSX.Element {
   const [expanded, setExpanded] = useState(true)
@@ -170,6 +176,7 @@ function GroupNode({
             selectedId={selectedId}
             callbacks={callbacks}
             searchFilter={searchFilter}
+            healthMap={healthMap}
           />
         ))}
     </div>
@@ -226,7 +233,8 @@ function ConnectionNode({
   selectedId,
   callbacks,
   isFavorite,
-  searchFilter
+  searchFilter,
+  healthStatus
 }: {
   node: TreeNode
   depth: number
@@ -234,9 +242,11 @@ function ConnectionNode({
   callbacks: TreeCallbacks
   isFavorite: boolean
   searchFilter?: string
+  healthStatus?: boolean | undefined
 }): JSX.Element {
   const isSelected = node.id === selectedId
   const conn = node.data as Connection
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const nodeContent = (
     <div
@@ -247,8 +257,16 @@ function ConnectionNode({
           : 'text-[#c7c4d7] hover:bg-[#2a2a2d]/50 hover:text-[#e6e1e5]'
       )}
       style={{ paddingLeft: `${depth * 12 + 8}px` }}
-      onClick={() => callbacks.onSelect(node.id)}
-      onDoubleClick={() => callbacks.onConnect(node.id)}
+      onClick={() => {
+        callbacks.onSelect(node.id)
+        if (clickTimerRef.current) clearTimeout(clickTimerRef.current)
+        clickTimerRef.current = setTimeout(() => callbacks.onEdit?.(node.id), 250)
+      }}
+      onDoubleClick={() => {
+        if (clickTimerRef.current) clearTimeout(clickTimerRef.current)
+        clickTimerRef.current = null
+        callbacks.onConnect(node.id)
+      }}
       role="treeitem"
       aria-selected={isSelected}
       tabIndex={0}
@@ -262,13 +280,20 @@ function ConnectionNode({
       )}
 
       <MethodIcon method={conn.method} />
-      <span className="truncate font-['Inter']">
-        {searchFilter ? (
-          <HighlightText text={node.name} highlight={searchFilter} />
-        ) : (
-          node.name
+      <div className="flex flex-col min-w-0">
+        <span className="truncate font-[var(--font-ui)]">
+          {searchFilter ? (
+            <HighlightText text={node.name} highlight={searchFilter} />
+          ) : (
+            node.name
+          )}
+        </span>
+        {conn.host && (
+          <span className="truncate text-[9px] text-[#c7c4d7]/40 leading-tight">
+            {conn.username ? `${conn.username}@` : ''}{conn.host}
+          </span>
         )}
-      </span>
+      </div>
 
       {/* Tag badges (#102) */}
       {conn.sshConfig && (() => {
@@ -307,8 +332,18 @@ function ConnectionNode({
         </button>
       )}
 
-      {/* Status dot */}
-      <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-[#c7c4d7]/20" />
+      {/* Health status dot with stats tooltip */}
+      <span
+        className={cn('w-1.5 h-1.5 rounded-full shrink-0',
+          healthStatus === true ? 'bg-[#22c55e]' : healthStatus === false ? 'bg-[#ef4444]' : 'bg-[#c7c4d7]/20'
+        )}
+        title={[
+          healthStatus === true ? 'Reachable' : healthStatus === false ? 'Unreachable' : 'Unknown',
+          conn.host ? `Host: ${conn.host}` : null,
+          conn.port ? `Port: ${conn.port}` : null,
+          `Protocol: ${conn.method?.toUpperCase() ?? 'SSH'}`
+        ].filter(Boolean).join('\n')}
+      />
     </div>
   )
 
@@ -338,6 +373,27 @@ function ConnectionNode({
         >
           <Copy size={14} strokeWidth={1.5} />
           Clone Connection
+        </ContextMenuItem>
+        <ContextMenuItem
+          onClick={async () => {
+            try {
+              const fullConn = await window.bifrost.connections.get(node.id)
+              if (!fullConn) return
+              const name = window.prompt('Template name:', `${fullConn.name} Template`)
+              if (!name) return
+              const config = JSON.stringify({
+                method: fullConn.method, host: fullConn.host, port: fullConn.port,
+                authType: fullConn.authType, username: fullConn.username,
+                privateKeyPath: fullConn.privateKeyPath,
+                sshConfig: fullConn.sshConfig, terminalConfig: fullConn.terminalConfig
+              })
+              await window.bifrost.templates.create(name, config)
+            } catch (err) { console.error('Save template failed:', err) }
+          }}
+          className="gap-2"
+        >
+          <Layers size={14} strokeWidth={1.5} />
+          Save as Template
         </ContextMenuItem>
         <ContextMenuItem
           onClick={() => callbacks.onToggleFavorite?.(node.id)}
@@ -380,6 +436,44 @@ function ConnectionNode({
             </ContextMenuItem>
           </ContextMenuSubContent>
         </ContextMenuSub>
+        {(() => {
+          const wsStore = useWorkspaceStore.getState()
+          const workspaces = wsStore.workspaces
+          if (workspaces.length === 0) return null
+          return (
+            <>
+              <ContextMenuSeparator />
+              <ContextMenuSub>
+                <ContextMenuSubTrigger className="gap-2">
+                  <Briefcase size={14} strokeWidth={1.5} />
+                  Workspaces
+                </ContextMenuSubTrigger>
+                <ContextMenuSubContent className="w-48">
+                  {workspaces.map((ws) => {
+                    const isIn = ws.connectionIds.includes(node.id)
+                    return (
+                      <ContextMenuItem
+                        key={ws.id}
+                        onClick={() => {
+                          if (isIn) {
+                            useWorkspaceStore.getState().removeConnectionFromWorkspace(ws.id, node.id)
+                          } else {
+                            useWorkspaceStore.getState().addConnectionToWorkspace(ws.id, node.id)
+                          }
+                        }}
+                        className="gap-2 text-xs"
+                      >
+                        <span className={cn('w-2 h-2 rounded-full shrink-0', isIn ? 'bg-[#22c55e]' : 'bg-[#c7c4d7]/20')} />
+                        {ws.name}
+                        {isIn && <span className="ml-auto text-[10px] text-[#c7c4d7]/40">remove</span>}
+                      </ContextMenuItem>
+                    )
+                  })}
+                </ContextMenuSubContent>
+              </ContextMenuSub>
+            </>
+          )
+        })()}
         <ContextMenuSeparator />
         <ContextMenuItem
           onClick={() => callbacks.onDelete?.(node.id)}
@@ -417,13 +511,15 @@ function TreeNodeItem({
   depth,
   selectedId,
   callbacks,
-  searchFilter
+  searchFilter,
+  healthMap
 }: {
   node: TreeNode
   depth: number
   selectedId: string | null
   callbacks: TreeCallbacks
   searchFilter?: string
+  healthMap?: Map<string, boolean>
 }): JSX.Element {
   const isFavorite = useConnectionsStore((s) => s.favorites.includes(node.id))
 
@@ -435,6 +531,7 @@ function TreeNodeItem({
         selectedId={selectedId}
         callbacks={callbacks}
         searchFilter={searchFilter}
+        healthMap={healthMap}
       />
     )
   }
@@ -446,6 +543,7 @@ function TreeNodeItem({
       callbacks={callbacks}
       isFavorite={isFavorite}
       searchFilter={searchFilter}
+      healthStatus={healthMap?.get(node.id)}
     />
   )
 }
@@ -455,11 +553,13 @@ interface ConnectionTreeProps {
   onEdit?: (connectionId: string) => void
   onNewConnection?: () => void
   searchFilter?: string
+  workspaceFilter?: string[] | null
 }
 
-export function ConnectionTree({ onConnect, onEdit, onNewConnection, searchFilter }: ConnectionTreeProps): JSX.Element {
+export function ConnectionTree({ onConnect, onEdit, onNewConnection, searchFilter, workspaceFilter }: ConnectionTreeProps): JSX.Element {
   const { t } = useTranslation()
   const connections = useConnectionsStore((s) => s.connections)
+  const [healthMap, setHealthMap] = useState<Map<string, boolean>>(new Map())
   const groups = useConnectionsStore((s) => s.groups)
   const selectedId = useConnectionsStore((s) => s.selectedConnectionId)
   const setSelected = useConnectionsStore((s) => s.setSelectedConnection)
@@ -477,6 +577,30 @@ export function ConnectionTree({ onConnect, onEdit, onNewConnection, searchFilte
     fetchGroups()
   }, [fetchConnections, fetchGroups])
 
+  // Periodic health check for connections with hosts
+  useEffect(() => {
+    if (!window.bifrost?.system?.healthPing) return
+    const connsWithHost = connections.filter((c) => c.host)
+    if (connsWithHost.length === 0) return
+
+    const checkAll = async (): Promise<void> => {
+      const next = new Map<string, boolean>()
+      for (const conn of connsWithHost) {
+        try {
+          const result = await window.bifrost.system.healthPing(conn.id, conn.host!)
+          next.set(conn.id, result.reachable)
+        } catch {
+          next.set(conn.id, false)
+        }
+      }
+      setHealthMap(next)
+    }
+
+    checkAll()
+    const interval = setInterval(checkAll, 60000) // Every 60s
+    return () => clearInterval(interval)
+  }, [connections])
+
   const [confirmDelete, setConfirmDelete] = useState<{ type: 'connection' | 'group'; id: string; name: string } | null>(null)
 
   const handleConnect = useCallback(
@@ -489,19 +613,43 @@ export function ConnectionTree({ onConnect, onEdit, onNewConnection, searchFilte
 
   const handleClone = useCallback(
     async (id: string) => {
-      const conn = connections.find((c) => c.id === id)
-      if (!conn) return
-      await createConnection({
-        groupId: conn.groupId,
-        name: `${conn.name} (copy)`,
-        method: conn.method,
-        host: conn.host,
-        port: conn.port,
-        authType: conn.authType,
-        username: conn.username
-      })
+      try {
+        const fullConn = await window.bifrost.connections.get(id)
+        if (!fullConn) return
+        // Strip fields that shouldn't be cloned (id, timestamps, encrypted blobs)
+        await window.bifrost.connections.create({
+          name: `${fullConn.name} (copy)`,
+          method: fullConn.method,
+          host: fullConn.host,
+          port: fullConn.port,
+          authType: fullConn.authType,
+          username: fullConn.username,
+          privateKeyPath: fullConn.privateKeyPath,
+          groupId: fullConn.groupId,
+          launchOnStartup: fullConn.launchOnStartup,
+          reconnectOnDisconnect: fullConn.reconnectOnDisconnect,
+          runWithSudo: fullConn.runWithSudo,
+          useAutossh: fullConn.useAutossh,
+          tabTitle: fullConn.tabTitle,
+          autoSaveLog: fullConn.autoSaveLog,
+          logPattern: fullConn.logPattern,
+          sendString: fullConn.sendString,
+          sendIntervalSeconds: fullConn.sendIntervalSeconds,
+          sendIdleOnly: fullConn.sendIdleOnly,
+          networkMode: fullConn.networkMode,
+          proxyConfig: fullConn.proxyConfig,
+          jumpServerConfig: fullConn.jumpServerConfig,
+          terminalOverride: fullConn.terminalOverride,
+          terminalConfig: fullConn.terminalConfig,
+          sshConfig: fullConn.sshConfig,
+          templateId: fullConn.templateId
+        } as Parameters<typeof window.bifrost.connections.create>[0])
+        await fetchConnections()
+      } catch (err) {
+        console.error('Clone failed:', err)
+      }
     },
-    [connections, createConnection]
+    [fetchConnections]
   )
 
   const handleCopyPassword = useCallback(async (id: string) => {
@@ -615,8 +763,12 @@ export function ConnectionTree({ onConnect, onEdit, onNewConnection, searchFilte
     }
   }
 
-  // Filter tree if search is active
-  const allTree = buildTree(groups, connections)
+  // Filter by workspace first, then by search
+  // If workspace filter is empty array, show all (workspace has no connections assigned yet)
+  const wsConnections = workspaceFilter && workspaceFilter.length > 0
+    ? connections.filter((c) => workspaceFilter.includes(c.id))
+    : connections
+  const allTree = buildTree(groups, wsConnections)
 
   const filterTree = (nodes: TreeNode[], filter: string): TreeNode[] => {
     if (!filter) return nodes
@@ -669,6 +821,7 @@ export function ConnectionTree({ onConnect, onEdit, onNewConnection, searchFilte
               selectedId={selectedId}
               callbacks={callbacks}
               searchFilter={searchFilter}
+              healthMap={healthMap}
             />
           ))
         )}

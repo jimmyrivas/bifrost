@@ -8,12 +8,15 @@ import { usePreferencesStore } from '@renderer/stores/preferences.store'
 import { useSessionsStore, type TerminalStyle } from '@renderer/stores/sessions.store'
 import { getSchemeByName, getDefaultScheme } from '@renderer/lib/color-schemes'
 import { scanForErrors, type DetectedError } from '@renderer/lib/error-patterns'
+import { redactSecrets } from '@renderer/lib/secret-redactor'
 import { detectZmodem, notifyZmodemDetected } from '@renderer/lib/zmodem-handler'
 
 interface UseTerminalOptions {
   paneId: string
+  tabId?: string
   connectionId?: string | null // null/undefined = local PTY, string = SSH connection
   terminalStyle?: TerminalStyle
+  shell?: string // shell path override for local terminals (e.g. /usr/bin/pwsh)
   onTerminalCreated?: (terminalId: string) => void
 }
 
@@ -63,7 +66,7 @@ function writeToTerminal(terminalId: string, data: string): void {
  */
 function broadcastInput(originTerminalId: string, data: string): void {
   const { broadcastMode } = useSessionsStore.getState()
-  if (broadcastMode === 'off') return
+  if (broadcastMode === 'off' || broadcastMode === 'hidden') return
 
   let targetIds: string[]
   if (broadcastMode === 'panes') {
@@ -79,7 +82,7 @@ function broadcastInput(originTerminalId: string, data: string): void {
   }
 }
 
-export function useTerminal({ paneId, connectionId, terminalStyle, onTerminalCreated }: UseTerminalOptions): UseTerminalReturn {
+export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell, onTerminalCreated }: UseTerminalOptions): UseTerminalReturn {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const terminalRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
@@ -106,6 +109,40 @@ export function useTerminal({ paneId, connectionId, terminalStyle, onTerminalCre
   const lastOutputTimeRef = useRef<number>(0)
   const outputActiveRef = useRef<boolean>(false)
   const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const aiDetectedRef = useRef(false)
+  const aiScanBufferRef = useRef('')
+
+  // AI tool detection patterns
+  const AI_PATTERNS: Array<{ regex: RegExp; tool: string }> = [
+    { regex: /claude>|╭─|Human:|Assistant:/i, tool: 'claude' },
+    { regex: /\$ claude\b|claude chat/i, tool: 'claude' },
+    { regex: /\$ sgpt\b|ShellGPT/i, tool: 'sgpt' },
+    { regex: /\$ aichat\b/i, tool: 'aichat' },
+    { regex: /\$ ollama run\b/i, tool: 'ollama' },
+    { regex: />>> .*\noollama/i, tool: 'ollama' },
+    { regex: /\$ gh copilot\b/i, tool: 'copilot' },
+    { regex: /\$ aider\b|aider v\d/i, tool: 'aider' },
+    { regex: /\$ interpreter\b|Open Interpreter/i, tool: 'interpreter' },
+    { regex: /\$ llm\b|llm chat/i, tool: 'llm' },
+    { regex: /\$ mods\b/i, tool: 'mods' },
+    { regex: /\$ q chat\b|Amazon Q/i, tool: 'amazon-q' }
+  ]
+
+  // Scan terminal output for AI tool patterns
+  const scanForAi = useCallback((data: string) => {
+    if (aiDetectedRef.current || !tabId) return
+    aiScanBufferRef.current += data
+    if (aiScanBufferRef.current.length > 8192) {
+      aiScanBufferRef.current = aiScanBufferRef.current.slice(-4096)
+    }
+    for (const { regex, tool } of AI_PATTERNS) {
+      if (regex.test(aiScanBufferRef.current)) {
+        aiDetectedRef.current = true
+        useSessionsStore.getState().setAiDetected(tabId, tool)
+        break
+      }
+    }
+  }, [tabId])
 
   const fitToContainer = useCallback(() => {
     fitAddonRef.current?.fit()
@@ -354,7 +391,7 @@ export function useTerminal({ paneId, connectionId, terminalStyle, onTerminalCre
             useSessionsStore.getState().resetReconnectAttempts(connId)
 
             const { cols, rows } = terminal
-            await window.bifrost.ssh.openShell(sid, cols, rows)
+            await window.bifrost.ssh.openShell(sid, cols, rows, connectionId)
 
             terminal.write('\x1b[32mReconnected.\x1b[0m\r\n')
 
@@ -378,78 +415,138 @@ export function useTerminal({ paneId, connectionId, terminalStyle, onTerminalCre
     }
 
     if (connectionId) {
-      // === SSH MODE ===
-      terminal.write('\x1b[33mConnecting...\x1b[0m\r\n')
+      // Detect protocol method for this connection
+      const initConnection = async (): Promise<void> => {
+        let method = 'ssh'
+        try {
+          const conn = await window.bifrost.connections.get(connectionId)
+          if (conn?.method) method = conn.method
+        } catch { /* default to ssh */ }
 
-      window.bifrost.ssh
-        .connect(connectionId)
-        .then(async (sid: string) => {
-          sshSessionId = sid
-          terminalIdRef.current = `ssh:${sid}`
-          onTerminalCreated?.(`ssh:${sid}`)
+        if (method === 'mosh') {
+          // === MOSH MODE ===
+          terminal.write('\x1b[33mConnecting via Mosh...\x1b[0m\r\n')
+          try {
+            const conn = await window.bifrost.connections.get(connectionId)
+            const host = conn?.host ?? 'localhost'
+            const user = conn?.username ?? undefined
+            const port = conn?.port ?? undefined
+            const moshSessionId = await window.bifrost.protocols.connectMosh(host, user, port)
+            terminalIdRef.current = `mosh:${moshSessionId}`
+            onTerminalCreated?.(`mosh:${moshSessionId}`)
 
-          const { cols, rows } = terminal
-          await window.bifrost.ssh.openShell(sid, cols, rows)
+            terminal.onData(async (data: string) => {
+              if (data.includes('\n') || data.includes('\r\n')) {
+                const allowed = await shouldAllowPaste(data)
+                if (!allowed) return
+              }
+              window.bifrost.protocols.writePty(moshSessionId, data)
+              broadcastInput(`mosh:${moshSessionId}`, data)
+            })
 
-          // Wire xterm input -> SSH (with paste interception + broadcast)
-          terminal.onData(async (data: string) => {
-            if (data.includes('\n') || data.includes('\r\n')) {
-              const allowed = await shouldAllowPaste(data)
-              if (!allowed) return
+            terminal.onResize(({ cols, rows }: { cols: number; rows: number }) => {
+              window.bifrost.protocols.resizePty(moshSessionId, cols, rows)
+            })
+
+            removeDataListener = window.bifrost.protocols.onData((id: string, data: string) => {
+              if (id === moshSessionId) {
+                terminal.write(redactSecrets(data))
+                lastOutputTimeRef.current = Date.now()
+                outputActiveRef.current = true
+                errorBufferRef.current += data
+                if (errorBufferRef.current.length > 4096) {
+                  errorBufferRef.current = errorBufferRef.current.slice(-2048)
+                }
+                const errors = scanForErrors(data)
+                if (errors.length > 0) {
+                  detectedErrorsRef.current = [...detectedErrorsRef.current.slice(-9), ...errors]
+                }
+                scanForAi(data)
+              }
+            })
+
+            removeExitListener = window.bifrost.protocols.onClose((id: string) => {
+              if (id === moshSessionId) {
+                terminal.write('\r\n\x1b[90m[Mosh session ended]\x1b[0m\r\n')
+              }
+            })
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err)
+            terminal.write(`\x1b[31mMosh connection failed: ${msg}\x1b[0m\r\n`)
+            terminal.write('\x1b[90mEnsure mosh is installed: sudo apt install mosh\x1b[0m\r\n')
+          }
+        } else {
+          // === SSH MODE ===
+          terminal.write('\x1b[33mConnecting...\x1b[0m\r\n')
+
+          window.bifrost.ssh
+            .connect(connectionId)
+            .then(async (sid: string) => {
+              sshSessionId = sid
+              terminalIdRef.current = `ssh:${sid}`
+              onTerminalCreated?.(`ssh:${sid}`)
+
+              const { cols, rows } = terminal
+              await window.bifrost.ssh.openShell(sid, cols, rows, connectionId)
+
+              terminal.onData(async (data: string) => {
+                if (data.includes('\n') || data.includes('\r\n')) {
+                  const allowed = await shouldAllowPaste(data)
+                  if (!allowed) return
+                }
+                window.bifrost.ssh.write(sid, data)
+                broadcastInput(`ssh:${sid}`, data)
+              })
+
+              terminal.onResize(({ cols, rows }: { cols: number; rows: number }) => {
+                window.bifrost.ssh.resize(sid, cols, rows)
+              })
+            })
+            .catch((err: Error) => {
+              terminal.write(`\x1b[31mSSH connection failed: ${err.message}\x1b[0m\r\n`)
+            })
+
+          removeDataListener = window.bifrost.ssh.onData((id: string, data: string) => {
+            if (id === sshSessionId) {
+              terminal.write(redactSecrets(data))
+              lastOutputTimeRef.current = Date.now()
+              outputActiveRef.current = true
+              if (detectZmodem(data)) {
+                notifyZmodemDetected()
+              }
+              errorBufferRef.current += data
+              if (errorBufferRef.current.length > 4096) {
+                errorBufferRef.current = errorBufferRef.current.slice(-2048)
+              }
+              const errors = scanForErrors(data)
+              if (errors.length > 0) {
+                detectedErrorsRef.current = [...detectedErrorsRef.current.slice(-9), ...errors]
+              }
+              scanForAi(data)
             }
-            window.bifrost.ssh.write(sid, data)
-            broadcastInput(`ssh:${sid}`, data)
           })
 
-          // Wire xterm resize -> SSH
-          terminal.onResize(({ cols, rows }: { cols: number; rows: number }) => {
-            window.bifrost.ssh.resize(sid, cols, rows)
-          })
-        })
-        .catch((err: Error) => {
-          terminal.write(`\x1b[31mSSH connection failed: ${err.message}\x1b[0m\r\n`)
-        })
+          removeExitListener = window.bifrost.ssh.onClose((id: string) => {
+            if (id === sshSessionId) {
+              terminal.write('\r\n\x1b[90m[SSH connection closed]\x1b[0m\r\n')
+              sshSessionId = null
 
-      // Wire SSH output -> xterm (with error detection #99, zmodem detection #15)
-      removeDataListener = window.bifrost.ssh.onData((id: string, data: string) => {
-        if (id === sshSessionId) {
-          terminal.write(data)
-          lastOutputTimeRef.current = Date.now()
-          outputActiveRef.current = true
-          // Zmodem detection (#15)
-          if (detectZmodem(data)) {
-            notifyZmodemDetected()
-          }
-          // Error detection (#99)
-          errorBufferRef.current += data
-          if (errorBufferRef.current.length > 4096) {
-            errorBufferRef.current = errorBufferRef.current.slice(-2048)
-          }
-          const errors = scanForErrors(data)
-          if (errors.length > 0) {
-            detectedErrorsRef.current = [...detectedErrorsRef.current.slice(-9), ...errors]
-          }
-        }
-      })
-
-      removeExitListener = window.bifrost.ssh.onClose((id: string) => {
-        if (id === sshSessionId) {
-          terminal.write('\r\n\x1b[90m[SSH connection closed]\x1b[0m\r\n')
-          sshSessionId = null
-
-          // Auto-reconnect if enabled and not user-initiated
-          if (!userDisconnected && connectionId) {
-            const autoReconnect = usePreferencesStore.getState().terminal.autoReconnect
-            if (autoReconnect) {
-              attemptReconnect(connectionId)
+              if (!userDisconnected && connectionId) {
+                const autoReconnect = usePreferencesStore.getState().terminal.autoReconnect
+                if (autoReconnect) {
+                  attemptReconnect(connectionId)
+                }
+              }
             }
-          }
+          })
         }
-      })
+      }
+
+      initConnection()
     } else {
       // === LOCAL PTY MODE ===
       const { cols, rows } = terminal
-      window.bifrost.terminal.create(cols, rows).then((id: string) => {
+      window.bifrost.terminal.create(cols, rows, shell).then((id: string) => {
         terminalIdRef.current = id
         onTerminalCreated?.(id)
 
@@ -470,7 +567,7 @@ export function useTerminal({ paneId, connectionId, terminalStyle, onTerminalCre
 
       removeDataListener = window.bifrost.terminal.onData((id: string, data: string) => {
         if (id === terminalIdRef.current) {
-          terminal.write(data)
+          terminal.write(redactSecrets(data))
           lastOutputTimeRef.current = Date.now()
           outputActiveRef.current = true
           // Zmodem detection (#15)
@@ -486,6 +583,7 @@ export function useTerminal({ paneId, connectionId, terminalStyle, onTerminalCre
           if (errors.length > 0) {
             detectedErrorsRef.current = [...detectedErrorsRef.current.slice(-9), ...errors]
           }
+          scanForAi(data)
         }
       })
 

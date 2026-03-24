@@ -18,10 +18,14 @@ import { registerImportIpc } from './ipc/import.ipc'
 import { registerDiscoveryIpc } from './ipc/discovery.ipc'
 import { registerAuditIpc } from './ipc/audit.ipc'
 import { registerAiIpc } from './ipc/ai.ipc'
+import { loadAiConfig } from './services/ai-assistant'
 import { registerConfigSyncIpc } from './ipc/config-sync.ipc'
 import { registerSshCaIpc } from './ipc/ssh-ca.ipc'
 import { registerPluginsIpc } from './ipc/plugins.ipc'
 import { registerFontsIpc } from './ipc/fonts.ipc'
+import { registerRemoteCommandsIpc } from './ipc/remote-commands.ipc'
+import { registerTunnelsIpc, autoStartTunnels } from './ipc/tunnels.ipc'
+import { registerNotesIpc } from './ipc/notes.ipc'
 import { macroExecutor } from './services/macro-executor'
 import { auditLogger } from './services/audit-log'
 import { sessionLogger } from './services/session-logger'
@@ -132,6 +136,9 @@ app.whenReady().then(() => {
     console.error('Failed to run migrations:', err)
   }
 
+  // Load persisted AI config from DB
+  loadAiConfig()
+
   // Register non-window-dependent IPC handlers
   registerConnectionsIpc()
   registerCredentialsIpc()
@@ -148,6 +155,9 @@ app.whenReady().then(() => {
   registerSshCaIpc()
   registerPluginsIpc()
   registerFontsIpc()
+  registerRemoteCommandsIpc()
+  registerTunnelsIpc()
+  registerNotesIpc()
 
   // Rotate audit log on startup (remove entries older than 30 days)
   try {
@@ -155,6 +165,11 @@ app.whenReady().then(() => {
   } catch (err) {
     console.warn('Audit log rotation failed (non-critical):', err)
   }
+
+  // Auto-start tunnels marked with autoStart
+  autoStartTunnels().catch((err) => {
+    console.warn('Tunnel auto-start failed (non-critical):', err)
+  })
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)

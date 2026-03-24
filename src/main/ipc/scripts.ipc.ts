@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { scriptEngine, type BifrostScript } from '../services/script-engine'
+import { scriptEngine, type BifrostScript, type ScriptOutputMessage } from '../services/script-engine'
 
 export function registerScriptsIpc(): void {
   ipcMain.handle('scripts:list', () => {
@@ -27,5 +27,15 @@ export function registerScriptsIpc(): void {
 
   ipcMain.handle('scripts:validate', (_event, code: string) => {
     return scriptEngine.validateScript(code)
+  })
+
+  ipcMain.handle('scripts:execute', (event, code: string) => {
+    return new Promise<void>((resolve, reject) => {
+      const { promise } = scriptEngine.executeScript(code, (msg: ScriptOutputMessage) => {
+        // Forward send/log messages to the renderer that initiated execution
+        event.sender.send('script:output', msg)
+      })
+      promise.then(resolve).catch(reject)
+    })
   })
 }

@@ -4,7 +4,7 @@ export interface Connection {
   id: string
   groupId: string | null
   name: string
-  method: 'ssh' | 'rdp' | 'vnc' | 'telnet' | 'local' | 'ftp'
+  method: 'ssh' | 'mosh' | 'rdp' | 'vnc' | 'telnet' | 'local' | 'ftp'
   host: string | null
   port: number | null
   authType: 'userpass' | 'key' | 'key_pass' | 'manual' | null

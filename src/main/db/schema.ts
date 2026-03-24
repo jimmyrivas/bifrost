@@ -19,10 +19,10 @@ export const connections = sqliteTable('connections', {
   id: text('id').primaryKey(),
   groupId: text('group_id').references(() => groups.id),
   name: text('name').notNull(),
-  method: text('method', { enum: ['ssh', 'rdp', 'vnc', 'telnet', 'local', 'ftp'] }).notNull(),
+  method: text('method', { enum: ['ssh', 'mosh', 'rdp', 'vnc', 'telnet', 'local', 'ftp'] }).notNull(),
   host: text('host'),
   port: integer('port'),
-  authType: text('auth_type', { enum: ['userpass', 'key', 'key_pass', 'manual'] }),
+  authType: text('auth_type', { enum: ['userpass', 'key', 'key_pass', 'fido2', 'manual'] }),
   username: text('username'),
   encryptedPassword: blob('encrypted_password', { mode: 'buffer' }),
   privateKeyPath: text('private_key_path'),
@@ -132,9 +132,50 @@ export const preferences = sqliteTable('preferences', {
   value: text('value').notNull()
 })
 
+export const remoteCommands = sqliteTable('remote_commands', {
+  id: text('id').primaryKey(),
+  connectionId: text('connection_id').references(() => connections.id, { onDelete: 'cascade' }),
+  command: text('command').notNull(),
+  description: text('description').notNull().default(''),
+  cmdGroup: text('cmd_group').default(''),
+  confirm: integer('confirm', { mode: 'boolean' }).default(false),
+  sendIntro: integer('send_intro', { mode: 'boolean' }).default(true),
+  keybinding: text('keybinding').default(''),
+  sortOrder: integer('sort_order').default(0),
+  createdAt: text('created_at').default('CURRENT_TIMESTAMP')
+})
+
+export const tunnels = sqliteTable('tunnels', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  host: text('host').notNull(),
+  port: integer('port').default(22),
+  username: text('username'),
+  authType: text('auth_type', { enum: ['userpass', 'key', 'key_pass'] }),
+  privateKeyPath: text('private_key_path'),
+  encryptedPassword: blob('encrypted_password', { mode: 'buffer' }),
+  encryptedPassphrase: blob('encrypted_passphrase', { mode: 'buffer' }),
+  forwards: text('forwards').notNull().default('[]'), // JSON array
+  autoStart: integer('auto_start', { mode: 'boolean' }).default(false),
+  createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
+  updatedAt: text('updated_at').default('CURRENT_TIMESTAMP')
+})
+
 export const globalExpectPatterns = sqliteTable('global_expect_patterns', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   pattern: text('pattern').notNull(),
   enabled: integer('enabled', { mode: 'boolean' }).default(true)
+})
+
+export const sessionNotes = sqliteTable('session_notes', {
+  id: text('id').primaryKey(),
+  content: text('content').notNull(),
+  connectionId: text('connection_id'),
+  connectionName: text('connection_name').default(''),
+  host: text('host').default(''),
+  user: text('user').default(''),
+  tag: text('tag').default('note'), // note, evidence, command, error, prompt, ai-conversation
+  tabTitle: text('tab_title').default(''),
+  createdAt: text('created_at').notNull()
 })

@@ -2,12 +2,13 @@ import { ipcMain } from 'electron'
 import { getDatabase, schema } from '../db'
 import { eq } from 'drizzle-orm'
 import { randomUUID } from 'crypto'
+import { variableEngine, type VariableContext } from '../services/variable-engine'
 
 export interface ConnectionData {
   id?: string
   groupId?: string | null
   name: string
-  method: 'ssh' | 'rdp' | 'vnc' | 'telnet' | 'local' | 'ftp'
+  method: 'ssh' | 'mosh' | 'rdp' | 'vnc' | 'telnet' | 'local' | 'ftp'
   host?: string
   port?: number
   authType?: 'userpass' | 'key' | 'key_pass' | 'manual'
@@ -139,5 +140,74 @@ export function registerConnectionsIpc(): void {
         .where(eq(schema.connections.id, item.id))
         .run()
     }
+  })
+
+  // Resolve a tab title template using the variable engine
+  ipcMain.handle('connections:resolveTabTitle', async (_event, template: string, connectionId?: string) => {
+    const db = getDatabase()
+    let ctx: VariableContext = {}
+
+    if (connectionId) {
+      const conn = db.select().from(schema.connections).where(eq(schema.connections.id, connectionId)).get()
+      if (conn) {
+        ctx = {
+          connectionId,
+          ip: conn.host ?? undefined,
+          port: conn.port ?? undefined,
+          user: conn.username ?? undefined,
+          name: conn.name ?? undefined,
+          title: conn.tabTitle ?? undefined
+        }
+      }
+    }
+
+    return variableEngine.resolveInternal(template, ctx)
+  })
+
+  // Exec commands (pre/post connection hooks)
+  ipcMain.handle('execCommands:list', (_event, connectionId: string) => {
+    const db = getDatabase()
+    return db.select().from(schema.execCommands)
+      .where(eq(schema.execCommands.connectionId, connectionId))
+      .all()
+  })
+
+  ipcMain.handle('execCommands:save', (_event, connectionId: string, commands: Array<{ phase: string; command: string; ask: boolean; isDefault: boolean; sortOrder: number }>) => {
+    const db = getDatabase()
+    // Delete existing and re-insert
+    db.delete(schema.execCommands)
+      .where(eq(schema.execCommands.connectionId, connectionId))
+      .run()
+    for (const cmd of commands) {
+      db.insert(schema.execCommands)
+        .values({
+          id: randomUUID(),
+          connectionId,
+          phase: cmd.phase as 'pre' | 'post',
+          command: cmd.command,
+          ask: cmd.ask ?? false,
+          isDefault: cmd.isDefault ?? true,
+          sortOrder: cmd.sortOrder
+        })
+        .run()
+    }
+  })
+
+  // Connection Templates
+  ipcMain.handle('templates:list', () => {
+    const db = getDatabase()
+    return db.select().from(schema.connectionTemplates).all()
+  })
+
+  ipcMain.handle('templates:create', (_event, name: string, config: string) => {
+    const db = getDatabase()
+    const id = randomUUID()
+    db.insert(schema.connectionTemplates).values({ id, name, config }).run()
+    return id
+  })
+
+  ipcMain.handle('templates:delete', (_event, id: string) => {
+    const db = getDatabase()
+    db.delete(schema.connectionTemplates).where(eq(schema.connectionTemplates.id, id)).run()
   })
 }

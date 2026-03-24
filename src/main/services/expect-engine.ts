@@ -26,6 +26,7 @@ export class ExpectEngine extends EventEmitter {
   private timer: ReturnType<typeof setTimeout> | null = null
   private running = false
   private debug = false
+  private debugLog: string[] = []
   private writeFn: ((data: string) => void) | null = null
 
   constructor() {
@@ -45,6 +46,26 @@ export class ExpectEngine extends EventEmitter {
 
   setDebug(enabled: boolean): void {
     this.debug = enabled
+    if (enabled) this.debugLog = []
+  }
+
+  isRunning(): boolean { return this.running }
+  isDebug(): boolean { return this.debug }
+  getRulesCount(): number { return this.rules.length }
+
+  getCurrentRule(): { id: string; pattern: string } | null {
+    const rule = this.rules[this.currentRuleIndex]
+    return rule ? { id: rule.id, pattern: rule.pattern.source } : null
+  }
+
+  getDebugLog(): string[] { return this.debugLog.slice(-50) }
+
+  private log(msg: string): void {
+    if (this.debug) {
+      const entry = `[${new Date().toISOString().slice(11, 19)}] ${msg}`
+      this.debugLog.push(entry)
+      if (this.debugLog.length > 200) this.debugLog = this.debugLog.slice(-100)
+    }
   }
 
   start(): void {
@@ -77,6 +98,7 @@ export class ExpectEngine extends EventEmitter {
     this.emit('buffer-update', this.buffer.slice(-500))
 
     if (this.debug) {
+      this.log(`Feed: ${JSON.stringify(data.slice(0, 80))}`)
       this.emit('expect-event', {
         type: 'match',
         ruleId: 'debug',
@@ -98,6 +120,7 @@ export class ExpectEngine extends EventEmitter {
 
     if (match) {
       this.clearTimeout()
+      this.log(`MATCH rule[${rule.id}] pattern:/${rule.pattern.source}/ → "${match[0].slice(0, 40)}"`)
 
       this.emit('expect-event', {
         type: 'match',
@@ -187,14 +210,4 @@ export class ExpectEngine extends EventEmitter {
     this.emit('expect-event', { type: 'complete' } as ExpectEvent)
   }
 
-  isRunning(): boolean {
-    return this.running
-  }
-
-  getCurrentRule(): ExpectRule | null {
-    if (this.currentRuleIndex < this.rules.length) {
-      return this.rules[this.currentRuleIndex]
-    }
-    return null
-  }
 }

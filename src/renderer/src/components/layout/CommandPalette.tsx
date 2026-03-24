@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { Terminal, Monitor, Tv, Radio, Laptop, Search, Star, Clock } from 'lucide-react'
+import { Terminal, Monitor, Tv, Radio, Laptop, Search, Star, Clock, Zap, Code2 } from 'lucide-react'
 import { cn } from '@renderer/lib/utils'
 import { useConnectionsStore, type Connection } from '@renderer/stores/connections.store'
+import { getFallbackSuggestions } from '@renderer/lib/command-suggestions'
 
 const SPECTRAL_GRADIENT =
   'linear-gradient(135deg, #ff6b6b, #ffa36b, #ffd56b, #6bff6b, #6bd5ff, #6b6bff, #d56bff)'
@@ -267,7 +268,7 @@ export function CommandPalette({ open, onClose, onConnect }: CommandPaletteProps
             }}
             onKeyDown={handleKeyDown}
             placeholder="Search connections..."
-            className="flex-1 bg-transparent text-sm text-[#e6e1e5] placeholder-[#c7c4d7]/40 outline-none font-['Inter']"
+            className="flex-1 bg-transparent text-sm text-[#e6e1e5] placeholder-[#c7c4d7]/40 outline-none font-[var(--font-ui)]"
             aria-label="Search connections"
             autoComplete="off"
             spellCheck={false}
@@ -287,9 +288,9 @@ export function CommandPalette({ open, onClose, onConnect }: CommandPaletteProps
           role="listbox"
           aria-label="Search results"
         >
-          {results.length === 0 && query && (
+          {results.length === 0 && query && !getFallbackSuggestions(query).length && (
             <div className="px-4 py-6 text-xs text-[#c7c4d7]/40 text-center">
-              No connections found
+              No results found
             </div>
           )}
           {results.map((result, index) => (
@@ -312,7 +313,7 @@ export function CommandPalette({ open, onClose, onConnect }: CommandPaletteProps
               />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-sm truncate font-['Inter']">
+                  <span className="text-sm truncate font-[var(--font-ui)]">
                     {query ? (
                       <HighlightMatch text={result.connection.name} query={query} />
                     ) : (
@@ -329,6 +330,7 @@ export function CommandPalette({ open, onClose, onConnect }: CommandPaletteProps
                 <div className="flex items-center gap-1.5 text-[11px] text-[#c7c4d7]/40">
                   {result.connection.host && (
                     <span className="truncate">
+                      {result.connection.username ? `${result.connection.username}@` : ''}
                       {query ? (
                         <HighlightMatch text={result.connection.host} query={query} />
                       ) : (
@@ -349,6 +351,36 @@ export function CommandPalette({ open, onClose, onConnect }: CommandPaletteProps
               </span>
             </button>
           ))}
+
+          {/* Snippet/Command suggestions when query matches */}
+          {query.trim() && (() => {
+            const snippets = getFallbackSuggestions(query)
+            if (snippets.length === 0) return null
+            return (
+              <>
+                <div className="px-4 py-1.5 text-[9px] font-semibold tracking-[0.1em] uppercase text-[#c7c4d7]/30">
+                  COMMANDS
+                </div>
+                {snippets.slice(0, 5).map((s, i) => (
+                  <button
+                    key={`snippet-${i}`}
+                    className="w-full flex items-center gap-3 px-4 py-2 text-left text-[#c7c4d7] hover:bg-[#39393c]/10 transition-colors"
+                    onClick={() => {
+                      // Copy command to clipboard
+                      navigator.clipboard.writeText(s.command)
+                      onClose()
+                    }}
+                  >
+                    <Code2 size={14} strokeWidth={1.5} className="shrink-0 text-[#6bd5ff]" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-[family-name:var(--font-mono)] text-[#e6e1e5] truncate">{s.command}</div>
+                      <div className="text-[11px] text-[#c7c4d7]/40 truncate">{s.description}</div>
+                    </div>
+                  </button>
+                ))}
+              </>
+            )
+          })()}
         </div>
 
         {/* Footer hints */}

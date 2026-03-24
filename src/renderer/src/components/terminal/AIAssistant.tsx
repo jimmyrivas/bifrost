@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { Bot, Send, X, ArrowRight, Loader2 } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { Bot, Send, X, ArrowRight, Loader2, RefreshCw } from 'lucide-react'
 import { cn } from '@renderer/lib/utils'
 import { getFallbackSuggestions } from '@renderer/lib/command-suggestions'
 
@@ -24,6 +24,244 @@ function extractCommands(text: string): string[] {
   return []
 }
 
+// ═══════════════════════════════════════════
+// Lightweight Markdown Renderer
+// ═══════════════════════════════════════════
+
+interface MdNode {
+  type: 'text' | 'code' | 'codeblock' | 'bold' | 'italic' | 'heading' | 'listitem' | 'break'
+  content: string
+  lang?: string
+  level?: number
+}
+
+function parseMarkdown(text: string): MdNode[] {
+  const nodes: MdNode[] = []
+  const lines = text.split('\n')
+  let i = 0
+
+  while (i < lines.length) {
+    const line = lines[i]
+
+    // Fenced code blocks ```lang ... ```
+    if (line.trimStart().startsWith('```')) {
+      const lang = line.trimStart().slice(3).trim()
+      const codeLines: string[] = []
+      i++
+      while (i < lines.length && !lines[i].trimStart().startsWith('```')) {
+        codeLines.push(lines[i])
+        i++
+      }
+      nodes.push({ type: 'codeblock', content: codeLines.join('\n'), lang: lang || undefined })
+      i++ // skip closing ```
+      continue
+    }
+
+    // Headings (### Header)
+    const headingMatch = line.match(/^(#{1,4})\s+(.+)/)
+    if (headingMatch) {
+      nodes.push({ type: 'heading', content: headingMatch[2], level: headingMatch[1].length })
+      i++
+      continue
+    }
+
+    // List items (- item or * item or 1. item)
+    const listMatch = line.match(/^\s*(?:[-*]|\d+\.)\s+(.+)/)
+    if (listMatch) {
+      nodes.push({ type: 'listitem', content: listMatch[1] })
+      i++
+      continue
+    }
+
+    // Empty line → break
+    if (line.trim() === '') {
+      if (nodes.length > 0 && nodes[nodes.length - 1].type !== 'break') {
+        nodes.push({ type: 'break', content: '' })
+      }
+      i++
+      continue
+    }
+
+    // Regular text with inline formatting
+    nodes.push({ type: 'text', content: line })
+    i++
+  }
+
+  return nodes
+}
+
+/** Render inline markdown: `code`, **bold**, *italic* */
+function renderInline(
+  text: string,
+  onInsertCommand: (cmd: string) => void
+): (JSX.Element | string)[] {
+  const parts: (JSX.Element | string)[] = []
+  // Match inline code, bold, or italic
+  const regex = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*)/g
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index))
+    }
+    const token = match[0]
+    if (token.startsWith('`') && token.endsWith('`')) {
+      const code = token.slice(1, -1)
+      parts.push(
+        <button
+          key={`code-${match.index}`}
+          onClick={() => onInsertCommand(code)}
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--surface-container-highest)] hover:bg-[#6bd5ff]/20 text-[#6bd5ff] font-[family-name:var(--font-mono)] text-[11px] transition-colors cursor-pointer"
+          title="Click to insert in terminal"
+        >
+          {code}
+        </button>
+      )
+    } else if (token.startsWith('**') && token.endsWith('**')) {
+      parts.push(
+        <strong key={`bold-${match.index}`} className="font-semibold text-[var(--on-surface)]">
+          {token.slice(2, -2)}
+        </strong>
+      )
+    } else if (token.startsWith('*') && token.endsWith('*')) {
+      parts.push(
+        <em key={`em-${match.index}`} className="italic text-[var(--on-surface-variant)]">
+          {token.slice(1, -1)}
+        </em>
+      )
+    }
+    lastIndex = match.index + token.length
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex))
+  }
+
+  return parts.length > 0 ? parts : [text]
+}
+
+function MarkdownContent({
+  content,
+  onInsertCommand
+}: {
+  content: string
+  onInsertCommand: (cmd: string) => void
+}): JSX.Element {
+  const nodes = useMemo(() => parseMarkdown(content), [content])
+
+  return (
+    <div className="text-xs text-[var(--on-surface)] leading-relaxed space-y-1.5">
+      {nodes.map((node, i) => {
+        switch (node.type) {
+          case 'codeblock':
+            return (
+              <div key={i} className="relative group">
+                {node.lang && (
+                  <span className="text-[9px] text-[var(--on-surface-variant)]/60 uppercase tracking-wider">
+                    {node.lang}
+                  </span>
+                )}
+                <pre className="bg-[var(--surface-container-highest)] rounded-[var(--radius)] px-3 py-2 overflow-x-auto font-[family-name:var(--font-mono)] text-[11px] text-[#6bd5ff] leading-relaxed">
+                  {node.content}
+                </pre>
+                <button
+                  onClick={() => onInsertCommand(node.content)}
+                  className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 p-1 rounded bg-[var(--surface-bright)]/60 hover:bg-[#6bd5ff]/20 transition-opacity"
+                  title="Insert in terminal"
+                  aria-label="Insert code block in terminal"
+                >
+                  <ArrowRight size={10} className="text-[var(--success)]" />
+                </button>
+              </div>
+            )
+          case 'heading':
+            return (
+              <div
+                key={i}
+                className={cn(
+                  'font-semibold text-[var(--on-surface)]',
+                  node.level === 1 && 'text-sm',
+                  node.level === 2 && 'text-xs',
+                  (node.level ?? 3) >= 3 && 'text-[11px]'
+                )}
+              >
+                {renderInline(node.content, onInsertCommand)}
+              </div>
+            )
+          case 'listitem':
+            return (
+              <div key={i} className="flex gap-2 pl-1">
+                <span className="text-[var(--on-surface-variant)]/50 shrink-0 mt-px">-</span>
+                <span>{renderInline(node.content, onInsertCommand)}</span>
+              </div>
+            )
+          case 'break':
+            return <div key={i} className="h-1" />
+          case 'text':
+          default:
+            return (
+              <p key={i}>{renderInline(node.content, onInsertCommand)}</p>
+            )
+        }
+      })}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════
+// Context builder — enriches AI prompts
+// ═══════════════════════════════════════════
+
+async function buildRichContext(connectionId?: string | null): Promise<string> {
+  const parts: string[] = []
+
+  if (!connectionId) {
+    parts.push('Local terminal session')
+    return parts.join('\n')
+  }
+
+  try {
+    const conn = await window.bifrost.connections.get(connectionId)
+    if (conn) {
+      const host = conn.host ?? 'unknown'
+      const user = conn.username ?? ''
+      const method = conn.method ?? 'ssh'
+      const port = conn.port ?? 22
+      parts.push(`Connected via ${method.toUpperCase()} to ${user ? user + '@' : ''}${host}:${port}`)
+      if (conn.name) parts.push(`Connection name: ${conn.name}`)
+    }
+  } catch { /* skip */ }
+
+  // Get last lines of terminal output for context
+  try {
+    const tabs = useSessionsStore.getState().tabs
+    const activeTabId = useSessionsStore.getState().activeTabId
+    const tab = tabs.find((t) => t.id === activeTabId)
+    const termId = tab?.rootPane?.terminalId
+    if (termId) {
+      const buffer = await window.bifrost.terminal.getBuffer(termId)
+      if (buffer) {
+        // Get last 20 meaningful lines
+        const lines = buffer.split('\n').filter((l: string) => l.trim().length > 0)
+        const recent = lines.slice(-20).join('\n')
+        if (recent.length > 0) {
+          parts.push(`\nRecent terminal output:\n${recent.slice(-1200)}`)
+        }
+      }
+    }
+  } catch { /* skip */ }
+
+  return parts.join('\n')
+}
+
+// ═══════════════════════════════════════════
+// Main component
+// ═══════════════════════════════════════════
+
+// Import sessions store for context building
+import { useSessionsStore } from '@renderer/stores/sessions.store'
+
 export function AIAssistant({
   open,
   onClose,
@@ -34,14 +272,14 @@ export function AIAssistant({
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(false)
   const [streaming, setStreaming] = useState('')
-  const [ollamaAvailable, setOllamaAvailable] = useState<boolean | null>(null)
+  const [aiAvailable, setAiAvailable] = useState<boolean | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!open) return
     inputRef.current?.focus()
-    window.bifrost?.ai?.checkAvailable().then(setOllamaAvailable).catch(() => setOllamaAvailable(false))
+    window.bifrost?.ai?.checkAvailable().then(setAiAvailable).catch(() => setAiAvailable(false))
   }, [open])
 
   useEffect(() => {
@@ -58,11 +296,14 @@ export function AIAssistant({
     setLoading(true)
     setStreaming('')
 
-    if (ollamaAvailable && window.bifrost?.ai) {
+    if (aiAvailable && window.bifrost?.ai) {
       let removeChunkListener: (() => void) | null = null
       let accumulated = ''
 
       try {
+        // Build rich context from connection + terminal
+        const richContext = await buildRichContext(connectionContext)
+
         removeChunkListener = window.bifrost.ai.onChunk((text, done) => {
           accumulated += text
           setStreaming(accumulated)
@@ -74,9 +315,8 @@ export function AIAssistant({
           }
         })
 
-        await window.bifrost.ai.generate(trimmed, connectionContext ?? undefined)
+        await window.bifrost.ai.generate(trimmed, richContext)
       } catch {
-        // If streaming didn't complete, use accumulated
         if (accumulated) {
           const commands = extractCommands(accumulated)
           setMessages((prev) => [...prev, { role: 'assistant', content: accumulated, commands }])
@@ -92,7 +332,7 @@ export function AIAssistant({
       useFallback(trimmed)
       setLoading(false)
     }
-  }, [query, loading, ollamaAvailable, connectionContext])
+  }, [query, loading, aiAvailable, connectionContext])
 
   const useFallback = (prompt: string): void => {
     const suggestions = getFallbackSuggestions(prompt)
@@ -110,6 +350,11 @@ export function AIAssistant({
     }
   }
 
+  const handleClear = useCallback(() => {
+    setMessages([])
+    setStreaming('')
+  }, [])
+
   if (!open) return null
 
   return (
@@ -121,26 +366,47 @@ export function AIAssistant({
           <span className="text-xs font-semibold text-[var(--on-surface)] uppercase tracking-wider">
             AI Assistant
           </span>
-          {ollamaAvailable === false && (
+          {aiAvailable === false && (
             <span className="text-[9px] px-1.5 py-0.5 rounded-[var(--radius)] bg-[var(--warning)]/15 text-[var(--warning)]">
-              Offline Mode
+              Offline
+            </span>
+          )}
+          {aiAvailable === true && (
+            <span className="text-[9px] px-1.5 py-0.5 rounded-[var(--radius)] bg-[var(--success)]/15 text-[var(--success)]">
+              Online
             </span>
           )}
         </div>
-        <button
-          onClick={onClose}
-          className="p-1 rounded-[var(--radius)] text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] hover:bg-[var(--surface-container-highest)]/50"
-          aria-label="Close AI assistant"
-        >
-          <X size={14} />
-        </button>
+        <div className="flex items-center gap-1">
+          {messages.length > 0 && (
+            <button
+              onClick={handleClear}
+              className="p-1 rounded-[var(--radius)] text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] hover:bg-[var(--surface-container-highest)]/50"
+              aria-label="Clear conversation"
+              title="Clear conversation"
+            >
+              <RefreshCw size={12} />
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="p-1 rounded-[var(--radius)] text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] hover:bg-[var(--surface-container-highest)]/50"
+            aria-label="Close AI assistant"
+          >
+            <X size={14} />
+          </button>
+        </div>
       </div>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-3 py-2 space-y-3">
         {messages.length === 0 && (
-          <div className="text-xs text-[var(--on-surface-variant)] text-center py-8">
-            Ask a question like &quot;How do I find large files?&quot;
+          <div className="text-xs text-[var(--on-surface-variant)] text-center py-8 space-y-2">
+            <Bot size={24} className="mx-auto text-[#6bd5ff]/40" />
+            <p>Ask about commands, troubleshooting, or DevOps tasks.</p>
+            <p className="text-[10px] text-[var(--on-surface-variant)]/50">
+              Click any <span className="text-[#6bd5ff]">`command`</span> to insert it in the terminal.
+            </p>
           </div>
         )}
         {messages.map((msg, i) => (
@@ -152,9 +418,7 @@ export function AIAssistant({
         ))}
         {streaming && (
           <div className="rounded-[var(--radius)] bg-[var(--surface-container-high)] p-3">
-            <p className="text-xs text-[var(--on-surface)] whitespace-pre-wrap font-[family-name:var(--font-mono)] leading-relaxed">
-              {streaming}
-            </p>
+            <MarkdownContent content={streaming} onInsertCommand={onInsertCommand} />
           </div>
         )}
         <div ref={messagesEndRef} />
@@ -210,29 +474,7 @@ function MessageBubble({
 
   return (
     <div className="rounded-[var(--radius)] bg-[var(--surface-container-high)] p-3">
-      <p className="text-xs text-[var(--on-surface)] whitespace-pre-wrap font-[family-name:var(--font-mono)] leading-relaxed">
-        {message.content}
-      </p>
-      {message.commands && message.commands.length > 0 && (
-        <div className="mt-2 flex flex-col gap-1">
-          {message.commands.map((cmd, i) => (
-            <button
-              key={i}
-              onClick={() => onInsertCommand(cmd)}
-              className={cn(
-                'flex items-center gap-2 px-2 py-1.5 rounded-[var(--radius)] text-left',
-                'bg-[var(--surface-container-highest)] hover:bg-[var(--surface-bright)]/20 transition-colors'
-              )}
-              aria-label={`Insert command: ${cmd}`}
-            >
-              <ArrowRight size={10} className="text-[var(--success)] shrink-0" />
-              <span className="text-[11px] font-[family-name:var(--font-mono)] text-[var(--on-surface)] truncate">
-                {cmd}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
+      <MarkdownContent content={message.content} onInsertCommand={onInsertCommand} />
     </div>
   )
 }

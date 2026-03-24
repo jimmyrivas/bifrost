@@ -13,6 +13,7 @@ export interface TerminalPreferences {
   autoReconnect: boolean
   fontLigatures: boolean
   copyOnSelect: boolean
+  tabTitleTemplate: string
 }
 
 interface PreferencesState {
@@ -38,7 +39,8 @@ const defaultTerminal: TerminalPreferences = {
   pasteWarningEnabled: true,
   autoReconnect: true,
   fontLigatures: true,
-  copyOnSelect: false
+  copyOnSelect: false,
+  tabTitleTemplate: ''
 }
 
 export const usePreferencesStore = create<PreferencesState>()(

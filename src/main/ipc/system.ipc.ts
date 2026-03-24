@@ -1,7 +1,8 @@
-import { ipcMain } from 'electron'
+import { ipcMain, dialog, BrowserWindow } from 'electron'
 import { createSocket } from 'dgram'
 import { sessionLogger } from '../services/session-logger'
 import { keepassBridge, type KeePassConfig } from '../services/keepass-bridge'
+import { connectionHealthMonitor } from '../services/connection-health'
 
 export function registerSystemIpc(): void {
   // Wake On LAN
@@ -58,6 +59,30 @@ export function registerSystemIpc(): void {
 
   ipcMain.handle('system:getLogDir', () => {
     return sessionLogger.getLogDir()
+  })
+
+  // File dialogs for SFTP
+  ipcMain.handle('system:showSaveDialog', async (_event, defaultName: string) => {
+    const win = BrowserWindow.getFocusedWindow()
+    const result = await dialog.showSaveDialog(win!, {
+      defaultPath: defaultName,
+      properties: ['createDirectory', 'showOverwriteConfirmation']
+    })
+    return result.canceled ? null : result.filePath
+  })
+
+  ipcMain.handle('system:showOpenDialog', async () => {
+    const win = BrowserWindow.getFocusedWindow()
+    const result = await dialog.showOpenDialog(win!, {
+      properties: ['openFile', 'multiSelections']
+    })
+    return result.canceled ? [] : result.filePaths
+  })
+
+  // Connection health
+  ipcMain.handle('health:ping', async (_event, connectionId: string, host: string) => {
+    const result = await connectionHealthMonitor.ping(host)
+    return { connectionId, host, reachable: result.reachable, latencyMs: result.latencyMs }
   })
 
   // KeePass

@@ -1,4 +1,4 @@
-import { execSync, exec } from 'child_process'
+import { execFileSync } from 'child_process'
 
 export interface PasswordManagerEntry {
   id: string
@@ -10,7 +10,7 @@ export interface PasswordManagerEntry {
 
 function commandExists(cmd: string): boolean {
   try {
-    execSync(`which ${cmd}`, { encoding: 'utf-8', timeout: 3000, stdio: 'pipe' })
+    execFileSync('which', [cmd], { encoding: 'utf-8', timeout: 3000, stdio: 'pipe' })
     return true
   } catch {
     return false
@@ -26,7 +26,7 @@ export const onePassword = {
 
   isSignedIn(): boolean {
     try {
-      execSync('op whoami', { encoding: 'utf-8', timeout: 5000, stdio: 'pipe' })
+      execFileSync('op', ['whoami'], { encoding: 'utf-8', timeout: 5000, stdio: 'pipe' })
       return true
     } catch {
       return false
@@ -35,7 +35,7 @@ export const onePassword = {
 
   listSSHKeys(): PasswordManagerEntry[] {
     try {
-      const json = execSync('op item list --categories "SSH Key" --format=json', {
+      const json = execFileSync('op', ['item', 'list', '--categories', 'SSH Key', '--format=json'], {
         encoding: 'utf-8',
         timeout: 10000,
         stdio: 'pipe'
@@ -54,7 +54,7 @@ export const onePassword = {
 
   listLogins(): PasswordManagerEntry[] {
     try {
-      const json = execSync('op item list --categories "Login" --format=json', {
+      const json = execFileSync('op', ['item', 'list', '--categories', 'Login', '--format=json'], {
         encoding: 'utf-8',
         timeout: 10000,
         stdio: 'pipe'
@@ -73,7 +73,7 @@ export const onePassword = {
 
   getPassword(itemId: string): string {
     try {
-      return execSync(`op item get "${itemId}" --fields password --reveal`, {
+      return execFileSync('op', ['item', 'get', itemId, '--fields', 'password', '--reveal'], {
         encoding: 'utf-8',
         timeout: 10000,
         stdio: 'pipe'
@@ -85,7 +85,7 @@ export const onePassword = {
 
   getField(itemId: string, field: string): string {
     try {
-      return execSync(`op item get "${itemId}" --fields "${field}" --reveal`, {
+      return execFileSync('op', ['item', 'get', itemId, '--fields', field, '--reveal'], {
         encoding: 'utf-8',
         timeout: 10000,
         stdio: 'pipe'
@@ -97,7 +97,7 @@ export const onePassword = {
 
   readSecret(reference: string): string {
     try {
-      return execSync(`op read "${reference}"`, {
+      return execFileSync('op', ['read', reference], {
         encoding: 'utf-8',
         timeout: 10000,
         stdio: 'pipe'
@@ -117,7 +117,11 @@ export const bitwarden = {
 
   isUnlocked(): boolean {
     try {
-      const status = execSync('bw status', { encoding: 'utf-8', timeout: 5000, stdio: 'pipe' })
+      const status = execFileSync('bw', ['status'], {
+        encoding: 'utf-8',
+        timeout: 5000,
+        stdio: 'pipe'
+      })
       return status.includes('"status":"unlocked"')
     } catch {
       return false
@@ -126,8 +130,13 @@ export const bitwarden = {
 
   listItems(search?: string): PasswordManagerEntry[] {
     try {
-      const cmd = search ? `bw list items --search "${search}"` : 'bw list items'
-      const json = execSync(cmd, { encoding: 'utf-8', timeout: 15000, stdio: 'pipe' })
+      const args = ['list', 'items']
+      if (search) args.push('--search', search)
+      const json = execFileSync('bw', args, {
+        encoding: 'utf-8',
+        timeout: 15000,
+        stdio: 'pipe'
+      })
       const items = JSON.parse(json) as Array<{
         id: string
         name: string
@@ -149,7 +158,7 @@ export const bitwarden = {
 
   getPassword(itemId: string): string {
     try {
-      const json = execSync(`bw get item "${itemId}"`, {
+      const json = execFileSync('bw', ['get', 'item', itemId], {
         encoding: 'utf-8',
         timeout: 10000,
         stdio: 'pipe'
@@ -163,7 +172,7 @@ export const bitwarden = {
 
   getField(itemId: string, fieldName: string): string {
     try {
-      const json = execSync(`bw get item "${itemId}"`, {
+      const json = execFileSync('bw', ['get', 'item', itemId], {
         encoding: 'utf-8',
         timeout: 10000,
         stdio: 'pipe'
@@ -184,10 +193,6 @@ export const vault = {
     return commandExists('vault')
   },
 
-  /**
-   * Sign an SSH public key using Vault's SSH secrets engine.
-   * POST /v1/ssh/sign/{role}
-   */
   signSSHKey(pubKeyPath: string, role: string, addr: string, token: string): string {
     try {
       const { readFileSync: readFs } = require('fs') as typeof import('fs')
@@ -195,8 +200,9 @@ export const vault = {
 
       const payload = JSON.stringify({ public_key: pubKey })
 
-      const result = execSync(
-        `curl -s -X POST -H "X-Vault-Token: ${token}" -H "Content-Type: application/json" -d '${payload}' ${addr}/v1/ssh/sign/${role}`,
+      const result = execFileSync(
+        'curl',
+        ['-s', '-X', 'POST', '-H', `X-Vault-Token: ${token}`, '-H', 'Content-Type: application/json', '-d', payload, `${addr}/v1/ssh/sign/${role}`],
         { encoding: 'utf-8', timeout: 15000, stdio: 'pipe' }
       )
 
@@ -210,14 +216,11 @@ export const vault = {
     }
   },
 
-  /**
-   * List available SSH roles.
-   * GET /v1/ssh/roles?list=true
-   */
   listRoles(addr: string, token: string): string[] {
     try {
-      const result = execSync(
-        `curl -s -H "X-Vault-Token: ${token}" "${addr}/v1/ssh/roles?list=true"`,
+      const result = execFileSync(
+        'curl',
+        ['-s', '-H', `X-Vault-Token: ${token}`, `${addr}/v1/ssh/roles?list=true`],
         { encoding: 'utf-8', timeout: 10000, stdio: 'pipe' }
       )
       const response = JSON.parse(result) as { data?: { keys?: string[] } }
@@ -227,13 +230,11 @@ export const vault = {
     }
   },
 
-  /**
-   * Get a secret from Vault KV engine.
-   */
   getSecret(path: string, addr: string, token: string): string {
     try {
-      const result = execSync(
-        `curl -s -H "X-Vault-Token: ${token}" "${addr}/v1/${path}"`,
+      const result = execFileSync(
+        'curl',
+        ['-s', '-H', `X-Vault-Token: ${token}`, `${addr}/v1/${path}`],
         { encoding: 'utf-8', timeout: 10000, stdio: 'pipe' }
       )
       const response = JSON.parse(result) as { data?: { data?: Record<string, string>; value?: string } }
@@ -251,13 +252,11 @@ export const awsSM = {
     return commandExists('aws')
   },
 
-  /**
-   * Get a secret value from AWS Secrets Manager.
-   */
   getSecret(secretId: string): string {
     try {
-      return execSync(
-        `aws secretsmanager get-secret-value --secret-id "${secretId}" --query SecretString --output text`,
+      return execFileSync(
+        'aws',
+        ['secretsmanager', 'get-secret-value', '--secret-id', secretId, '--query', 'SecretString', '--output', 'text'],
         { encoding: 'utf-8', timeout: 15000, stdio: 'pipe' }
       ).trim()
     } catch (err) {
@@ -265,13 +264,11 @@ export const awsSM = {
     }
   },
 
-  /**
-   * List secrets in AWS Secrets Manager.
-   */
   listSecrets(): Array<{ name: string; arn: string; description: string }> {
     try {
-      const result = execSync(
-        'aws secretsmanager list-secrets --output json',
+      const result = execFileSync(
+        'aws',
+        ['secretsmanager', 'list-secrets', '--output', 'json'],
         { encoding: 'utf-8', timeout: 15000, stdio: 'pipe' }
       )
       const data = JSON.parse(result) as {
@@ -295,13 +292,11 @@ export const azureKV = {
     return commandExists('az')
   },
 
-  /**
-   * Get a secret from Azure Key Vault.
-   */
   getSecret(vaultName: string, secretName: string): string {
     try {
-      return execSync(
-        `az keyvault secret show --vault-name "${vaultName}" --name "${secretName}" --query value -o tsv`,
+      return execFileSync(
+        'az',
+        ['keyvault', 'secret', 'show', '--vault-name', vaultName, '--name', secretName, '--query', 'value', '-o', 'tsv'],
         { encoding: 'utf-8', timeout: 15000, stdio: 'pipe' }
       ).trim()
     } catch (err) {
@@ -309,13 +304,11 @@ export const azureKV = {
     }
   },
 
-  /**
-   * List secrets in an Azure Key Vault.
-   */
   listSecrets(vaultName: string): Array<{ name: string; id: string; enabled: boolean }> {
     try {
-      const result = execSync(
-        `az keyvault secret list --vault-name "${vaultName}" -o json`,
+      const result = execFileSync(
+        'az',
+        ['keyvault', 'secret', 'list', '--vault-name', vaultName, '-o', 'json'],
         { encoding: 'utf-8', timeout: 15000, stdio: 'pipe' }
       )
       const data = JSON.parse(result) as Array<{

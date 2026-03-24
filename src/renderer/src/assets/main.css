@@ -37,7 +37,7 @@
   --warning: #eab308;
 
   /* Typography */
-  --font-ui: "Inter", system-ui, -apple-system, sans-serif;
+  --font-ui: "Meslo LG S", "Menlo", "Inter", system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
 
   /* Spacing & Rounding */
