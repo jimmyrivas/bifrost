@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from 'child_process'
 import { EventEmitter } from 'events'
 import { createConnection, type Socket } from 'net'
+import { isWindows, isMac } from './platform'
 
 export interface RdpOptions {
   width?: number
@@ -73,9 +74,10 @@ class ExternalProtocolManager extends EventEmitter {
       args.push('+printer:')
     }
 
-    // Audio playback
+    // Audio playback (platform-specific backend)
     if (options?.audioPlayback) {
-      args.push('/sound:sys:alsa')
+      const soundBackend = isWindows() ? 'sys:winmm' : isMac() ? 'sys:mac' : 'sys:alsa'
+      args.push(`/sound:${soundBackend}`)
     }
 
     // Color depth
@@ -100,10 +102,26 @@ class ExternalProtocolManager extends EventEmitter {
       args.push(...options.extraArgs)
     }
 
-    const child = spawn('xfreerdp', args, {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      detached: false
-    })
+    // Windows: use native mstsc.exe; Linux/macOS: use xfreerdp
+    let child: ChildProcess
+    if (isWindows()) {
+      const mstscArgs = [`/v:${host}:${port}`]
+      if (username) mstscArgs.push(`/u:${username}`)
+      if (options?.fullscreen) mstscArgs.push('/f')
+      if (options?.resolution) {
+        const [w, h] = options.resolution.split('x').map(Number)
+        mstscArgs.push(`/w:${w || 1280}`, `/h:${h || 800}`)
+      }
+      child = spawn('mstsc.exe', mstscArgs, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        detached: false
+      })
+    } else {
+      child = spawn('xfreerdp', args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        detached: false
+      })
+    }
 
     const session: ExternalProtocolSession = {
       id,
@@ -147,9 +165,12 @@ class ExternalProtocolManager extends EventEmitter {
     }
 
     // #44: Try preferred viewer, then fall back through options
-    const viewers = preferredViewer
-      ? [preferredViewer, 'vncviewer', 'tigervnc', 'xtigervncviewer', 'realvnc']
+    const defaultViewers = isWindows()
+      ? ['vncviewer', 'tvnviewer', 'ultravnc', 'realvnc']
       : ['vncviewer', 'tigervnc', 'xtigervncviewer', 'realvnc']
+    const viewers = preferredViewer
+      ? [preferredViewer, ...defaultViewers]
+      : defaultViewers
     // Deduplicate
     const uniqueViewers = [...new Set(viewers)]
 
@@ -280,6 +301,9 @@ class ExternalProtocolManager extends EventEmitter {
     port?: number,
     extraArgs?: string[]
   ): string {
+    if (isWindows()) {
+      throw new Error('Mosh is not available on Windows. Use SSH instead, or install Mosh via WSL.')
+    }
     const id = `mosh-${++idCounter}`
     const target = user ? `${user}@${host}` : host
 
@@ -716,7 +740,8 @@ class ExternalProtocolManager extends EventEmitter {
     }
 
     if (session.process) {
-      session.process.kill('SIGTERM')
+      const { killProcess } = require('./platform') as typeof import('./platform')
+      killProcess(session.process)
     }
 
     if (session.socket) {

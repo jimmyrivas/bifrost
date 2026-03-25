@@ -17,6 +17,7 @@ interface UseTerminalOptions {
   connectionId?: string | null // null/undefined = local PTY, string = SSH connection
   terminalStyle?: TerminalStyle
   shell?: string // shell path override for local terminals (e.g. /usr/bin/pwsh)
+  shellArgs?: string[] // extra args for the shell
   onTerminalCreated?: (terminalId: string) => void
 }
 
@@ -82,7 +83,7 @@ function broadcastInput(originTerminalId: string, data: string): void {
   }
 }
 
-export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell, onTerminalCreated }: UseTerminalOptions): UseTerminalReturn {
+export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell, shellArgs, onTerminalCreated }: UseTerminalOptions): UseTerminalReturn {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const terminalRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
@@ -551,7 +552,7 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
     } else {
       // === LOCAL PTY MODE ===
       const { cols, rows } = terminal
-      window.bifrost.terminal.create(cols, rows, shell).then((id: string) => {
+      window.bifrost.terminal.create(cols, rows, shell, shellArgs).then((id: string) => {
         terminalIdRef.current = id
         onTerminalCreated?.(id)
 

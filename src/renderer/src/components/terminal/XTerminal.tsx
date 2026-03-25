@@ -13,16 +13,18 @@ interface XTerminalProps {
   connectionId?: string | null
   terminalStyle?: TerminalStyle
   shell?: string
+  shellArgs?: string[]
   onTerminalCreated?: (terminalId: string) => void
 }
 
-export function XTerminal({ paneId, tabId, connectionId, terminalStyle, shell, onTerminalCreated }: XTerminalProps): JSX.Element {
+export function XTerminal({ paneId, tabId, connectionId, terminalStyle, shell, shellArgs, onTerminalCreated }: XTerminalProps): JSX.Element {
   const { containerRef, terminalIdRef, pendingPaste, confirmPaste, cancelPaste, dynamicTitle, detectedErrors } = useTerminal({
     paneId,
     tabId,
     connectionId,
     terminalStyle,
     shell,
+    shellArgs,
     onTerminalCreated
   })
 

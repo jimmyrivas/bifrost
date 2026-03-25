@@ -22,3 +22,20 @@ linux:
   maintainer: Jimmy Rivas
   category: Utility
   icon: resources/icon.png
+win:
+  target:
+    - nsis
+    - portable
+  icon: resources/icon.ico
+  publisherName: Jimmy Rivas
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+mac:
+  target:
+    - dmg
+  category: public.app-category.utilities
+  icon: resources/icon.icns

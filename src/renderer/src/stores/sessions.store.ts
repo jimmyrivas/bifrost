@@ -29,6 +29,7 @@ export interface Tab {
   lockTitle: boolean
   terminalStyle?: TerminalStyle
   shell?: string // shell path override for local terminals (e.g. /usr/bin/pwsh)
+  shellArgs?: string[] // extra args for the shell (e.g. for gsudo elevation)
   aiDetected?: string // AI tool name detected in session (e.g. "claude", "ollama")
 }
 
@@ -42,7 +43,7 @@ interface SessionsState {
   maxReconnectAttempts: number
   maximizedPaneId: string | null
 
-  createTab: (title?: string, connectionId?: string, terminalStyle?: TerminalStyle, shell?: string) => string
+  createTab: (title?: string, connectionId?: string, terminalStyle?: TerminalStyle, shell?: string, shellArgs?: string[]) => string
   closeTab: (tabId: string) => void
   setActiveTab: (tabId: string) => void
   renameTab: (tabId: string, title: string) => void
@@ -181,7 +182,7 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
   _detachingTabs: new Set<string>(),
   sftpOpenTabIds: [] as string[],
 
-  createTab: (title?: string, connectionId?: string, terminalStyle?: TerminalStyle, shell?: string) => {
+  createTab: (title?: string, connectionId?: string, terminalStyle?: TerminalStyle, shell?: string, shellArgs?: string[]) => {
     const tabId = newTabId()
     const label = title ?? `Terminal ${tabIdCounter}`
     const tab: Tab = {
@@ -192,7 +193,8 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
       connectionId: connectionId ?? null,
       lockTitle: false,
       terminalStyle,
-      shell
+      shell,
+      shellArgs
     }
     set((state) => ({
       tabs: state.tabs.map((t) => ({ ...t, isActive: false })).concat(tab),

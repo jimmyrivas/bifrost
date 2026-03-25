@@ -11,6 +11,8 @@ interface ShellInfo {
   id: string
   name: string
   path: string
+  args?: string[]
+  elevated?: boolean
 }
 
 export function TabBar(): JSX.Element {
@@ -85,7 +87,7 @@ export function TabBar(): JSX.Element {
   }, [shells.length])
 
   const createShellTab = useCallback((shell: ShellInfo) => {
-    createTab(shell.name, undefined, undefined, shell.path)
+    createTab(shell.name, undefined, undefined, shell.path, shell.args)
     setShellMenuOpen(false)
   }, [createTab])
 
@@ -217,9 +219,14 @@ export function TabBar(): JSX.Element {
                 onClick={() => createShellTab(shell)}
                 className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] hover:bg-[var(--surface-container-highest)]/30 transition-colors text-left"
               >
-                <Terminal size={12} strokeWidth={1.5} className={shell.id === 'pwsh' ? 'text-[#6bd5ff]' : 'text-[#c7c4d7]/50'} />
+                <Terminal size={12} strokeWidth={1.5} className={shell.elevated ? 'text-[#ffa36b]' : shell.id.includes('pwsh') || shell.id.includes('powershell') ? 'text-[#6bd5ff]' : 'text-[#c7c4d7]/50'} />
                 <span className="flex-1">{shell.name}</span>
-                <span className="text-[9px] text-[#c7c4d7]/25 font-mono">{shell.id}</span>
+                {shell.elevated && (
+                  <span className="text-[8px] font-bold px-1 rounded bg-[#ffa36b]/15 text-[#ffa36b] uppercase">Admin</span>
+                )}
+                {!shell.elevated && (
+                  <span className="text-[9px] text-[#c7c4d7]/25 font-mono">{shell.id}</span>
+                )}
               </button>
             ))}
           </div>

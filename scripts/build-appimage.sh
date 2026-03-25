@@ -3,7 +3,29 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# Resolve version from git tag or package.json
+GIT_TAG=$(git describe --tags --exact-match 2>/dev/null || true)
+PKG_VERSION=$(node -p "require('./package.json').version")
+
+if [ -n "$GIT_TAG" ]; then
+  VERSION="${GIT_TAG#v}"
+  # Sync package.json if tag differs
+  if [ "$VERSION" != "$PKG_VERSION" ]; then
+    sed -i "s/\"version\": \"$PKG_VERSION\"/\"version\": \"$VERSION\"/" package.json
+    echo "Synced package.json version to tag: $VERSION"
+  fi
+else
+  # No exact tag — use describe for dev builds (e.g. v0.2.0-3-gabc1234)
+  GIT_DESCRIBE=$(git describe --tags 2>/dev/null || echo "")
+  if [ -n "$GIT_DESCRIBE" ]; then
+    VERSION="${GIT_DESCRIBE#v}"
+  else
+    VERSION="$PKG_VERSION"
+  fi
+fi
+
 echo "=== Bifrost AppImage Builder ==="
+echo "Version: $VERSION  (tag: ${GIT_TAG:-none})"
 echo ""
 
 # 1. Check dependencies
@@ -34,10 +56,15 @@ npx electron-builder --linux AppImage 2>&1 | tail -15
 
 echo ""
 echo "=== Done ==="
-APPIMAGE=$(find dist -name '*.AppImage' -type f 2>/dev/null | head -1)
+APPIMAGE=$(find dist -name '*.AppImage' -type f 2>/dev/null | sort -r | head -1)
 if [ -n "$APPIMAGE" ]; then
   SIZE=$(du -h "$APPIMAGE" | cut -f1)
-  echo "AppImage: $APPIMAGE ($SIZE)"
+  echo ""
+  echo "  AppImage : $APPIMAGE"
+  echo "  Size     : $SIZE"
+  echo "  Version  : $VERSION"
+  echo "  Git tag  : ${GIT_TAG:-untagged}"
+  echo "  Commit   : $(git rev-parse --short HEAD)"
 else
   echo "ERROR: AppImage not found in dist/"
   exit 1

@@ -91,6 +91,45 @@ async function run(ctx) {
   }
 ]
 
+const WINDOWS_SAMPLE_SCRIPTS: Array<{ name: string; description: string; code: string }> = [
+  {
+    name: 'System Health Check (Windows)',
+    description: 'Check OS version, CPU, memory, and disk via PowerShell',
+    code: `// Windows System Health Check
+async function run(ctx) {
+  const commands = [
+    'Get-CimInstance Win32_OperatingSystem | Select Caption, Version, LastBootUpTime | Format-List',
+    'Get-Process | Sort-Object CPU -Descending | Select -First 10 Name, CPU, WorkingSet | Format-Table',
+    'Get-Volume | Where-Object DriveLetter | Format-Table DriveLetter, FileSystemLabel, SizeRemaining, Size',
+    'Get-Service | Where-Object Status -eq Running | Measure-Object | Select Count'
+  ];
+
+  for (const cmd of commands) {
+    ctx.send(cmd + '\\n');
+    await ctx.sleep(1500);
+  }
+
+  ctx.log('Health check complete');
+}
+`
+  },
+  {
+    name: 'Windows Security Audit',
+    description: 'Check firewall, users, and recent security events',
+    code: `// Windows Security Audit
+async function run(ctx) {
+  ctx.send('Get-NetFirewallRule | Where-Object Enabled -eq True | Measure-Object | Select Count\\n');
+  await ctx.sleep(1500);
+  ctx.send('Get-LocalUser | Select Name, Enabled, LastLogon | Format-Table\\n');
+  await ctx.sleep(1500);
+  ctx.send('Get-EventLog -LogName Security -Newest 20 | Format-Table TimeGenerated, EntryType, Message -Wrap\\n');
+  await ctx.sleep(2000);
+  ctx.log('Security audit complete');
+}
+`
+  }
+]
+
 /**
  * Worker code executed in an isolated thread with vm sandbox.
  * No access to require, process, fs, child_process, or any Node.js globals.
@@ -186,7 +225,10 @@ export class ScriptEngine extends EventEmitter {
       // Create sample scripts only if directory has no .json files
       if (files.length === 0) {
         const now = new Date().toISOString()
-        for (const sample of SAMPLE_SCRIPTS) {
+        const samples = process.platform === 'win32'
+          ? [...WINDOWS_SAMPLE_SCRIPTS, ...SAMPLE_SCRIPTS]
+          : SAMPLE_SCRIPTS
+        for (const sample of samples) {
           const id = `script-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
           const script: BifrostScript = {
             id,

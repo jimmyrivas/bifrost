@@ -1,4 +1,5 @@
 import { execFileSync } from 'child_process'
+import { commandExists } from './platform'
 
 export interface PasswordManagerEntry {
   id: string
@@ -6,15 +7,6 @@ export interface PasswordManagerEntry {
   username?: string
   category?: string
   vault?: string
-}
-
-function commandExists(cmd: string): boolean {
-  try {
-    execFileSync('which', [cmd], { encoding: 'utf-8', timeout: 3000, stdio: 'pipe' })
-    return true
-  } catch {
-    return false
-  }
 }
 
 // === 1Password CLI (op) ===

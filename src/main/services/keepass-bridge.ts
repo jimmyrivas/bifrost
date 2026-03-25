@@ -1,4 +1,5 @@
 import { execFileSync } from 'child_process'
+import { commandExists } from './platform'
 
 export interface KeePassConfig {
   databasePath: string
@@ -20,16 +21,8 @@ export class KeePassBridge {
     return this.config !== null
   }
 
-  /**
-   * Check if keepassxc-cli is available on the system.
-   */
   isAvailable(): boolean {
-    try {
-      execFileSync('which', ['keepassxc-cli'], { encoding: 'utf-8', timeout: 5000, stdio: 'pipe' })
-      return true
-    } catch {
-      return false
-    }
+    return commandExists('keepassxc-cli')
   }
 
   /**

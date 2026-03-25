@@ -20,12 +20,12 @@ export interface AiChunkCallback {
 
 export interface BifrostApi {
   terminal: {
-    create: (cols: number, rows: number, shell?: string) => Promise<string>
+    create: (cols: number, rows: number, shell?: string, shellArgs?: string[]) => Promise<string>
     write: (id: string, data: string) => void
     resize: (id: string, cols: number, rows: number) => void
     destroy: (id: string) => Promise<void>
     getDefaultShell: () => Promise<string>
-    listShells: () => Promise<Array<{ id: string; name: string; path: string }>>
+    listShells: () => Promise<Array<{ id: string; name: string; path: string; args?: string[]; elevated?: boolean }>>
     onData: (callback: (id: string, data: string) => void) => () => void
     onExit: (callback: (id: string, exitCode: number) => void) => () => void
     transferOwnership: (terminalId: string) => Promise<void>
@@ -328,7 +328,7 @@ export interface BifrostApi {
 
 const api: BifrostApi = {
   terminal: {
-    create: (cols, rows, shell?) => ipcRenderer.invoke('terminal:create', cols, rows, shell),
+    create: (cols, rows, shell?, shellArgs?) => ipcRenderer.invoke('terminal:create', cols, rows, shell, shellArgs),
     write: (id, data) => ipcRenderer.send('terminal:write', id, data),
     resize: (id, cols, rows) => ipcRenderer.send('terminal:resize', id, cols, rows),
     destroy: (id) => ipcRenderer.invoke('terminal:destroy', id),

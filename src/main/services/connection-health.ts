@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events'
 import { execFile } from 'child_process'
+import { getPingArgs } from './platform'
 
 export interface HealthStatus {
   connectionId: string
@@ -67,7 +68,7 @@ export class ConnectionHealthMonitor extends EventEmitter {
     }
     return new Promise((resolve) => {
       execFile(
-        'ping', ['-c', '1', '-W', '3', host],
+        'ping', getPingArgs(host),
         { timeout: 5000, encoding: 'utf-8' },
         (error, stdout) => {
           if (error) {

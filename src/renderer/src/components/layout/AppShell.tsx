@@ -392,6 +392,7 @@ export function AppShell(): JSX.Element {
                             connectionId={tab.connectionId}
                             terminalStyle={tab.terminalStyle}
                             shell={tab.shell}
+                            shellArgs={tab.shellArgs}
                           />
                         </div>
                         {sftpOpen && tab.connectionId && (

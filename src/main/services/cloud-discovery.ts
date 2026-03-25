@@ -1,5 +1,6 @@
 import { execFile } from 'child_process'
 import { promisify } from 'util'
+import { commandExists as commandExistsSync } from './platform'
 
 const execFileAsync = promisify(execFile)
 
@@ -12,16 +13,8 @@ export interface DiscoveredHost {
   metadata: Record<string, string>
 }
 
-/**
- * Check whether a CLI binary exists on the system PATH.
- */
 async function commandExists(command: string): Promise<boolean> {
-  try {
-    await execFileAsync('which', [command])
-    return true
-  } catch {
-    return false
-  }
+  return commandExistsSync(command)
 }
 
 /**

@@ -1,4 +1,4 @@
-import { execSync } from 'child_process'
+import { scanMonospaceFonts as platformScan } from './platform'
 
 const FALLBACK_FONTS = [
   'JetBrains Mono',
@@ -23,38 +23,26 @@ const FALLBACK_FONTS = [
   'Liberation Mono',
   'DejaVu Sans Mono',
   'Courier New',
+  'Consolas',
   'monospace'
 ]
 
 /**
  * Scan system for available monospace fonts.
- * Linux: parses `fc-list :spacing=mono family` output.
- * Returns a deduplicated, sorted array of font family names.
+ * Cross-platform: Linux (fc-list), Windows (PowerShell), macOS (system_profiler).
+ * Merges with fallback list and returns deduplicated, sorted array.
  */
 export function scanMonospaceFonts(): string[] {
   const systemFonts = new Set<string>()
 
   try {
-    const output = execSync('fc-list :spacing=mono family', {
-      encoding: 'utf-8',
-      timeout: 5000
-    })
-
-    for (const line of output.split('\n')) {
-      const trimmed = line.trim()
-      if (!trimmed) continue
-      // fc-list may output comma-separated aliases: "DejaVu Sans Mono,DejaVu Sans Mono"
-      const families = trimmed.split(',')
-      for (const family of families) {
-        const cleaned = family.trim()
-        if (cleaned) systemFonts.add(cleaned)
-      }
+    for (const font of platformScan()) {
+      systemFonts.add(font)
     }
   } catch {
-    // fc-list not available or failed; rely on fallbacks
+    // Platform scan failed; rely on fallbacks
   }
 
-  // Merge with fallbacks
   for (const font of FALLBACK_FONTS) {
     systemFonts.add(font)
   }

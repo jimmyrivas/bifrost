@@ -43,11 +43,40 @@ const SUGGESTIONS: CommandSuggestion[] = [
   { query: ['kernel', 'version', 'os'], command: 'uname -a', description: 'Show kernel/OS information' }
 ]
 
+const WINDOWS_SUGGESTIONS: CommandSuggestion[] = [
+  { query: ['list', 'files', 'directory'], command: 'Get-ChildItem', description: 'List files and directories' },
+  { query: ['disk', 'space', 'usage'], command: 'Get-Volume', description: 'Show disk volume info' },
+  { query: ['directory', 'size'], command: 'Get-ChildItem -Recurse | Measure-Object -Property Length -Sum', description: 'Calculate directory size' },
+  { query: ['memory', 'ram'], command: 'Get-CimInstance Win32_PhysicalMemory | Measure-Object Capacity -Sum', description: 'Show physical memory' },
+  { query: ['cpu', 'processes', 'top'], command: 'Get-Process | Sort-Object CPU -Descending | Select-Object -First 10', description: 'Top 10 CPU consumers' },
+  { query: ['find', 'file', 'search'], command: 'Get-ChildItem -Recurse -Filter "FILENAME"', description: 'Find file by name' },
+  { query: ['search', 'text', 'grep'], command: 'Select-String -Path * -Pattern "PATTERN"', description: 'Search text in files' },
+  { query: ['network', 'ports', 'listening'], command: 'Get-NetTCPConnection -State Listen', description: 'Show listening TCP ports' },
+  { query: ['ip', 'address', 'network'], command: 'Get-NetIPAddress | Format-Table', description: 'Show IP addresses' },
+  { query: ['ping', 'test', 'connectivity'], command: 'Test-Connection HOST -Count 4', description: 'Test network connectivity' },
+  { query: ['dns', 'resolve', 'lookup'], command: 'Resolve-DnsName HOSTNAME', description: 'DNS lookup' },
+  { query: ['service', 'status'], command: 'Get-Service SERVICE', description: 'Check service status' },
+  { query: ['restart', 'service'], command: 'Restart-Service SERVICE', description: 'Restart a service' },
+  { query: ['log', 'event', 'syslog'], command: 'Get-EventLog -LogName System -Newest 50', description: 'View recent system events' },
+  { query: ['user', 'who', 'logged'], command: 'query user', description: 'Show logged-in users' },
+  { query: ['uptime', 'boot'], command: '(Get-CimInstance Win32_OperatingSystem).LastBootUpTime', description: 'Show last boot time' },
+  { query: ['kill', 'process', 'stop'], command: 'Stop-Process -Id PID -Force', description: 'Force kill a process' },
+  { query: ['firewall', 'rules'], command: 'Get-NetFirewallRule | Where-Object Enabled -eq True | Format-Table', description: 'List active firewall rules' },
+  { query: ['environment', 'variables', 'env'], command: 'Get-ChildItem Env: | Sort-Object Name', description: 'Show environment variables' },
+  { query: ['hostname', 'machine'], command: 'hostname', description: 'Show computer name' },
+  { query: ['kernel', 'version', 'os'], command: '[System.Environment]::OSVersion', description: 'Show OS version' },
+  { query: ['docker', 'container'], command: 'docker ps', description: 'List running containers' },
+  { query: ['git', 'status'], command: 'git status', description: 'Show git repository status' }
+]
+
+const IS_WINDOWS = typeof navigator !== 'undefined' && navigator.platform?.startsWith('Win')
+
 export function getFallbackSuggestions(query: string): Array<{ command: string; description: string }> {
   const lower = query.toLowerCase()
   const words = lower.split(/\s+/)
 
-  const scored = SUGGESTIONS.map((s) => {
+  const allSuggestions = IS_WINDOWS ? [...WINDOWS_SUGGESTIONS, ...SUGGESTIONS] : SUGGESTIONS
+  const scored = allSuggestions.map((s) => {
     let score = 0
     for (const word of words) {
       for (const keyword of s.query) {

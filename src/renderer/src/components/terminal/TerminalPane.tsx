@@ -12,6 +12,7 @@ interface TerminalPaneProps {
   connectionId?: string | null
   terminalStyle?: TerminalStyle
   shell?: string
+  shellArgs?: string[]
 }
 
 function isPaneVisible(pane: TerminalPaneType, targetId: string): boolean {
@@ -22,7 +23,7 @@ function isPaneVisible(pane: TerminalPaneType, targetId: string): boolean {
   return false
 }
 
-export function TerminalPane({ pane, tabId, connectionId, terminalStyle, shell }: TerminalPaneProps): JSX.Element {
+export function TerminalPane({ pane, tabId, connectionId, terminalStyle, shell, shellArgs }: TerminalPaneProps): JSX.Element {
   const setTerminalId = useSessionsStore((s) => s.setTerminalId)
   const maximizedPaneId = useSessionsStore((s) => s.maximizedPaneId)
 
@@ -35,17 +36,17 @@ export function TerminalPane({ pane, tabId, connectionId, terminalStyle, shell }
       const firstContains = isPaneVisible(panes[0], maximizedPaneId)
       const secondContains = isPaneVisible(panes[1], maximizedPaneId)
       if (firstContains && !secondContains) {
-        return <TerminalPane pane={panes[0]} tabId={tabId} connectionId={connectionId} terminalStyle={terminalStyle} shell={shell} />
+        return <TerminalPane pane={panes[0]} tabId={tabId} connectionId={connectionId} terminalStyle={terminalStyle} shell={shell} shellArgs={shellArgs} />
       }
       if (secondContains && !firstContains) {
-        return <TerminalPane pane={panes[1]} tabId={tabId} connectionId={connectionId} terminalStyle={terminalStyle} shell={shell} />
+        return <TerminalPane pane={panes[1]} tabId={tabId} connectionId={connectionId} terminalStyle={terminalStyle} shell={shell} shellArgs={shellArgs} />
       }
     }
 
     return (
       <PanelGroup direction={direction} className="h-full">
         <Panel minSize={10}>
-          <TerminalPane pane={panes[0]} tabId={tabId} connectionId={connectionId} terminalStyle={terminalStyle} shell={shell} />
+          <TerminalPane pane={panes[0]} tabId={tabId} connectionId={connectionId} terminalStyle={terminalStyle} shell={shell} shellArgs={shellArgs} />
         </Panel>
         <PanelResizeHandle
           className={cn(
@@ -65,7 +66,7 @@ export function TerminalPane({ pane, tabId, connectionId, terminalStyle, shell }
           />
         </PanelResizeHandle>
         <Panel minSize={10}>
-          <TerminalPane pane={panes[1]} tabId={tabId} connectionId={connectionId} terminalStyle={terminalStyle} shell={shell} />
+          <TerminalPane pane={panes[1]} tabId={tabId} connectionId={connectionId} terminalStyle={terminalStyle} shell={shell} shellArgs={shellArgs} />
         </Panel>
       </PanelGroup>
     )
@@ -78,6 +79,7 @@ export function TerminalPane({ pane, tabId, connectionId, terminalStyle, shell }
       connectionId={connectionId}
       terminalStyle={terminalStyle}
       shell={shell}
+      shellArgs={shellArgs}
       onTerminalCreated={(terminalId) => setTerminalId(tabId, pane.id, terminalId)}
     />
   )
