@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, Menu } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -171,9 +171,45 @@ app.whenReady().then(() => {
     console.warn('Tunnel auto-start failed (non-critical):', err)
   })
 
-  app.on('browser-window-created', (_, window) => {
-    optimizer.watchWindowShortcuts(window)
-  })
+  // Custom menu: remove default Ctrl+R/Ctrl+Shift+R/F5 that conflict with terminal
+  const template: Electron.MenuItemConstructorOptions[] = [
+    {
+      label: 'File',
+      submenu: [
+        { label: 'New Tab', accelerator: 'CmdOrCtrl+T', click: () => BrowserWindow.getFocusedWindow()?.webContents.send('menu:new-tab') },
+        { type: 'separator' },
+        { role: 'quit' }
+      ]
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' }
+      ]
+    },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'togglefullscreen' },
+        { type: 'separator' },
+        // Dev tools only in development — no Ctrl+R reload
+        ...(is.dev ? [
+          { role: 'toggleDevTools' as const, accelerator: 'F12' },
+          { label: 'Reload', accelerator: 'CmdOrCtrl+F5', role: 'reload' as const }
+        ] : [])
+      ]
+    }
+  ]
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+
+  // NOTE: intentionally NOT calling optimizer.watchWindowShortcuts()
+  // It registers Ctrl+R as reload which conflicts with bash reverse-search
 
   const mainWindow = createWindow()
 
