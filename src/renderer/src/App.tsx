@@ -110,12 +110,39 @@ export function App(): JSX.Element {
         const tab = tabs.find((t) => t.id === activeTabId)
         if (tab) splitPane(tab.id, tab.rootPane.id, 'horizontal')
       }
-      // Ctrl+Shift+V: Split vertical
-      if (e.ctrlKey && e.shiftKey && e.key === 'V') {
+      // Ctrl+\: Split vertical (tmux/iTerm2 convention)
+      if (e.ctrlKey && e.key === '\\' && !e.shiftKey) {
         e.preventDefault()
         const { tabs, activeTabId } = useSessionsStore.getState()
         const tab = tabs.find((t) => t.id === activeTabId)
         if (tab) splitPane(tab.id, tab.rootPane.id, 'vertical')
+      }
+      // Ctrl+Shift+C: Copy from terminal
+      if (e.ctrlKey && e.shiftKey && e.key === 'C') {
+        e.preventDefault()
+        // Find active pane's terminal selection
+        const { tabs, activeTabId } = useSessionsStore.getState()
+        const tab = tabs.find((t) => t.id === activeTabId)
+        const paneId = tab?.rootPane?.id
+        if (paneId) {
+          const paneEl = document.querySelector(`[data-pane-id="${paneId}"]`) as HTMLElement
+          const selection = paneEl?.dataset?.terminalSelection?.trim()
+          if (selection) navigator.clipboard.writeText(selection)
+        }
+        return
+      }
+      // Ctrl+Shift+V: Paste to terminal
+      if (e.ctrlKey && e.shiftKey && e.key === 'V') {
+        e.preventDefault()
+        document.dispatchEvent(new CustomEvent('terminal:paste'))
+        return
+      }
+      // Ctrl+Shift+D: Disconnect/close session
+      if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+        e.preventDefault()
+        const { activeTabId } = useSessionsStore.getState()
+        if (activeTabId) closeTab(activeTabId)
+        return
       }
       // Ctrl+Shift+B: Toggle broadcast mode (off -> panes -> all-tabs -> off)
       if (e.ctrlKey && e.shiftKey && e.key === 'B') {

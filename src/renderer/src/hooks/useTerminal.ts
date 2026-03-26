@@ -208,14 +208,29 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
     const handleZoomOut = (): void => zoomOut()
     const handleZoomReset = (): void => resetZoom()
 
+    const handlePaste = (): void => {
+      navigator.clipboard.readText().then((text) => {
+        if (!text) return
+        const termId = terminalIdRef.current
+        if (!termId) return
+        if (termId.startsWith('ssh:')) {
+          window.bifrost?.ssh?.write(termId.slice(4), text)
+        } else {
+          window.bifrost?.terminal?.write(termId, text)
+        }
+      }).catch(() => { /* clipboard denied */ })
+    }
+
     document.addEventListener('terminal:zoom-in', handleZoomIn)
     document.addEventListener('terminal:zoom-out', handleZoomOut)
     document.addEventListener('terminal:zoom-reset', handleZoomReset)
+    document.addEventListener('terminal:paste', handlePaste)
 
     return () => {
       document.removeEventListener('terminal:zoom-in', handleZoomIn)
       document.removeEventListener('terminal:zoom-out', handleZoomOut)
       document.removeEventListener('terminal:zoom-reset', handleZoomReset)
+      document.removeEventListener('terminal:paste', handlePaste)
     }
   }, [zoomIn, zoomOut, resetZoom])
 
