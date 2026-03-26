@@ -209,14 +209,19 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
     const handleZoomReset = (): void => resetZoom()
 
     const handlePaste = (): void => {
+      // Only paste to the active tab's terminal
+      const { activeTabId, tabs } = useSessionsStore.getState()
+      const activeTab = tabs.find((t) => t.id === activeTabId)
+      const activeTermId = activeTab?.rootPane?.terminalId
+      const myTermId = terminalIdRef.current
+      if (!myTermId || myTermId !== activeTermId) return
+
       navigator.clipboard.readText().then((text) => {
         if (!text) return
-        const termId = terminalIdRef.current
-        if (!termId) return
-        if (termId.startsWith('ssh:')) {
-          window.bifrost?.ssh?.write(termId.slice(4), text)
+        if (myTermId.startsWith('ssh:')) {
+          window.bifrost?.ssh?.write(myTermId.slice(4), text)
         } else {
-          window.bifrost?.terminal?.write(termId, text)
+          window.bifrost?.terminal?.write(myTermId, text)
         }
       }).catch(() => { /* clipboard denied */ })
     }
