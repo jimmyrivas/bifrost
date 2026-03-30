@@ -22,6 +22,7 @@ import { loadAiConfig } from './services/ai-assistant'
 import { registerConfigSyncIpc } from './ipc/config-sync.ipc'
 import { registerSshCaIpc } from './ipc/ssh-ca.ipc'
 import { registerPluginsIpc } from './ipc/plugins.ipc'
+import { activatePlugins, deactivatePlugins } from './services/plugin-manager'
 import { registerFontsIpc } from './ipc/fonts.ipc'
 import { registerRemoteCommandsIpc } from './ipc/remote-commands.ipc'
 import { registerTunnelsIpc, autoStartTunnels } from './ipc/tunnels.ipc'
@@ -154,6 +155,9 @@ app.whenReady().then(() => {
   registerConfigSyncIpc()
   registerSshCaIpc()
   registerPluginsIpc()
+
+  // Activate all installed plugins
+  activatePlugins()
   registerFontsIpc()
   registerRemoteCommandsIpc()
   registerTunnelsIpc()
@@ -323,6 +327,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  deactivatePlugins()
   stopAllRecordings()
   destroyAllSessions()
   sftpManager.closeAll()

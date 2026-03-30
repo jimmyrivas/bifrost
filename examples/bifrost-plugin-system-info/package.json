@@ -1,0 +1,9 @@
+{
+  "name": "bifrost-plugin-system-info",
+  "version": "1.0.0",
+  "description": "Example Bifrost plugin — adds system info commands and session logging hooks",
+  "keywords": ["bifrost-plugin"],
+  "main": "index.js",
+  "license": "GPL-3.0",
+  "author": "Bifrost Contributors"
+}

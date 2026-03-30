@@ -311,9 +311,11 @@ export interface BifrostApi {
   }
   // #29-31: Plugin system
   plugins: {
-    list: () => Promise<Array<{ name: string; version: string; description: string; path: string; valid: boolean }>>
-    install: (packageName: string) => Promise<{ name: string; version: string; description: string; path: string; valid: boolean }>
+    list: () => Promise<Array<{ name: string; version: string; description: string; path: string; valid: boolean; enabled: boolean }>>
+    install: (packageName: string) => Promise<{ name: string; version: string; description: string; path: string; valid: boolean; enabled: boolean }>
     uninstall: (pluginName: string) => Promise<void>
+    enable: (pluginName: string) => Promise<void>
+    disable: (pluginName: string) => Promise<void>
   }
   window: {
     toggleFullscreen: () => Promise<void>
@@ -647,7 +649,9 @@ const api: BifrostApi = {
   plugins: {
     list: () => ipcRenderer.invoke('plugins:list'),
     install: (packageName: string) => ipcRenderer.invoke('plugins:install', packageName),
-    uninstall: (pluginName: string) => ipcRenderer.invoke('plugins:uninstall', pluginName)
+    uninstall: (pluginName: string) => ipcRenderer.invoke('plugins:uninstall', pluginName),
+    enable: (pluginName: string) => ipcRenderer.invoke('plugins:enable', pluginName),
+    disable: (pluginName: string) => ipcRenderer.invoke('plugins:disable', pluginName)
   },
   window: {
     toggleFullscreen: () => ipcRenderer.invoke('window:toggleFullscreen'),
