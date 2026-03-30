@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Monitor, Globe, Network, KeyRound, GitBranch, Puzzle, Shield, Lock, Bot } from 'lucide-react'
+import { Monitor, Globe, Network, KeyRound, GitBranch, Puzzle, Shield, Lock, Bot, Keyboard } from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { Switch } from '@renderer/components/ui/switch'
@@ -9,16 +9,18 @@ import { usePreferencesStore, type TerminalPreferences } from '@renderer/stores/
 import { ColorSchemeSelector } from './ColorSchemeSelector'
 import { ConfigSync } from './ConfigSync'
 import { PluginManager } from './PluginManager'
+import { KeyBindings } from './KeyBindings'
 import { KnownHostsPanel } from './KnownHostsPanel'
 import { setSecretRedactionEnabled, isSecretRedactionEnabled } from '@renderer/lib/secret-redactor'
 
-type PrefsTab = 'terminal' | 'ai' | 'ssh' | 'security' | 'language' | 'network' | 'keepass' | 'sync' | 'plugins'
+type PrefsTab = 'terminal' | 'ai' | 'ssh' | 'security' | 'keybindings' | 'language' | 'network' | 'keepass' | 'sync' | 'plugins'
 
 const tabConfig: Array<{ id: PrefsTab; icon: typeof Monitor; labelKey: string; fallback: string }> = [
   { id: 'terminal', icon: Monitor, labelKey: 'prefs.terminal', fallback: 'Terminal' },
   { id: 'ai', icon: Bot, labelKey: 'prefs.ai', fallback: 'AI' },
   { id: 'ssh', icon: Shield, labelKey: 'prefs.ssh', fallback: 'SSH' },
   { id: 'security', icon: Lock, labelKey: 'prefs.security', fallback: 'Security' },
+  { id: 'keybindings', icon: Keyboard, labelKey: 'prefs.keybindings', fallback: 'Key Bindings' },
   { id: 'language', icon: Globe, labelKey: 'prefs.language', fallback: 'Language' },
   { id: 'network', icon: Network, labelKey: 'prefs.network', fallback: 'Network' },
   { id: 'keepass', icon: KeyRound, labelKey: 'prefs.keepass', fallback: 'KeePass' },
@@ -230,6 +232,10 @@ export function Preferences(): JSX.Element {
               </div>
             </div>
           </div>
+        )}
+
+        {activeTab === 'keybindings' && (
+          <KeyBindings />
         )}
 
         {activeTab === 'language' && (

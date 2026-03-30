@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { X, Plus, Terminal, Lock, ChevronDown } from 'lucide-react'
+import { X, Plus, Terminal, Lock, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@renderer/lib/utils'
 import { useSessionsStore } from '@renderer/stores/sessions.store'
 
@@ -28,10 +28,45 @@ export function TabBar(): JSX.Element {
   const [editValue, setEditValue] = useState('')
   const inputRef = useRef<HTMLInputElement | null>(null)
 
-  // Shell picker state
+  // Shell picker
   const [shellMenuOpen, setShellMenuOpen] = useState(false)
   const [shells, setShells] = useState<ShellInfo[]>([])
   const shellMenuRef = useRef<HTMLDivElement>(null)
+
+  // Scroll state
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const [canScrollLeft, setCanScrollLeft] = useState(false)
+  const [canScrollRight, setCanScrollRight] = useState(false)
+
+  const updateScrollState = useCallback(() => {
+    const el = scrollRef.current
+    if (!el) return
+    setCanScrollLeft(el.scrollLeft > 4)
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4)
+  }, [])
+
+  useEffect(() => {
+    updateScrollState()
+    const el = scrollRef.current
+    el?.addEventListener('scroll', updateScrollState)
+    const ro = new ResizeObserver(updateScrollState)
+    if (el) ro.observe(el)
+    return () => {
+      el?.removeEventListener('scroll', updateScrollState)
+      ro.disconnect()
+    }
+  }, [updateScrollState, tabs.length])
+
+  // Scroll active tab into view
+  useEffect(() => {
+    if (!activeTabId || !scrollRef.current) return
+    const tabEl = scrollRef.current.querySelector(`[data-tab-id="${activeTabId}"]`) as HTMLElement
+    tabEl?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
+  }, [activeTabId])
+
+  const scrollBy = useCallback((delta: number) => {
+    scrollRef.current?.scrollBy({ left: delta, behavior: 'smooth' })
+  }, [])
 
   const startEditing = useCallback((tabId: string, currentTitle: string) => {
     setEditingTabId(tabId)
@@ -41,9 +76,8 @@ export function TabBar(): JSX.Element {
   const commitEdit = useCallback(() => {
     if (editingTabId && editValue.trim()) {
       renameTab(editingTabId, editValue.trim())
-      // Auto-lock title after manual rename so OSC sequences don't override it
-      const { tabs } = useSessionsStore.getState()
-      const tab = tabs.find((t) => t.id === editingTabId)
+      const { tabs: t } = useSessionsStore.getState()
+      const tab = t.find((x) => x.id === editingTabId)
       if (tab && !tab.lockTitle) {
         useSessionsStore.getState().toggleLockTitle(editingTabId)
       }
@@ -51,11 +85,27 @@ export function TabBar(): JSX.Element {
     setEditingTabId(null)
   }, [editingTabId, editValue, renameTab])
 
-  const cancelEdit = useCallback(() => {
-    setEditingTabId(null)
-  }, [])
+  const cancelEdit = useCallback(() => { setEditingTabId(null) }, [])
 
-  // Focus input when editing starts
+  // Click/double-click disambiguation
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const handleTabClick = useCallback((tabId: string) => {
+    if (clickTimerRef.current) clearTimeout(clickTimerRef.current)
+    clickTimerRef.current = setTimeout(() => {
+      setActiveTab(tabId)
+      clickTimerRef.current = null
+    }, 200)
+  }, [setActiveTab])
+
+  const handleTabDoubleClick = useCallback((tabId: string, title: string) => {
+    if (clickTimerRef.current) {
+      clearTimeout(clickTimerRef.current)
+      clickTimerRef.current = null
+    }
+    setActiveTab(tabId)
+    startEditing(tabId, title)
+  }, [setActiveTab, startEditing])
+
   useEffect(() => {
     if (editingTabId && inputRef.current) {
       inputRef.current.focus()
@@ -63,7 +113,6 @@ export function TabBar(): JSX.Element {
     }
   }, [editingTabId])
 
-  // Close shell menu on outside click
   useEffect(() => {
     if (!shellMenuOpen) return
     const handler = (e: MouseEvent): void => {
@@ -75,7 +124,6 @@ export function TabBar(): JSX.Element {
     return () => document.removeEventListener('mousedown', handler)
   }, [shellMenuOpen])
 
-  // Load available shells when menu opens
   const openShellMenu = useCallback(async () => {
     if (shells.length === 0) {
       try {
@@ -97,34 +145,53 @@ export function TabBar(): JSX.Element {
       role="tablist"
       aria-label="Terminal tabs"
     >
-      <div className="flex items-center overflow-x-auto flex-1 scrollbar-none gap-[1px]">
-        {tabs.map((tab) => {
+      {/* Scroll left arrow */}
+      {canScrollLeft && (
+        <button
+          onClick={() => scrollBy(-200)}
+          className="flex items-center justify-center w-6 h-9 text-[#c7c4d7]/40 hover:text-[#c7c4d7] shrink-0 bg-gradient-to-r from-[#1b1b1e] to-transparent z-10"
+          aria-label="Scroll tabs left"
+        >
+          <ChevronLeft size={12} />
+        </button>
+      )}
+
+      {/* Tab strip */}
+      <div
+        ref={scrollRef}
+        className="flex items-center overflow-x-auto flex-1 scrollbar-none gap-[1px]"
+      >
+        {tabs.map((tab, idx) => {
           const isActive = tab.id === activeTabId
           const isEditing = editingTabId === tab.id
+          const tabNumber = idx + 1
           return (
             <div
               key={tab.id}
+              data-tab-id={tab.id}
               className={cn(
-                'group relative flex items-center gap-1.5 px-3 h-9 text-sm cursor-pointer shrink-0 transition-colors',
+                'group relative flex items-center gap-1.5 px-3 h-9 text-sm cursor-pointer shrink-0 transition-colors min-w-0',
                 isActive
                   ? 'bg-[#2a2a2d] text-[#e6e1e5]'
                   : 'bg-[#1b1b1e] text-[#c7c4d7] hover:text-[#e6e1e5] hover:bg-[#2a2a2d]/40'
               )}
-              onClick={() => setActiveTab(tab.id)}
-              onAuxClick={(e) => {
-                if (e.button === 1) closeTab(tab.id)
-              }}
-              onDoubleClick={(e) => {
-                e.stopPropagation()
-                startEditing(tab.id, tab.title)
-              }}
+              onClick={() => handleTabClick(tab.id)}
+              onAuxClick={(e) => { if (e.button === 1) closeTab(tab.id) }}
+              onDoubleClick={(e) => { e.stopPropagation(); handleTabDoubleClick(tab.id, tab.title) }}
               role="tab"
               aria-selected={isActive}
               tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') setActiveTab(tab.id)
-              }}
+              onKeyDown={(e) => { if (e.key === 'Enter') setActiveTab(tab.id) }}
+              title={`${tab.title}${tabNumber <= 9 ? ` (Ctrl+${tabNumber})` : ''}`}
             >
+              {/* Tab number */}
+              <span className={cn(
+                'text-[9px] font-mono shrink-0 w-3 text-center',
+                isActive ? 'text-[#6bd5ff]/60' : 'text-[#c7c4d7]/20'
+              )}>
+                {tabNumber <= 9 ? tabNumber : ''}
+              </span>
+
               <Terminal size={13} strokeWidth={1.5} className="shrink-0 opacity-60" />
               {tab.aiDetected && (
                 <span className="shrink-0 text-[8px] font-bold px-1 py-0 rounded bg-[#d56bff]/15 text-[#d56bff] uppercase" title={`AI detected: ${tab.aiDetected}`}>
@@ -160,10 +227,7 @@ export function TabBar(): JSX.Element {
                   'text-[#c7c4d7]/50 hover:text-[#e6e1e5] hover:bg-[#39393c]',
                   'opacity-0 group-hover:opacity-100 transition-opacity'
                 )}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  closeTab(tab.id)
-                }}
+                onClick={(e) => { e.stopPropagation(); closeTab(tab.id) }}
                 aria-label={t('tabs.closeTab')}
                 tabIndex={-1}
               >
@@ -181,6 +245,17 @@ export function TabBar(): JSX.Element {
           )
         })}
       </div>
+
+      {/* Scroll right arrow */}
+      {canScrollRight && (
+        <button
+          onClick={() => scrollBy(200)}
+          className="flex items-center justify-center w-6 h-9 text-[#c7c4d7]/40 hover:text-[#c7c4d7] shrink-0 bg-gradient-to-l from-[#1b1b1e] to-transparent z-10"
+          aria-label="Scroll tabs right"
+        >
+          <ChevronRight size={12} />
+        </button>
+      )}
 
       {/* New tab: click = default shell, dropdown arrow = shell picker */}
       <div className="flex items-center shrink-0 relative" ref={shellMenuRef}>
@@ -232,6 +307,13 @@ export function TabBar(): JSX.Element {
           </div>
         )}
       </div>
+
+      {/* Tab count badge when many tabs */}
+      {tabs.length > 5 && (
+        <span className="text-[9px] text-[#c7c4d7]/25 px-2 shrink-0 tabular-nums">
+          {tabs.length}
+        </span>
+      )}
     </div>
   )
 }

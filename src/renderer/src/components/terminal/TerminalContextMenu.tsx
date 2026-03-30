@@ -168,19 +168,27 @@ export function TerminalContextMenu({
     toggleLockTitle(tabId)
   }, [toggleLockTitle, tabId])
 
+  const [renamingTab, setRenamingTab] = useState(false)
+  const [renameValue, setRenameValue] = useState('')
+
   const handleRenameTab = useCallback(() => {
     const { tabs } = useSessionsStore.getState()
     const tab = tabs.find((t) => t.id === tabId)
-    const current = tab?.title ?? ''
-    const newTitle = window.prompt('Tab title:', current)
-    if (newTitle !== null && newTitle.trim()) {
-      renameTab(tabId, newTitle.trim())
-      // Auto-lock after manual rename
+    setRenameValue(tab?.title ?? '')
+    setRenamingTab(true)
+  }, [tabId])
+
+  const commitTabRename = useCallback(() => {
+    if (renameValue.trim()) {
+      renameTab(tabId, renameValue.trim())
+      const { tabs } = useSessionsStore.getState()
+      const tab = tabs.find((t) => t.id === tabId)
       if (tab && !tab.lockTitle) {
         toggleLockTitle(tabId)
       }
     }
-  }, [tabId, renameTab, toggleLockTitle])
+    setRenamingTab(false)
+  }, [tabId, renameValue, renameTab, toggleLockTitle])
 
   // Scripts menu (#3)
   interface ScriptEntry { id: string; name: string; description?: string; code: string }
@@ -780,6 +788,37 @@ export function TerminalContextMenu({
           <div className="flex items-center gap-2">
             <StickyNote size={14} className="text-[#22c55e] shrink-0" />
             <p>{noteSaved}</p>
+          </div>
+        </div>
+      )}
+      {/* Rename tab overlay */}
+      {renamingTab && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-20" onClick={() => setRenamingTab(false)}>
+          <div
+            className="bg-[var(--surface-bright)] rounded-[var(--radius)] shadow-lg shadow-black/40 p-3 w-72"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-[#c7c4d7]/50 mb-2">Rename Tab</p>
+            <div className="flex gap-2">
+              <input
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitTabRename()
+                  if (e.key === 'Escape') setRenamingTab(false)
+                }}
+                className="flex-1 bg-[var(--surface-container-highest)] rounded-[var(--radius)] px-3 py-1.5 text-xs text-[var(--on-surface)] outline-none ghost-border focus:border-[#6bd5ff]/30"
+                autoFocus
+                maxLength={60}
+              />
+              <button
+                onClick={commitTabRename}
+                disabled={!renameValue.trim()}
+                className="px-3 py-1.5 rounded-[var(--radius)] text-xs font-semibold bg-[#6bd5ff]/15 text-[#6bd5ff] hover:bg-[#6bd5ff]/25 disabled:opacity-40"
+              >
+                OK
+              </button>
+            </div>
           </div>
         </div>
       )}

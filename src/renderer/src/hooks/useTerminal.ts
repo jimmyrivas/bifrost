@@ -555,7 +555,18 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
           removeExitListener = window.bifrost.ssh.onClose((id: string) => {
             if (id === sshSessionId) {
               terminal.write('\r\n\x1b[90m[SSH connection closed]\x1b[0m\r\n')
+              const closedSessionId = sshSessionId
               sshSessionId = null
+
+              // Auto-close tab after delay (unless auto-reconnect kicks in)
+              setTimeout(() => {
+                // Only close if still disconnected (auto-reconnect may have reconnected)
+                if (sshSessionId === null) {
+                  const { tabs } = useSessionsStore.getState()
+                  const tab = tabs.find((t) => t.rootPane?.terminalId === `ssh:${closedSessionId}`)
+                  if (tab) useSessionsStore.getState().closeTab(tab.id)
+                }
+              }, 2000)
 
               if (!userDisconnected && connectionId) {
                 const autoReconnect = usePreferencesStore.getState().terminal.autoReconnect
@@ -613,9 +624,15 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
         }
       })
 
-      removeExitListener = window.bifrost.terminal.onExit((id: string, _exitCode: number) => {
+      removeExitListener = window.bifrost.terminal.onExit((id: string, exitCode: number) => {
         if (id === terminalIdRef.current) {
-          terminal.write('\r\n\x1b[90m[Process exited]\x1b[0m\r\n')
+          terminal.write(`\r\n\x1b[90m[Process exited with code ${exitCode}]\x1b[0m\r\n`)
+          // Auto-close tab after brief delay so user sees the exit message
+          setTimeout(() => {
+            const { tabs } = useSessionsStore.getState()
+            const tab = tabs.find((t) => t.rootPane?.terminalId === id)
+            if (tab) useSessionsStore.getState().closeTab(tab.id)
+          }, 1500)
         }
       })
     }

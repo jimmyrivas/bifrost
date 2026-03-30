@@ -164,6 +164,16 @@ export function App(): JSX.Element {
         e.preventDefault()
         document.dispatchEvent(new CustomEvent('terminal:zoom-reset'))
       }
+      // Ctrl+1-9: Jump to tab by number
+      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key >= '1' && e.key <= '9') {
+        e.preventDefault()
+        const idx = parseInt(e.key, 10) - 1
+        const { tabs } = useSessionsStore.getState()
+        if (idx < tabs.length) {
+          setActiveTab(tabs[idx].id)
+        }
+        return
+      }
       // Ctrl+Shift+M: Maximize pane (#4)
       if (e.ctrlKey && e.shiftKey && e.key === 'M') {
         e.preventDefault()
