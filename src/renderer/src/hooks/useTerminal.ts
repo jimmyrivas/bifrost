@@ -129,55 +129,20 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
     { regex: /\$ q chat\b|Amazon Q/i, tool: 'amazon-q' }
   ]
 
-  // Extract working directory from AI agent output
-  const extractAiCwd = (buffer: string): string | null => {
-    // Claude Code: shows cwd in the status line or prompt like "/home/user/project"
-    // Pattern: "cwd: /path/to/dir" or working directory in prompt
-    const patterns = [
-      /(?:cwd|directory|project)[:\s]+([~/][^\s\n\r\x1b]{3,80})/i,
-      /╭─\s*([~/][^\s\n\r\x1b]{3,80})/,
-      /\s(\/[\w./-]{5,80})\s*$/m,
-    ]
-    for (const p of patterns) {
-      const m = buffer.match(p)
-      if (m?.[1]) {
-        // Return just the last directory component
-        const full = m[1].replace(/\/+$/, '')
-        const parts = full.split('/')
-        return parts[parts.length - 1] || full
-      }
-    }
-    return null
-  }
-
   // Scan terminal output for AI tool patterns
+  // NOTE: cwd extraction is handled by XTerminal.tsx via clean OSC title sequences,
+  // not from raw terminal data which contains ANSI escape codes.
   const scanForAi = useCallback((data: string) => {
-    if (!tabId) return
+    if (aiDetectedRef.current || !tabId) return
     aiScanBufferRef.current += data
     if (aiScanBufferRef.current.length > 8192) {
       aiScanBufferRef.current = aiScanBufferRef.current.slice(-4096)
     }
-
-    if (!aiDetectedRef.current) {
-      for (const { regex, tool } of AI_PATTERNS) {
-        if (regex.test(aiScanBufferRef.current)) {
-          aiDetectedRef.current = true
-          const cwd = extractAiCwd(aiScanBufferRef.current)
-          useSessionsStore.getState().setAiDetected(tabId, tool, cwd ?? undefined)
-          break
-        }
-      }
-    }
-
-    // Keep updating the cwd while AI is active (the agent may change directories)
-    if (aiDetectedRef.current) {
-      const cwd = extractAiCwd(aiScanBufferRef.current)
-      if (cwd) {
-        const store = useSessionsStore.getState()
-        const tab = store.tabs.find((t) => t.id === tabId)
-        if (tab && tab.aiCwd !== cwd) {
-          store.setAiCwd(tabId, cwd)
-        }
+    for (const { regex, tool } of AI_PATTERNS) {
+      if (regex.test(aiScanBufferRef.current)) {
+        aiDetectedRef.current = true
+        useSessionsStore.getState().setAiDetected(tabId, tool)
+        break
       }
     }
   }, [tabId])

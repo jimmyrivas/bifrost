@@ -38,14 +38,25 @@ export function XTerminal({ paneId, tabId, connectionId, terminalStyle, shell, s
     if (tab?.lockTitle) return
     renameTab(tabId, dynamicTitle)
 
-    // Extract cwd from OSC title for AI tabs (shells set title to "user@host:~/path")
+    // Extract cwd from OSC title for AI tabs
+    // Shells set title to patterns like: "user@host:~/project", "~/project", "/home/user/project"
+    // Claude Code may set: "claude:~/Devel/bifrost" or include cwd in various formats
     if (tab?.aiDetected && dynamicTitle) {
-      const cwdMatch = dynamicTitle.match(/[:]\s*([~/][^\s]+)/) ?? dynamicTitle.match(/([~/][\w./-]+)$/)
-      if (cwdMatch?.[1]) {
-        const full = cwdMatch[1].replace(/\/+$/, '')
-        const dirName = full.split('/').pop() || full
-        if (dirName && dirName !== tab.aiCwd) {
-          store.setAiCwd(tabId, dirName)
+      const cwdPatterns = [
+        /[:]\s*([~/][^\s:]+)/,          // "user@host:~/path" or "claude:~/path"
+        /([~/][\w./-]+)\s*[-—]/,         // "~/path — something"
+        /([~/][\w./-]+)$/,               // ends with a path
+        /(\/(?:home|root|Users)\/[\w./-]+)/,  // absolute path starting from home dirs
+      ]
+      for (const pattern of cwdPatterns) {
+        const m = dynamicTitle.match(pattern)
+        if (m?.[1]) {
+          const full = m[1].replace(/\/+$/, '')
+          const dirName = full.split('/').pop() || full
+          if (dirName && dirName.length > 1 && dirName !== tab.aiCwd) {
+            store.setAiCwd(tabId, dirName)
+          }
+          break
         }
       }
     }
