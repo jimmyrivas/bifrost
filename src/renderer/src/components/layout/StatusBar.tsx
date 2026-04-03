@@ -1,7 +1,8 @@
 import { useSessionsStore } from '@renderer/stores/sessions.store'
 import { useWorkspaceStore } from '@renderer/stores/workspace.store'
 import { cn } from '@renderer/lib/utils'
-import { Radio, Bot, Layers } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Radio, Bot, Layers, Cpu } from 'lucide-react'
 
 export function StatusBar(): JSX.Element {
   const tabs = useSessionsStore((s) => s.tabs)
@@ -13,6 +14,17 @@ export function StatusBar(): JSX.Element {
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
   const workspaces = useWorkspaceStore((s) => s.workspaces)
   const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId)
+
+  const [mcpRunning, setMcpRunning] = useState(false)
+
+  useEffect(() => {
+    const check = (): void => {
+      window.bifrost?.mcp?.status().then((s) => setMcpRunning(s?.running ?? false)).catch(() => {})
+    }
+    check()
+    const interval = setInterval(check, 5000)
+    return () => clearInterval(interval)
+  }, [])
 
   const toggleAi = (): void => {
     document.dispatchEvent(new CustomEvent('toggle:ai-assistant'))
@@ -74,6 +86,18 @@ export function StatusBar(): JSX.Element {
 
       {/* Right section */}
       <div className="flex items-center gap-3">
+        {/* MCP Server indicator */}
+        <span
+          className={cn(
+            'flex items-center gap-1.5',
+            mcpRunning ? 'text-[#22c55e]/80' : 'text-[#c7c4d7]/30'
+          )}
+          title={mcpRunning ? 'MCP Server: Running' : 'MCP Server: Stopped'}
+        >
+          <Cpu size={11} strokeWidth={1.5} />
+          <span className="uppercase tracking-wide text-[10px]">MCP</span>
+        </span>
+
         {/* AI Assistant toggle */}
         <button
           onClick={toggleAi}

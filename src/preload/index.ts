@@ -317,6 +317,36 @@ export interface BifrostApi {
     enable: (pluginName: string) => Promise<void>
     disable: (pluginName: string) => Promise<void>
   }
+  mcp: {
+    getConfig: () => Promise<{
+      enabled: boolean
+      transport: 'stdio' | 'http'
+      port: number
+      securityLevel: 0 | 1 | 2
+      autoStart: boolean
+      token: string
+    }>
+    setConfig: (config: Partial<{
+      enabled: boolean
+      transport: 'stdio' | 'http'
+      port: number
+      securityLevel: 0 | 1 | 2
+      autoStart: boolean
+      token: string
+    }>) => Promise<unknown>
+    start: () => Promise<{ pid: number }>
+    stop: () => Promise<void>
+    status: () => Promise<{
+      running: boolean
+      pid: number | null
+      transport: 'stdio' | 'http' | null
+      port: number | null
+      uptime: number | null
+      logs: string[]
+    }>
+    getLogs: (lines?: number) => Promise<string[]>
+    generateToken: () => Promise<string>
+  }
   window: {
     toggleFullscreen: () => Promise<void>
     showConfirmDialog: (message: string) => Promise<boolean>
@@ -652,6 +682,15 @@ const api: BifrostApi = {
     uninstall: (pluginName: string) => ipcRenderer.invoke('plugins:uninstall', pluginName),
     enable: (pluginName: string) => ipcRenderer.invoke('plugins:enable', pluginName),
     disable: (pluginName: string) => ipcRenderer.invoke('plugins:disable', pluginName)
+  },
+  mcp: {
+    getConfig: () => ipcRenderer.invoke('mcp:getConfig'),
+    setConfig: (config) => ipcRenderer.invoke('mcp:setConfig', config),
+    start: () => ipcRenderer.invoke('mcp:start'),
+    stop: () => ipcRenderer.invoke('mcp:stop'),
+    status: () => ipcRenderer.invoke('mcp:status'),
+    getLogs: (lines?: number) => ipcRenderer.invoke('mcp:getLogs', lines),
+    generateToken: () => ipcRenderer.invoke('mcp:generateToken')
   },
   window: {
     toggleFullscreen: () => ipcRenderer.invoke('window:toggleFullscreen'),

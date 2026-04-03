@@ -18,11 +18,17 @@
     "test:e2e": "playwright test",
     "package": "electron-vite build && electron-builder --linux",
     "drizzle:generate": "drizzle-kit generate",
-    "drizzle:migrate": "drizzle-kit migrate"
+    "drizzle:migrate": "drizzle-kit migrate",
+    "mcp:dev": "npx tsx src/mcp/index.ts",
+    "mcp:http": "BIFROST_MCP_HTTP=1 npx tsx src/mcp/index.ts",
+    "mcp:build": "tsc -p tsconfig.mcp.json",
+    "mcp:start": "node out/mcp/index.js",
+    "mcp:install": "node -e \"const p=require('path'),h=require('os').homedir();const c=p.join(h,'.claude','settings.json');let s={};try{s=JSON.parse(require('fs').readFileSync(c,'utf8'))}catch{}if(!s.mcpServers)s.mcpServers={};s.mcpServers.bifrost={command:'npx',args:['tsx',p.resolve('src/mcp/index.ts')]};require('fs').writeFileSync(c,JSON.stringify(s,null,2));console.log('Bifrost MCP server registered in Claude Code settings')\""
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
+    "@modelcontextprotocol/sdk": "1.29.0",
     "@radix-ui/react-context-menu": "^2.2.16",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-dropdown-menu": "^2.1.16",
@@ -50,8 +56,10 @@
     "react-dom": "^18.3.1",
     "react-i18next": "^15.4.0",
     "react-resizable-panels": "^2.1.0",
+    "sql.js": "1.14.1",
     "ssh2": "^1.17.0",
     "tailwind-merge": "^3.5.0",
+    "zod": "4.3.6",
     "zustand": "^5.0.12"
   },
   "devDependencies": {
@@ -65,6 +73,7 @@
     "@types/node": "^22.10.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
+    "@types/sql.js": "1.4.11",
     "@types/ssh2": "^1.15.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",

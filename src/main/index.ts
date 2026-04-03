@@ -27,6 +27,7 @@ import { registerFontsIpc } from './ipc/fonts.ipc'
 import { registerRemoteCommandsIpc } from './ipc/remote-commands.ipc'
 import { registerTunnelsIpc, autoStartTunnels } from './ipc/tunnels.ipc'
 import { registerNotesIpc } from './ipc/notes.ipc'
+import { registerMcpIpc, autoStartMcp, stopMcpOnExit } from './ipc/mcp.ipc'
 import { macroExecutor } from './services/macro-executor'
 import { auditLogger } from './services/audit-log'
 import { sessionLogger } from './services/session-logger'
@@ -162,6 +163,7 @@ app.whenReady().then(() => {
   registerRemoteCommandsIpc()
   registerTunnelsIpc()
   registerNotesIpc()
+  registerMcpIpc()
 
   // Rotate audit log on startup (remove entries older than 30 days)
   try {
@@ -174,6 +176,13 @@ app.whenReady().then(() => {
   autoStartTunnels().catch((err) => {
     console.warn('Tunnel auto-start failed (non-critical):', err)
   })
+
+  // Auto-start MCP server if configured
+  try {
+    autoStartMcp()
+  } catch (err) {
+    console.warn('MCP auto-start failed (non-critical):', err)
+  }
 
   // Custom menu: remove default Ctrl+R/Ctrl+Shift+R/F5 that conflict with terminal
   const template: Electron.MenuItemConstructorOptions[] = [
@@ -327,6 +336,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  stopMcpOnExit()
   deactivatePlugins()
   stopAllRecordings()
   destroyAllSessions()

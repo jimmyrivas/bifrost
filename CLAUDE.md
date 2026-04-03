@@ -26,6 +26,34 @@ npm run dev          # Electron + Vite dev with HMR
 npm run build        # Production build (electron-vite build)
 npm run test         # Vitest unit tests
 npm run package      # electron-builder (deb, rpm, AppImage)
+npm run mcp:dev      # Start MCP server (stdio transport)
+npm run mcp:http     # Start MCP server (HTTP transport, port 3100)
+npm run mcp:build    # Compile MCP server to out/mcp/
+npm run mcp:install  # Register MCP server in Claude Code settings
+```
+
+## MCP Server
+
+Bifrost includes a standalone MCP server (`src/mcp/`) that exposes infrastructure management to AI agents.
+
+- **42 tools**: SSH, terminal, SFTP, clusters, tunnels, discovery, automation
+- **9 resources**: connections, groups, clusters, tunnels, audit, snippets, scripts, variables, commands
+- **8 prompts**: troubleshoot, deploy, tunnel, discovery, security audit, migration, incident, bulk config
+- **Transports**: stdio (default) and Streamable HTTP (with Bearer token auth)
+- **DB access**: Uses sql.js (pure JS SQLite) to read Bifrost's DB without native module conflicts
+- **Security**: Command filter blocks destructive operations (rm -rf, DROP TABLE, fork bombs, etc.)
+- **Skill**: `/bifrost` Claude Code command for infrastructure management
+
+Configure in Claude Code:
+```json
+{
+  "mcpServers": {
+    "bifrost": {
+      "command": "npx",
+      "args": ["tsx", "<path-to-bifrost>/src/mcp/index.ts"]
+    }
+  }
+}
 ```
 
 ## Critical Lessons Learned
@@ -62,6 +90,21 @@ Electron 34 uses Node 20 which lacks `fs.globSync` (Node 22+). Use manual regex-
 
 ### Context menus via Radix UI
 Radix ContextMenu works in Electron but dispatching `contextmenu` events programmatically via CDP doesn't reliably trigger React's synthetic event handling.
+
+### MCP Server — sql.js instead of better-sqlite3
+**Problem**: The MCP server runs as a standalone Node.js process (system Node), but `better-sqlite3` is compiled against Electron's Node ABI (NODE_MODULE_VERSION 132 vs 127). Loading it from system Node crashes with `ERR_DLOPEN_FAILED`.
+**Fix**: Use `sql.js` (pure JavaScript SQLite via WASM). No native bindings, works with any Node version. Trade-off: entire DB loaded into memory, async init required (`await initSqlJs()`). Acceptable for read-only access to Bifrost's ~200KB database.
+**Files affected**: `src/mcp/db.ts`
+
+### MCP Server — ESM module resolution
+**Problem**: The project has `"type": "module"` in package.json. Setting `tsconfig.mcp.json` to `"module": "CommonJS"` produces `exports is not defined` errors at runtime. Setting to `"module": "Node16"` requires `.js` extensions on all imports.
+**Fix**: Use `"module": "ES2022"` + `"moduleResolution": "bundler"`. This accepts extensionless imports at compile time, and `tsx` handles resolution at runtime. Don't try to run compiled `out/mcp/*.js` with raw `node` — use `tsx` or fix extensions.
+**Files affected**: `tsconfig.mcp.json`
+
+### MCP Server — Credential vault inaccessible from standalone process
+**Problem**: Bifrost encrypts passwords with `electron.safeStorage`, which is tied to the Electron main process keychain context. The standalone MCP server cannot decrypt them.
+**Fix**: Intentional security boundary. MCP server supports: (1) SSH key-based auth (reads key files directly), (2) SSH agent forwarding, (3) explicit password parameter in `ssh_connect`. Never try to import `electron` in the MCP server.
+**Files affected**: `src/mcp/tools/ssh.tools.ts`
 
 ## Architecture
 
@@ -107,6 +150,29 @@ src/main/                     # Electron main process
     ssh-ca.ts                   # Vault API + local CA signing
     connection-health.ts        # Ping latency monitor
     config-sync.ts              # Git-based config sync
+
+src/mcp/                       # MCP Server (standalone process)
+  index.ts                     # Entry point, transport selection (stdio/HTTP)
+  db.ts                        # sql.js database access (reads Bifrost's SQLite)
+  types.ts                     # Shared types
+  transport/
+    http.ts                    # Streamable HTTP transport with Bearer auth
+  tools/                       # 42 MCP tools across 8 modules
+    connections.tools.ts       # list/get connections, groups, clusters, sessions
+    ssh.tools.ts               # connect, execute, disconnect
+    terminal.tools.ts          # create, execute, read buffer, destroy
+    sftp.tools.ts              # open, list, read, write, mkdir, delete, rename, stat
+    cluster.tools.ts           # parallel execute, multi-host diff
+    tunnels.tools.ts           # list, start, stop, create ad-hoc
+    discovery.tools.ts         # AWS, GCP, Azure, Docker, K8s, Terraform
+    automation.tools.ts        # snippets, scripts, variables
+    observability.tools.ts     # audit query, health ping
+  resources/
+    bifrost.resources.ts       # 9 read-only resources (bifrost://*)
+  prompts/
+    bifrost.prompts.ts         # 8 prompt templates (troubleshoot, deploy, etc.)
+  security/
+    command-filter.ts          # Dangerous command detection
 
 src/renderer/                  # React app
   stores/
@@ -154,3 +220,5 @@ Full spec in `docs/reference/DESIGN.md`. Key rules:
 - `docs/STATUS.md` — Feature-by-feature implementation status
 - `docs/reference/DESIGN.md` — Spectral Command design system
 - `docs/stitch-design-brief.md` — Design brief for Google Stitch
+- `docs/MCP_SERVER_PLAN.md` — MCP server design plan (phases, tools, security model)
+- `docs/MCP_ARCHITECTURE.md` — MCP server architecture guide (decisions, trade-offs, limitations)

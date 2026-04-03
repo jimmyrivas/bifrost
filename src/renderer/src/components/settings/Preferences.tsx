@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Monitor, Globe, Network, KeyRound, GitBranch, Puzzle, Shield, Lock, Bot, Keyboard } from 'lucide-react'
+import { Monitor, Globe, Network, KeyRound, GitBranch, Puzzle, Shield, Lock, Bot, Keyboard, Cpu } from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { Switch } from '@renderer/components/ui/switch'
@@ -13,11 +13,12 @@ import { KeyBindings } from './KeyBindings'
 import { KnownHostsPanel } from './KnownHostsPanel'
 import { setSecretRedactionEnabled, isSecretRedactionEnabled } from '@renderer/lib/secret-redactor'
 
-type PrefsTab = 'terminal' | 'ai' | 'ssh' | 'security' | 'keybindings' | 'language' | 'network' | 'keepass' | 'sync' | 'plugins'
+type PrefsTab = 'terminal' | 'ai' | 'ssh' | 'security' | 'keybindings' | 'language' | 'network' | 'keepass' | 'sync' | 'plugins' | 'mcp'
 
 const tabConfig: Array<{ id: PrefsTab; icon: typeof Monitor; labelKey: string; fallback: string }> = [
   { id: 'terminal', icon: Monitor, labelKey: 'prefs.terminal', fallback: 'Terminal' },
   { id: 'ai', icon: Bot, labelKey: 'prefs.ai', fallback: 'AI' },
+  { id: 'mcp', icon: Cpu, labelKey: 'prefs.mcp', fallback: 'MCP Server' },
   { id: 'ssh', icon: Shield, labelKey: 'prefs.ssh', fallback: 'SSH' },
   { id: 'security', icon: Lock, labelKey: 'prefs.security', fallback: 'Security' },
   { id: 'keybindings', icon: Keyboard, labelKey: 'prefs.keybindings', fallback: 'Key Bindings' },
@@ -301,6 +302,274 @@ export function Preferences(): JSX.Element {
         {activeTab === 'plugins' && (
           <PluginManager />
         )}
+
+        {activeTab === 'mcp' && (
+          <McpSettingsPanel />
+        )}
+      </div>
+    </div>
+  )
+}
+
+function McpSettingsPanel(): JSX.Element {
+  const [config, setConfig] = useState<{
+    enabled: boolean
+    transport: 'stdio' | 'http'
+    port: number
+    securityLevel: 0 | 1 | 2
+    autoStart: boolean
+    token: string
+  } | null>(null)
+  const [status, setStatus] = useState<{
+    running: boolean
+    pid: number | null
+    transport: 'stdio' | 'http' | null
+    port: number | null
+    uptime: number | null
+    logs: string[]
+  } | null>(null)
+  const [logs, setLogs] = useState<string[]>([])
+  const [showLogs, setShowLogs] = useState(false)
+  const [showToken, setShowToken] = useState(false)
+  const [actionStatus, setActionStatus] = useState<string | null>(null)
+  const logsEndRef = useRef<HTMLDivElement>(null)
+
+  const refresh = useCallback(async () => {
+    const [cfg, st] = await Promise.all([
+      window.bifrost?.mcp?.getConfig(),
+      window.bifrost?.mcp?.status()
+    ])
+    if (cfg) setConfig(cfg)
+    if (st) {
+      setStatus(st)
+      setLogs(st.logs)
+    }
+  }, [])
+
+  useEffect(() => {
+    refresh()
+    const interval = setInterval(refresh, 3000)
+    return () => clearInterval(interval)
+  }, [refresh])
+
+  useEffect(() => {
+    if (showLogs && logsEndRef.current) {
+      logsEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [logs, showLogs])
+
+  const updateConfig = async (updates: Partial<NonNullable<typeof config>>): Promise<void> => {
+    const result = await window.bifrost?.mcp?.setConfig(updates)
+    if (result) setConfig(result as NonNullable<typeof config>)
+  }
+
+  const handleStart = async (): Promise<void> => {
+    try {
+      setActionStatus('Starting...')
+      await updateConfig({ enabled: true })
+      await window.bifrost?.mcp?.start()
+      setActionStatus('Started')
+      setTimeout(() => { setActionStatus(null); refresh() }, 1500)
+    } catch (err) {
+      setActionStatus(`Error: ${(err as Error).message}`)
+      setTimeout(() => setActionStatus(null), 3000)
+    }
+  }
+
+  const handleStop = async (): Promise<void> => {
+    try {
+      setActionStatus('Stopping...')
+      await window.bifrost?.mcp?.stop()
+      setActionStatus('Stopped')
+      setTimeout(() => { setActionStatus(null); refresh() }, 1500)
+    } catch (err) {
+      setActionStatus(`Error: ${(err as Error).message}`)
+      setTimeout(() => setActionStatus(null), 3000)
+    }
+  }
+
+  const handleRegenToken = async (): Promise<void> => {
+    const token = await window.bifrost?.mcp?.generateToken()
+    if (token && config) {
+      setConfig({ ...config, token })
+      setShowToken(true)
+    }
+  }
+
+  if (!config) return <div className="text-xs text-[var(--on-surface-variant)]">Loading...</div>
+
+  const uptime = status?.uptime
+    ? `${Math.floor(status.uptime / 60000)}m ${Math.floor((status.uptime % 60000) / 1000)}s`
+    : null
+
+  return (
+    <div className="flex flex-col gap-5 max-w-lg">
+      <h3 className="text-sm font-semibold text-[var(--on-surface)]">MCP Server</h3>
+
+      {/* Status card */}
+      <div className={sectionCard}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <span className={cn(
+              'inline-block w-2 h-2 rounded-full',
+              status?.running ? 'bg-[#22c55e]' : 'bg-[#c7c4d7]/30'
+            )} />
+            <span className="text-xs font-medium text-[var(--on-surface)]">
+              {status?.running ? 'Running' : 'Stopped'}
+            </span>
+            {status?.running && status.pid && (
+              <span className="text-[10px] text-[var(--on-surface-variant)]">PID {status.pid}</span>
+            )}
+            {uptime && (
+              <span className="text-[10px] text-[var(--on-surface-variant)]">Uptime: {uptime}</span>
+            )}
+          </div>
+          <div className="flex gap-2">
+            {!status?.running ? (
+              <Button variant="spectral" size="sm" onClick={handleStart}>Start</Button>
+            ) : (
+              <Button variant="outline" size="sm" onClick={handleStop}>Stop</Button>
+            )}
+          </div>
+        </div>
+        {status?.running && config.transport === 'http' && (
+          <div className="text-[10px] text-[var(--on-surface-variant)] font-mono bg-[var(--surface-container-highest)] rounded px-2 py-1">
+            http://127.0.0.1:{config.port}/mcp
+          </div>
+        )}
+        {actionStatus && (
+          <span className="text-[10px] text-[var(--on-surface-variant)] mt-1 block">{actionStatus}</span>
+        )}
+      </div>
+
+      {/* Configuration */}
+      <div className={sectionCard}>
+        <div className="flex flex-col gap-4">
+          <div>
+            <label className={fieldLabel}>TRANSPORT</label>
+            <select
+              className={selectClass}
+              value={config.transport}
+              onChange={(e) => updateConfig({ transport: e.target.value as 'stdio' | 'http' })}
+            >
+              <option value="http">HTTP (remote access, web clients)</option>
+              <option value="stdio">Stdio (Claude Code, Cursor — local only)</option>
+            </select>
+            <span className="text-[9px] text-[var(--on-surface-variant)] mt-0.5 block">
+              {config.transport === 'http'
+                ? 'Starts an HTTP server for remote AI clients. Requires a token for security.'
+                : 'Stdio is used when Claude Code or Cursor spawns the MCP server as a child process.'}
+            </span>
+          </div>
+
+          {config.transport === 'http' && (
+            <div>
+              <label className={fieldLabel}>PORT</label>
+              <Input
+                type="number"
+                min={1024}
+                max={65535}
+                value={config.port}
+                onChange={(e) => updateConfig({ port: Number(e.target.value) })}
+              />
+            </div>
+          )}
+
+          <div>
+            <label className={fieldLabel}>SECURITY LEVEL</label>
+            <select
+              className={selectClass}
+              value={config.securityLevel}
+              onChange={(e) => updateConfig({ securityLevel: Number(e.target.value) as 0 | 1 | 2 })}
+            >
+              <option value={0}>0 — Read only (list connections, audit, health)</option>
+              <option value={1}>1 — Execute (SSH, terminal, discovery, snippets)</option>
+              <option value={2}>2 — Full (SFTP write, cluster broadcast, tunnel create)</option>
+            </select>
+          </div>
+
+          {config.transport === 'http' && (
+            <div>
+              <label className={fieldLabel}>API TOKEN</label>
+              <div className="flex gap-2">
+                <Input
+                  type={showToken ? 'text' : 'password'}
+                  value={config.token}
+                  readOnly
+                  className="font-mono text-xs flex-1"
+                  onClick={() => setShowToken(!showToken)}
+                />
+                <Button variant="outline" size="sm" onClick={handleRegenToken} title="Generate new token">
+                  Regenerate
+                </Button>
+              </div>
+              <span className="text-[9px] text-[var(--on-surface-variant)] mt-0.5 block">
+                Required for HTTP transport. Click to show/hide. Use as: Authorization: Bearer &lt;token&gt;
+              </span>
+            </div>
+          )}
+
+          <label className="flex items-center justify-between cursor-pointer">
+            <span className="text-xs text-[var(--on-surface-variant)]">Start MCP server with Bifrost</span>
+            <Switch
+              checked={config.autoStart}
+              onCheckedChange={(v) => updateConfig({ autoStart: v, enabled: v })}
+            />
+          </label>
+        </div>
+      </div>
+
+      {/* Claude Code config snippet */}
+      <div className={sectionCard}>
+        <label className={fieldLabel}>CLAUDE CODE CONFIGURATION</label>
+        <p className="text-[10px] text-[var(--on-surface-variant)] mb-2">
+          Add this to your Claude Code settings or run <code className="font-mono bg-[var(--surface-container-highest)] px-1 rounded">npm run mcp:install</code>
+        </p>
+        <pre className="text-[10px] font-mono bg-[#0d0d0f] rounded p-2 overflow-x-auto text-[#c7c4d7] leading-relaxed select-all">
+{config.transport === 'http'
+  ? `"bifrost": {
+  "url": "http://127.0.0.1:${config.port}/mcp",
+  "headers": {
+    "Authorization": "Bearer ${showToken ? config.token : '<token>'}"
+  }
+}`
+  : `"bifrost": {
+  "command": "npx",
+  "args": ["tsx", "src/mcp/index.ts"]
+}`}
+        </pre>
+      </div>
+
+      {/* Logs */}
+      <div className={sectionCard}>
+        <button
+          className="text-xs text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] transition-colors w-full text-left"
+          onClick={() => { setShowLogs(!showLogs); if (!showLogs) refresh() }}
+        >
+          {showLogs ? '▾ Hide Logs' : '▸ Show Logs'} ({logs.length} entries)
+        </button>
+        {showLogs && (
+          <div className="mt-2 max-h-48 overflow-y-auto bg-[#0d0d0f] rounded p-2">
+            {logs.length === 0 ? (
+              <span className="text-[10px] text-[#71717a] font-mono">No logs yet. Start the server to see output.</span>
+            ) : (
+              logs.map((line, i) => (
+                <div key={i} className="text-[10px] font-mono text-[#c7c4d7]/80 leading-relaxed whitespace-pre-wrap">
+                  {line}
+                </div>
+              ))
+            )}
+            <div ref={logsEndRef} />
+          </div>
+        )}
+      </div>
+
+      {/* Info */}
+      <div className={sectionCard}>
+        <p className="text-xs text-[var(--on-surface-variant)]">
+          The MCP server exposes Bifrost&apos;s infrastructure management (SSH, SFTP, tunnels, clusters, discovery)
+          to AI agents via the Model Context Protocol. 42 tools, 9 resources, 8 prompt templates.
+        </p>
       </div>
     </div>
   )
