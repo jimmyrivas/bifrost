@@ -182,7 +182,7 @@ export function TabBar(): JSX.Element {
               aria-selected={isActive}
               tabIndex={0}
               onKeyDown={(e) => { if (e.key === 'Enter') setActiveTab(tab.id) }}
-              title={`${tab.title}${tabNumber <= 9 ? ` (Ctrl+${tabNumber})` : ''}`}
+              title={`${tab.aiDetected && tab.aiCwd ? `${tab.aiCwd} — ${tab.aiDetected}` : tab.title}${tabNumber <= 9 ? ` (Ctrl+${tabNumber})` : ''}`}
             >
               {/* Tab number */}
               <span className={cn(
@@ -217,8 +217,13 @@ export function TabBar(): JSX.Element {
                   maxLength={60}
                 />
               ) : (
-                <span className="truncate max-w-[140px] font-[var(--font-ui)] text-[13px]">
-                  {tab.title}
+                <span className={cn(
+                  'truncate font-[var(--font-ui)] text-[13px]',
+                  tab.aiDetected ? 'max-w-[220px]' : 'max-w-[140px]'
+                )}>
+                  {tab.aiDetected && tab.aiCwd
+                    ? `${tab.aiCwd} — ${tab.aiDetected}`
+                    : tab.title}
                 </span>
               )}
               <button

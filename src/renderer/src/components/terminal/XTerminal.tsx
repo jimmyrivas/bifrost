@@ -29,13 +29,26 @@ export function XTerminal({ paneId, tabId, connectionId, terminalStyle, shell, s
   })
 
   // Update tab title from OSC sequences (#8)
+  // Also extract working directory for AI-detected tabs
   const renameTab = useSessionsStore((s) => s.renameTab)
   useEffect(() => {
     if (!tabId || !dynamicTitle) return
-    const { tabs } = useSessionsStore.getState()
-    const tab = tabs.find((t) => t.id === tabId)
+    const store = useSessionsStore.getState()
+    const tab = store.tabs.find((t) => t.id === tabId)
     if (tab?.lockTitle) return
     renameTab(tabId, dynamicTitle)
+
+    // Extract cwd from OSC title for AI tabs (shells set title to "user@host:~/path")
+    if (tab?.aiDetected && dynamicTitle) {
+      const cwdMatch = dynamicTitle.match(/[:]\s*([~/][^\s]+)/) ?? dynamicTitle.match(/([~/][\w./-]+)$/)
+      if (cwdMatch?.[1]) {
+        const full = cwdMatch[1].replace(/\/+$/, '')
+        const dirName = full.split('/').pop() || full
+        if (dirName && dirName !== tab.aiCwd) {
+          store.setAiCwd(tabId, dirName)
+        }
+      }
+    }
   }, [dynamicTitle, tabId, renameTab])
   const broadcastMode = useSessionsStore((s) => s.broadcastMode)
   const [showSearch, setShowSearch] = useState(false)

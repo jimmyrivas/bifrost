@@ -31,6 +31,7 @@ export interface Tab {
   shell?: string // shell path override for local terminals (e.g. /usr/bin/pwsh)
   shellArgs?: string[] // extra args for the shell (e.g. for gsudo elevation)
   aiDetected?: string // AI tool name detected in session (e.g. "claude", "ollama")
+  aiCwd?: string // Working directory name detected from AI agent output
 }
 
 export type BroadcastMode = 'hidden' | 'off' | 'panes' | 'all-tabs'
@@ -52,7 +53,8 @@ interface SessionsState {
   closeSplitPane: (tabId: string, paneId: string) => void
   setBroadcastMode: (mode: BroadcastMode) => void
   cycleBroadcastMode: () => void
-  setAiDetected: (tabId: string, tool: string) => void
+  setAiDetected: (tabId: string, tool: string, cwd?: string) => void
+  setAiCwd: (tabId: string, cwd: string) => void
   toggleLockTitle: (tabId: string) => void
   toggleMaximizePane: (paneId: string) => void
   getReconnectAttempts: (sessionId: string) => number
@@ -273,10 +275,18 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
     set({ broadcastMode: next })
   },
 
-  setAiDetected: (tabId: string, tool: string) => {
+  setAiDetected: (tabId: string, tool: string, cwd?: string) => {
     set((state) => ({
       tabs: state.tabs.map((t) =>
-        t.id === tabId ? { ...t, aiDetected: t.aiDetected || tool } : t
+        t.id === tabId ? { ...t, aiDetected: t.aiDetected || tool, aiCwd: cwd ?? t.aiCwd } : t
+      )
+    }))
+  },
+
+  setAiCwd: (tabId: string, cwd: string) => {
+    set((state) => ({
+      tabs: state.tabs.map((t) =>
+        t.id === tabId ? { ...t, aiCwd: cwd } : t
       )
     }))
   },
