@@ -1,13 +1,17 @@
-export type MultiplexerKind = 'dtach' | 'tmux'
+export type MultiplexerKind = 'dtach' | 'tmux' | 'zellij'
 
 export interface MultiplexerSession {
   name: string
-  /** dtach: socket path. tmux: session name (same as `name`). */
+  /** dtach: socket path. tmux/zellij: session name (same as `name`). */
   target: string
-  /** dtach: process holding socket detected via fuser/lsof. tmux: always true. */
+  /** dtach: process holding socket detected via fuser/lsof. tmux: always true.
+   *  zellij: false when the session is exited but still resurrectable. */
   alive: boolean
   /** tmux only: another client is currently attached. */
   attached: boolean
+  /** Lifecycle state. `exited` is zellij-specific (resurrectable from cache);
+   *  `stale` is dtach-specific (orphan socket, process gone). */
+  state?: 'alive' | 'exited' | 'stale'
   /** tmux only: creation timestamp in unix seconds. */
   createdAt?: number
 }
@@ -37,6 +41,8 @@ export interface AttachOptions {
   shell?: string
   /** Default true: create the session if it does not exist. */
   createIfMissing?: boolean
+  /** Zellij-only: run resurrected commands immediately on exited-session attach. */
+  forceRunCommands?: boolean
 }
 
 export interface Multiplexer {

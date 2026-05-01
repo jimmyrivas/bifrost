@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { dtach, parseDtachListOutput } from '../../src/main/services/multiplexer/dtach'
 import { tmux, parseTmuxListOutput } from '../../src/main/services/multiplexer/tmux'
+import { zellij, parseZellijListOutput } from '../../src/main/services/multiplexer/zellij'
 import { shellQuote, type RemoteExecutor } from '../../src/main/services/multiplexer/types'
 
 function fakeExecutor(
@@ -180,6 +181,128 @@ describe('parseTmuxListOutput', () => {
     const sessions = parseTmuxListOutput(stdout)
     expect(sessions).toHaveLength(1)
     expect(sessions[0].name).toBe('foo')
+  })
+})
+
+describe('zellij.buildAttachCmd', () => {
+  it('uses attach --create by default', () => {
+    expect(zellij.buildAttachCmd('work', {})).toBe(`zellij attach --create 'work'`)
+  })
+  it('uses plain attach when not creating', () => {
+    expect(zellij.buildAttachCmd('work', { createIfMissing: false })).toBe(
+      `zellij attach 'work'`
+    )
+  })
+  it('appends --force-run-commands when requested', () => {
+    expect(zellij.buildAttachCmd('work', { forceRunCommands: true })).toBe(
+      `zellij attach --create --force-run-commands 'work'`
+    )
+  })
+  it('combines no-create + force-run', () => {
+    expect(
+      zellij.buildAttachCmd('work', { createIfMissing: false, forceRunCommands: true })
+    ).toBe(`zellij attach --force-run-commands 'work'`)
+  })
+  it('quotes names with spaces or quotes', () => {
+    expect(zellij.buildAttachCmd(`it's a test`, {})).toContain(`'it'\\''s a test'`)
+  })
+})
+
+describe('parseZellijListOutput', () => {
+  it('parses alive sessions with creation metadata', () => {
+    const stdout = [
+      'session-a [Created 2 hours ago]',
+      'session-b [Created 30 minutes ago]'
+    ].join('\n')
+    const sessions = parseZellijListOutput(stdout)
+    expect(sessions).toHaveLength(2)
+    expect(sessions[0]).toMatchObject({ name: 'session-a', alive: true, state: 'alive' })
+    expect(sessions[1]).toMatchObject({ name: 'session-b', alive: true })
+  })
+
+  it('detects exited sessions via the EXITED marker', () => {
+    const stdout = [
+      'session-a [Created 2 hours ago]',
+      'old-session [EXITED - 3 hours ago]'
+    ].join('\n')
+    const sessions = parseZellijListOutput(stdout)
+    expect(sessions).toHaveLength(2)
+    expect(sessions[0]).toMatchObject({ name: 'session-a', alive: true, state: 'alive' })
+    expect(sessions[1]).toMatchObject({ name: 'old-session', alive: false, state: 'exited' })
+  })
+
+  it('marks (current) sessions as attached but still alive', () => {
+    const stdout = 'session-a [Created 5 minutes ago] (current)'
+    const sessions = parseZellijListOutput(stdout)
+    expect(sessions[0]).toMatchObject({
+      name: 'session-a',
+      alive: true,
+      attached: true,
+      state: 'alive'
+    })
+  })
+
+  it('is case-insensitive about EXITED to survive minor format drift', () => {
+    expect(parseZellijListOutput('s [Exited - 1 hour ago]')[0].state).toBe('exited')
+    expect(parseZellijListOutput('s [exited]')[0].state).toBe('exited')
+  })
+
+  it('skips empty lines and lines with no name', () => {
+    const stdout = '\n\n  \nsession-a [Created]\n'
+    const sessions = parseZellijListOutput(stdout)
+    expect(sessions).toHaveLength(1)
+    expect(sessions[0].name).toBe('session-a')
+  })
+})
+
+describe('zellij.probe', () => {
+  it('returns installed=false when binary missing', async () => {
+    const { exec } = fakeExecutor([{ match: /command -v zellij/, code: 1 }])
+    const r = await zellij.probe(exec, {})
+    expect(r.installed).toBe(false)
+    expect(r.sessions).toEqual([])
+  })
+
+  it('parses mixed alive + exited output when installed', async () => {
+    const { exec } = fakeExecutor([
+      { match: /command -v zellij/, stdout: '/usr/bin/zellij\n' },
+      {
+        match: /list-sessions/,
+        stdout: 'live-one [Created 1 hour ago]\nold-one [EXITED - 2 hours ago]\n'
+      }
+    ])
+    const r = await zellij.probe(exec, {})
+    expect(r.installed).toBe(true)
+    expect(r.sessions).toHaveLength(2)
+    expect(r.sessions[0].alive).toBe(true)
+    expect(r.sessions[1].state).toBe('exited')
+  })
+})
+
+describe('zellij.cleanStale', () => {
+  it('deletes only exited sessions and returns the count', async () => {
+    const calls: string[] = []
+    const exec: RemoteExecutor = {
+      run: async (cmd: string) => {
+        calls.push(cmd)
+        if (cmd.includes('list-sessions')) {
+          return {
+            stdout: 'alive-a [Created 1 hour ago]\nexited-b [EXITED]\nexited-c [EXITED]\n',
+            stderr: '',
+            code: 0
+          }
+        }
+        return { stdout: '', stderr: '', code: 0 }
+      }
+    }
+    const removed = await zellij.cleanStale(exec, {})
+    expect(removed).toBe(2)
+    const deleteCalls = calls.filter((c) => c.includes('delete-session'))
+    expect(deleteCalls).toHaveLength(2)
+    expect(deleteCalls[0]).toContain(`'exited-b'`)
+    expect(deleteCalls[1]).toContain(`'exited-c'`)
+    // Alive session must NOT be touched
+    expect(calls.some((c) => c.includes('delete-session') && c.includes('alive-a'))).toBe(false)
   })
 })
 

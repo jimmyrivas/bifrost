@@ -259,7 +259,11 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
         fallback = 'tmux'
       } else {
         preferred = cfg.preferred
-        if (preferred === 'dtach' && cfg.fallback === 'tmux') fallback = 'tmux'
+        // Honor whatever fallback the user picked, as long as it's a real kind
+        // and isn't the same as the primary.
+        if (cfg.fallback !== 'none' && cfg.fallback !== preferred) {
+          fallback = cfg.fallback
+        }
       }
 
       const probe = await window.bifrost.multiplexer.probe(transport, {
@@ -310,7 +314,8 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
 
       if (pick.type === 'attach') {
         return window.bifrost.multiplexer.buildAttachCmd(pick.kind, pick.target, {
-          createIfMissing: false
+          createIfMissing: false,
+          forceRunCommands: pick.forceRunCommands
         })
       }
 

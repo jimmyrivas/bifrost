@@ -3,8 +3,8 @@ import { Switch } from '@renderer/components/ui/switch'
 import { Input } from '@renderer/components/ui/input'
 import { cn } from '@renderer/lib/utils'
 
-export type MultiplexerKind = 'none' | 'dtach' | 'tmux' | 'auto'
-export type MultiplexerFallback = 'tmux' | 'none'
+export type MultiplexerKind = 'none' | 'dtach' | 'tmux' | 'zellij' | 'auto'
+export type MultiplexerFallback = 'none' | 'dtach' | 'tmux' | 'zellij'
 
 export interface MultiplexerConfig {
   preferred: MultiplexerKind
@@ -34,8 +34,16 @@ interface MultiplexerPanelProps {
 const KIND_OPTIONS: Array<{ id: MultiplexerKind; label: string; hint: string }> = [
   { id: 'none', label: 'NONE', hint: 'Plain shell. No persistence.' },
   { id: 'dtach', label: 'DTACH', hint: 'Lightweight, transparent persistence.' },
-  { id: 'tmux', label: 'TMUX', hint: 'Multi-window/pane persistence.' },
+  { id: 'tmux', label: 'TMUX', hint: 'Multi-window/pane persistence with scrollback.' },
+  { id: 'zellij', label: 'ZELLIJ', hint: 'Modern multiplexer with built-in scrollback, panes, and session resurrection.' },
   { id: 'auto', label: 'AUTO', hint: 'Try dtach first, fall back to tmux.' }
+]
+
+const FALLBACK_OPTIONS: Array<{ id: MultiplexerFallback; label: string }> = [
+  { id: 'none', label: 'None' },
+  { id: 'dtach', label: 'dtach' },
+  { id: 'tmux', label: 'tmux' },
+  { id: 'zellij', label: 'zellij' }
 ]
 
 export function MultiplexerPanel({
@@ -53,7 +61,8 @@ export function MultiplexerPanel({
 
   const enabled = value.preferred !== 'none'
   const showDtachOptions = value.preferred === 'dtach' || value.preferred === 'auto'
-  const showFallbackToggle = showDtachOptions
+  // Fallback applies whenever we have a non-tmux primary that could be missing.
+  const showFallback = value.preferred === 'dtach' || value.preferred === 'zellij' || value.preferred === 'auto'
 
   return (
     <div className={cn('flex flex-col gap-3', disabled && 'opacity-50 pointer-events-none')}>
@@ -67,7 +76,7 @@ export function MultiplexerPanel({
         <label className="block text-xs text-[var(--on-surface-variant)] mb-2">
           Session multiplexer
         </label>
-        <div className="grid grid-cols-4 gap-1">
+        <div className="grid grid-cols-5 gap-1">
           {KIND_OPTIONS.map((opt) => (
             <button
               key={opt.id}
@@ -91,19 +100,24 @@ export function MultiplexerPanel({
 
       {enabled && (
         <>
-          {showFallbackToggle && (
-            <label className="flex items-center justify-between cursor-pointer p-2 rounded-[var(--radius)] bg-[var(--surface-container-high)]">
-              <div>
-                <span className="text-xs text-[var(--on-surface)]">Fall back to tmux</span>
-                <span className="text-[9px] text-[var(--on-surface-variant)] block">
-                  If dtach is missing on the host, ask whether to use tmux instead.
-                </span>
-              </div>
-              <Switch
-                checked={value.fallback === 'tmux'}
-                onCheckedChange={(checked) => update('fallback', checked ? 'tmux' : 'none')}
-              />
-            </label>
+          {showFallback && (
+            <div className="rounded-[var(--radius)] bg-[var(--surface-container-high)] p-2">
+              <label className="text-xs text-[var(--on-surface)]">Fallback when primary is missing</label>
+              <p className="text-[9px] text-[var(--on-surface-variant)] mb-2">
+                If the preferred multiplexer is not installed on the host, probe the fallback so the picker can offer it.
+              </p>
+              <select
+                value={value.fallback}
+                onChange={(e) => update('fallback', e.target.value as MultiplexerFallback)}
+                className="h-8 w-full rounded-[var(--radius)] bg-[var(--surface-container-highest)] px-2 text-xs text-[var(--on-surface)] ghost-border outline-none"
+              >
+                {FALLBACK_OPTIONS
+                  .filter((f) => f.id === 'none' || f.id !== value.preferred)
+                  .map((f) => (
+                    <option key={f.id} value={f.id}>{f.label}</option>
+                  ))}
+              </select>
+            </div>
           )}
 
           {showDtachOptions && (

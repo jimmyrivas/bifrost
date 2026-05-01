@@ -11,13 +11,15 @@ import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { cn } from '@renderer/lib/utils'
 
-export type MultiplexerKind = 'dtach' | 'tmux'
+export type MultiplexerKind = 'dtach' | 'tmux' | 'zellij'
 
 export interface MultiplexerProbeSession {
   name: string
   target: string
   alive: boolean
   attached: boolean
+  /** dtach=stale (orphan socket), zellij=exited (resurrectable from cache). */
+  state?: 'alive' | 'exited' | 'stale'
   createdAt?: number
 }
 
@@ -36,7 +38,7 @@ export interface MultiplexerProbeResponse {
 
 export type MultiplexerPick =
   | { type: 'skip' }
-  | { type: 'attach'; kind: MultiplexerKind; target: string }
+  | { type: 'attach'; kind: MultiplexerKind; target: string; forceRunCommands?: boolean }
   | { type: 'create'; kind: MultiplexerKind; name: string }
 
 interface Props {
@@ -75,7 +77,8 @@ export function MultiplexerPicker({
   }, [active, probe])
 
   const liveSessions = activeProbe?.sessions.filter((s) => s.alive) ?? []
-  const staleSessions = activeProbe?.sessions.filter((s) => !s.alive) ?? []
+  const inactiveSessions = activeProbe?.sessions.filter((s) => !s.alive) ?? []
+  const [forceRunBy, setForceRunBy] = useState<Record<string, boolean>>({})
 
   // Available kinds (the ones we have a probe result for)
   const availableKinds: MultiplexerKind[] = []
@@ -86,9 +89,9 @@ export function MultiplexerPicker({
     setErrorMsg(null)
   }, [active])
 
-  const handleAttach = (target: string): void => {
+  const handleAttach = (target: string, forceRunCommands?: boolean): void => {
     if (!active) return
-    onResolve({ type: 'attach', kind: active, target })
+    onResolve({ type: 'attach', kind: active, target, forceRunCommands })
   }
 
   const handleCreate = (): void => {
@@ -115,7 +118,7 @@ export function MultiplexerPicker({
     }
   }
 
-  const handleCleanStale = async (): Promise<void> => {
+  const handleCleanInactive = async (): Promise<void> => {
     if (!active || !onCleanStale) return
     setBusy(true)
     try {
@@ -123,9 +126,9 @@ export function MultiplexerPicker({
       if (activeProbe) {
         activeProbe.sessions = activeProbe.sessions.filter((s) => s.alive)
       }
-      setErrorMsg(`Removed ${removed} stale session${removed === 1 ? '' : 's'}.`)
+      setErrorMsg(`Removed ${removed} inactive session${removed === 1 ? '' : 's'}.`)
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to clean stale')
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to clean inactive')
     } finally {
       setBusy(false)
     }
@@ -236,45 +239,86 @@ export function MultiplexerPicker({
           </div>
         )}
 
-        {/* Stale sessions (dtach only) */}
-        {active === 'dtach' && staleSessions.length > 0 && (
+        {/* Inactive sessions — dtach=stale (orphan socket), zellij=exited (resurrectable) */}
+        {active && inactiveSessions.length > 0 && (
           <div className="flex flex-col gap-1">
             <div className="flex items-center justify-between px-1">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--on-surface-variant)]">
-                Stale sockets ({staleSessions.length})
+                Inactive sessions ({inactiveSessions.length})
               </span>
               {onCleanStale && (
                 <button
-                  onClick={handleCleanStale}
+                  onClick={handleCleanInactive}
                   disabled={busy}
                   className="flex items-center gap-1 text-[10px] text-[var(--on-surface-variant)] hover:text-[var(--error,#f87171)] disabled:opacity-40"
+                  title={
+                    active === 'dtach'
+                      ? 'Remove orphan sockets'
+                      : active === 'zellij'
+                        ? 'Delete exited sessions from cache (no longer resurrectable)'
+                        : 'Clean inactive'
+                  }
                 >
                   <Trash2 size={10} />
-                  Clean
+                  Clean inactive
                 </button>
               )}
             </div>
-            {staleSessions.map((s) => (
-              <div
-                key={s.target}
-                className="flex items-center gap-2 rounded-[var(--radius)] bg-[var(--surface-container-highest)]/50 px-2 py-1 opacity-60"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-[var(--on-surface-variant)]/40 shrink-0" />
-                <span className="text-xs font-[family-name:var(--font-mono)] text-[var(--on-surface-variant)] truncate flex-1">
-                  {s.name}
-                </span>
-                <span className="text-[9px] text-[var(--on-surface-variant)] truncate">
-                  {s.target}
-                </span>
-              </div>
-            ))}
+            {inactiveSessions.map((s) => {
+              const isResurrectable = active === 'zellij' && s.state === 'exited'
+              const badge = s.state === 'exited' ? 'exited' : s.state === 'stale' ? 'stale' : 'inactive'
+              return (
+                <div
+                  key={s.target}
+                  className={cn(
+                    'flex flex-col gap-1 rounded-[var(--radius)] bg-[var(--surface-container-highest)]/50 px-2 py-1.5',
+                    !isResurrectable && 'opacity-60'
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--on-surface-variant)]/40 shrink-0" />
+                    <span className="text-xs font-[family-name:var(--font-mono)] text-[var(--on-surface)] truncate flex-1">
+                      {s.name}
+                    </span>
+                    <span className="text-[9px] text-[var(--on-surface-variant)] uppercase tracking-wider shrink-0">
+                      {badge}
+                    </span>
+                    {isResurrectable && (
+                      <button
+                        onClick={() => handleAttach(s.target, forceRunBy[s.target])}
+                        disabled={busy}
+                        className="text-[10px] font-semibold text-[#6bd5ff] hover:underline disabled:opacity-40"
+                      >
+                        Resurrect →
+                      </button>
+                    )}
+                  </div>
+                  {isResurrectable && (
+                    <label className="flex items-center gap-2 pl-3 text-[9px] text-[var(--on-surface-variant)] cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={!!forceRunBy[s.target]}
+                        onChange={(e) =>
+                          setForceRunBy((prev) => ({ ...prev, [s.target]: e.target.checked }))
+                        }
+                        className="w-3 h-3 accent-[#6bd5ff]"
+                      />
+                      <span>
+                        Force-run saved commands on resurrect
+                        <span className="text-[var(--on-surface-variant)]/60"> (else: press ENTER inside the session)</span>
+                      </span>
+                    </label>
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
 
         {/* Empty state */}
-        {active && liveSessions.length === 0 && staleSessions.length === 0 && (
+        {active && liveSessions.length === 0 && inactiveSessions.length === 0 && (
           <div className="text-center text-xs text-[var(--on-surface-variant)] py-3">
-            No active {active} sessions on this host.
+            No {active} sessions on this host.
           </div>
         )}
 

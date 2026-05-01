@@ -351,24 +351,24 @@ export interface BifrostApi {
   multiplexer: {
     probe: (
       transport: { type: 'ssh'; sessionId: string } | { type: 'local' },
-      req: { preferred: 'dtach' | 'tmux'; fallback?: 'dtach' | 'tmux'; socketDir?: string }
+      req: { preferred: 'dtach' | 'tmux' | 'zellij'; fallback?: 'dtach' | 'tmux' | 'zellij'; socketDir?: string }
     ) => Promise<{
       primary: MultiplexerProbeResult
       fallback?: MultiplexerProbeResult
     }>
     buildAttachCmd: (
-      kind: 'dtach' | 'tmux',
+      kind: 'dtach' | 'tmux' | 'zellij',
       target: string,
-      opts?: { shell?: string; createIfMissing?: boolean }
+      opts?: { shell?: string; createIfMissing?: boolean; forceRunCommands?: boolean }
     ) => Promise<string>
     killSession: (
       transport: { type: 'ssh'; sessionId: string } | { type: 'local' },
-      kind: 'dtach' | 'tmux',
+      kind: 'dtach' | 'tmux' | 'zellij',
       target: string
     ) => Promise<void>
     cleanStale: (
       transport: { type: 'ssh'; sessionId: string } | { type: 'local' },
-      kind: 'dtach' | 'tmux',
+      kind: 'dtach' | 'tmux' | 'zellij',
       socketDir?: string
     ) => Promise<number>
   }

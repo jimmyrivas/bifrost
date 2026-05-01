@@ -67,8 +67,8 @@ export function MultiplexerManager({
     setBusy(true)
     setError(null)
     try {
-      // Probe both tools so the user can switch
-      const [primary, fallback] = await Promise.all([
+      // Probe all three tools so the user can switch between them.
+      const [tmuxR, dtachR, zellijR] = await Promise.all([
         window.bifrost.multiplexer.probe(transport, {
           preferred: 'tmux',
           socketDir: config.socketDir
@@ -76,9 +76,18 @@ export function MultiplexerManager({
         window.bifrost.multiplexer.probe(transport, {
           preferred: 'dtach',
           socketDir: config.socketDir
+        }),
+        window.bifrost.multiplexer.probe(transport, {
+          preferred: 'zellij',
+          socketDir: config.socketDir
         })
       ])
-      setProbe({ primary: primary.primary, fallback: fallback.primary })
+      // Stash all three results in a single "extended" probe shape (panel-internal).
+      setProbe({
+        primary: tmuxR.primary,
+        fallback: dtachR.primary,
+        zellij: zellijR.primary
+      } as MultiplexerProbeResponse & { zellij?: MultiplexerProbeResult })
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -91,10 +100,14 @@ export function MultiplexerManager({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [terminalId])
 
-  const activeProbe: MultiplexerProbeResult | undefined =
-    probe?.primary.kind === active ? probe.primary
-    : probe?.fallback?.kind === active ? probe.fallback
-    : undefined
+  const activeProbe: MultiplexerProbeResult | undefined = (() => {
+    if (!probe) return undefined
+    if (probe.primary.kind === active) return probe.primary
+    if (probe.fallback?.kind === active) return probe.fallback
+    const ext = probe as MultiplexerProbeResponse & { zellij?: MultiplexerProbeResult }
+    if (ext.zellij?.kind === active) return ext.zellij
+    return undefined
+  })()
 
   const handleAttach = async (target: string): Promise<void> => {
     const cmd = await window.bifrost.multiplexer.buildAttachCmd(active, target, {
@@ -130,11 +143,11 @@ export function MultiplexerManager({
     }
   }
 
-  const handleCleanStale = async (): Promise<void> => {
+  const handleCleanInactive = async (): Promise<void> => {
     if (!transport) return
     setBusy(true)
     try {
-      await window.bifrost.multiplexer.cleanStale(transport, 'dtach', config.socketDir)
+      await window.bifrost.multiplexer.cleanStale(transport, active, config.socketDir)
       await refresh()
     } finally {
       setBusy(false)
@@ -173,9 +186,11 @@ export function MultiplexerManager({
 
       {/* Kind tabs */}
       <div className="flex gap-1">
-        {(['tmux', 'dtach'] as const).map((kind) => {
+        {(['tmux', 'dtach', 'zellij'] as const).map((kind) => {
+          const ext = probe as (MultiplexerProbeResponse & { zellij?: MultiplexerProbeResult }) | null
           const r = probe?.primary.kind === kind ? probe.primary
                   : probe?.fallback?.kind === kind ? probe.fallback
+                  : ext?.zellij?.kind === kind ? ext.zellij
                   : undefined
           return (
             <button
@@ -243,16 +258,16 @@ export function MultiplexerManager({
         </div>
       )}
 
-      {active === 'dtach' && staleSessions.length > 0 && (
+      {(active === 'dtach' || active === 'zellij') && staleSessions.length > 0 && (
         <div className="flex items-center justify-between text-[10px] text-[var(--on-surface-variant)] px-1">
-          <span>{staleSessions.length} stale</span>
+          <span>{staleSessions.length} inactive</span>
           <button
-            onClick={handleCleanStale}
+            onClick={handleCleanInactive}
             disabled={busy}
             className="flex items-center gap-1 hover:text-[var(--error,#f87171)] disabled:opacity-40"
           >
             <Trash2 size={10} />
-            Clean
+            Clean inactive
           </button>
         </div>
       )}
