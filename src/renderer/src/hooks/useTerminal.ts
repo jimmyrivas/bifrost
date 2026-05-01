@@ -10,6 +10,15 @@ import { getSchemeByName, getDefaultScheme } from '@renderer/lib/color-schemes'
 import { scanForErrors, type DetectedError } from '@renderer/lib/error-patterns'
 import { redactSecrets } from '@renderer/lib/secret-redactor'
 import { detectZmodem, notifyZmodemDetected } from '@renderer/lib/zmodem-handler'
+import {
+  defaultMultiplexer,
+  type MultiplexerConfig
+} from '@renderer/components/connections/MultiplexerPanel'
+import type {
+  MultiplexerKind,
+  MultiplexerPick,
+  MultiplexerProbeResponse
+} from '@renderer/components/terminal/MultiplexerPicker'
 
 interface UseTerminalOptions {
   paneId: string
@@ -26,6 +35,34 @@ interface PasteRequest {
   resolve: (confirmed: boolean) => void
 }
 
+type MuxTransport =
+  | { type: 'ssh'; sessionId: string }
+  | { type: 'local' }
+
+interface PendingMuxPick {
+  hostLabel: string
+  defaultPrefix: string
+  probe: MultiplexerProbeResponse
+  socketDir: string
+  transport: MuxTransport
+  resolve: (pick: MultiplexerPick) => void
+}
+
+function parseMultiplexerConfig(sshConfig?: string | null): MultiplexerConfig {
+  if (!sshConfig) return { ...defaultMultiplexer }
+  try {
+    const cfg = JSON.parse(sshConfig)
+    return { ...defaultMultiplexer, ...(cfg.multiplexer ?? {}) }
+  } catch {
+    return { ...defaultMultiplexer }
+  }
+}
+
+function resolveDefaultPrefix(template: string, connectionName: string): string {
+  const slug = connectionName.replace(/\s+/g, '-').toLowerCase()
+  return template.replace('{conn}', slug || 'session')
+}
+
 interface UseTerminalReturn {
   containerRef: React.RefObject<HTMLDivElement | null>
   terminalIdRef: React.RefObject<string | null>
@@ -36,6 +73,8 @@ interface UseTerminalReturn {
   pendingPaste: PasteRequest | null
   confirmPaste: () => void
   cancelPaste: () => void
+  pendingMuxPick: PendingMuxPick | null
+  resolveMuxPick: (pick: MultiplexerPick) => void
   dynamicTitle: string | null
   detectedErrors: DetectedError[]
 }
@@ -104,6 +143,7 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
   const colorScheme = terminalStyle?.colorScheme || globalColorScheme
 
   const [pendingPaste, setPendingPaste] = useState<PasteRequest | null>(null)
+  const [pendingMuxPick, setPendingMuxPick] = useState<PendingMuxPick | null>(null)
   const detectedErrorsRef = useRef<DetectedError[]>([])
   const dynamicTitleRef = useRef<string | null>(null)
   const errorBufferRef = useRef('')
@@ -195,6 +235,97 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
       return null
     })
   }, [])
+
+  const resolveMuxPick = useCallback((pick: MultiplexerPick) => {
+    setPendingMuxPick((prev) => {
+      if (prev) prev.resolve(pick)
+      return null
+    })
+  }, [])
+
+  const resolveMultiplexerCmd = useCallback(
+    async (
+      transport: MuxTransport,
+      cfg: MultiplexerConfig,
+      hostLabel: string,
+      connectionName: string
+    ): Promise<string | undefined> => {
+      if (cfg.preferred === 'none') return undefined
+
+      let preferred: MultiplexerKind
+      let fallback: MultiplexerKind | undefined
+      if (cfg.preferred === 'auto') {
+        preferred = 'dtach'
+        fallback = 'tmux'
+      } else {
+        preferred = cfg.preferred
+        if (preferred === 'dtach' && cfg.fallback === 'tmux') fallback = 'tmux'
+      }
+
+      const probe = await window.bifrost.multiplexer.probe(transport, {
+        preferred,
+        fallback,
+        socketDir: cfg.socketDir
+      })
+
+      if (!probe.primary.installed && !probe.fallback?.installed) {
+        // Neither installed: notify user via xterm and proceed plain.
+        const installHint = preferred === 'dtach'
+          ? 'sudo apt install dtach   (or dnf/yum/pacman equivalent)'
+          : 'sudo apt install tmux    (or dnf/yum/pacman equivalent)'
+        terminalRef.current?.write(
+          `\r\n\x1b[33mMultiplexer ${preferred} not installed on ${hostLabel}.\x1b[0m\r\n` +
+          `\x1b[90mTo enable session persistence: ${installHint}\x1b[0m\r\n`
+        )
+        return undefined
+      }
+
+      // Auto-attach: only when primary installed, exactly 1 live session, no fallback sessions.
+      if (cfg.autoAttachSingle && !cfg.alwaysAsk && probe.primary.installed) {
+        const primaryLive = probe.primary.sessions.filter((s) => s.alive)
+        const fallbackLive =
+          probe.fallback?.sessions.filter((s) => s.alive).length ?? 0
+        if (primaryLive.length === 1 && fallbackLive === 0) {
+          return window.bifrost.multiplexer.buildAttachCmd(
+            probe.primary.kind,
+            primaryLive[0].target,
+            { createIfMissing: false }
+          )
+        }
+      }
+
+      const defaultPrefix = resolveDefaultPrefix(cfg.sessionPrefix, connectionName)
+      const pick = await new Promise<MultiplexerPick>((resolve) => {
+        setPendingMuxPick({
+          hostLabel,
+          defaultPrefix,
+          probe,
+          socketDir: cfg.socketDir,
+          transport,
+          resolve
+        })
+      })
+
+      if (pick.type === 'skip') return undefined
+
+      if (pick.type === 'attach') {
+        return window.bifrost.multiplexer.buildAttachCmd(pick.kind, pick.target, {
+          createIfMissing: false
+        })
+      }
+
+      // create
+      let target = pick.name
+      if (pick.kind === 'dtach') {
+        const dir = (cfg.socketDir || '~/.dtach').replace(/\/$/, '')
+        target = `${dir}/${pick.name}.sock`
+      }
+      return window.bifrost.multiplexer.buildAttachCmd(pick.kind, target, {
+        createIfMissing: true
+      })
+    },
+    []
+  )
 
   // Update theme when colorScheme preference changes
   useEffect(() => {
@@ -418,8 +549,18 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
             onTerminalCreated?.(`ssh:${sid}`)
             useSessionsStore.getState().resetReconnectAttempts(connId)
 
+            const conn = await window.bifrost.connections.get(connId).catch(() => null)
+            const muxCmd = conn?.method === 'mosh'
+              ? undefined
+              : await resolveMultiplexerCmd(
+                  { type: 'ssh', sessionId: sid },
+                  parseMultiplexerConfig(conn?.sshConfig),
+                  conn?.host || conn?.name || 'host',
+                  conn?.name || 'session'
+                )
+
             const { cols, rows } = terminal
-            await window.bifrost.ssh.openShell(sid, cols, rows, connectionId)
+            await window.bifrost.ssh.openShell(sid, cols, rows, connectionId, muxCmd)
 
             terminal.write('\x1b[32mReconnected.\x1b[0m\r\n')
 
@@ -445,11 +586,11 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
     if (connectionId) {
       // Detect protocol method for this connection
       const initConnection = async (): Promise<void> => {
-        let method = 'ssh'
-        try {
-          const conn = await window.bifrost.connections.get(connectionId)
-          if (conn?.method) method = conn.method
-        } catch { /* default to ssh */ }
+        const conn = await window.bifrost.connections.get(connectionId).catch(() => null)
+        const method = conn?.method ?? 'ssh'
+        const muxConfig = parseMultiplexerConfig(conn?.sshConfig)
+        const hostLabel = conn?.host || conn?.name || 'host'
+        const connectionName = conn?.name || 'session'
 
         if (method === 'mosh') {
           // === MOSH MODE ===
@@ -514,8 +655,15 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
               terminalIdRef.current = `ssh:${sid}`
               onTerminalCreated?.(`ssh:${sid}`)
 
+              const muxCmd = await resolveMultiplexerCmd(
+                { type: 'ssh', sessionId: sid },
+                muxConfig,
+                hostLabel,
+                connectionName
+              )
+
               const { cols, rows } = terminal
-              await window.bifrost.ssh.openShell(sid, cols, rows, connectionId)
+              await window.bifrost.ssh.openShell(sid, cols, rows, connectionId, muxCmd)
 
               terminal.onData(async (data: string) => {
                 if (data.includes('\n') || data.includes('\r\n')) {
@@ -671,6 +819,8 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
     pendingPaste,
     confirmPaste,
     cancelPaste,
+    pendingMuxPick,
+    resolveMuxPick,
     dynamicTitle: dynamicTitleRef.current,
     detectedErrors: detectedErrorsRef.current
   }

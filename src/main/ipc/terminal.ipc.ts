@@ -29,12 +29,17 @@ let idCounter = 0
 export function registerTerminalIpc(mainWindow: BrowserWindow): void {
   setMainWindow(mainWindow)
 
-  ipcMain.handle('terminal:create', (_event, cols: number, rows: number, shell?: string, shellArgs?: string[]) => {
+  ipcMain.handle('terminal:create', (_event, cols: number, rows: number, shell?: string, shellArgs?: string[], multiplexerCmd?: string) => {
     const id = `terminal-${++idCounter}`
     const shellPath = shell || getDefaultShell()
     const args = shellArgs ?? []
 
-    const ptyProcess = pty.spawn(shellPath, args, {
+    // When a multiplexer command is provided, wrap with /bin/sh -c so the
+    // local PTY runs dtach/tmux directly instead of an interactive shell.
+    const spawnPath = multiplexerCmd ? '/bin/sh' : shellPath
+    const spawnArgs = multiplexerCmd ? ['-c', multiplexerCmd] : args
+
+    const ptyProcess = pty.spawn(spawnPath, spawnArgs, {
       name: 'xterm-256color',
       cols,
       rows,

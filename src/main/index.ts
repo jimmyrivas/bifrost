@@ -28,6 +28,7 @@ import { registerRemoteCommandsIpc } from './ipc/remote-commands.ipc'
 import { registerTunnelsIpc, autoStartTunnels } from './ipc/tunnels.ipc'
 import { registerNotesIpc } from './ipc/notes.ipc'
 import { registerMcpIpc, autoStartMcp, stopMcpOnExit } from './ipc/mcp.ipc'
+import { registerMultiplexerIpc } from './ipc/multiplexer.ipc'
 import { macroExecutor } from './services/macro-executor'
 import { auditLogger } from './services/audit-log'
 import { sessionLogger } from './services/session-logger'
@@ -313,6 +314,7 @@ app.whenReady().then(() => {
   registerExpectIpc(mainWindow)
   registerProtocolsIpc(mainWindow)
   registerAiIpc(mainWindow)
+  registerMultiplexerIpc()
 
   try {
     trayManager.create()

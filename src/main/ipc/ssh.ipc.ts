@@ -49,8 +49,15 @@ export function registerSshIpc(mainWindow: BrowserWindow): void {
 
   ipcMain.handle(
     'ssh:openShell',
-    async (_event, sessionId: string, cols: number, rows: number, connectionId?: string): Promise<void> => {
-      const stream = await sshManager.openShell(sessionId, cols, rows)
+    async (
+      _event,
+      sessionId: string,
+      cols: number,
+      rows: number,
+      connectionId?: string,
+      multiplexerCmd?: string
+    ): Promise<void> => {
+      const stream = await sshManager.openShell(sessionId, cols, rows, multiplexerCmd)
 
       // Set owner to the window that opened the shell
       const senderWin = BrowserWindow.fromWebContents(_event.sender)

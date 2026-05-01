@@ -7,12 +7,17 @@ import { Switch } from '@renderer/components/ui/switch'
 import { cn } from '@renderer/lib/utils'
 import { useConnectionsStore } from '@renderer/stores/connections.store'
 import { SshOptionsPanel } from './SshOptionsPanel'
+import {
+  MultiplexerPanel,
+  defaultMultiplexer,
+  type MultiplexerConfig
+} from './MultiplexerPanel'
 import { ConnectionStats } from './ConnectionStats'
 import { COLOR_SCHEMES } from '@renderer/lib/color-schemes'
 
 type Method = 'ssh' | 'mosh' | 'rdp' | 'vnc' | 'telnet' | 'local' | 'ftp' | 'custom'
 type AuthType = 'userpass' | 'key' | 'key_pass' | 'fido2' | 'manual'
-type FormTab = 'general' | 'advanced' | 'hooks' | 'terminal'
+type FormTab = 'general' | 'advanced' | 'session' | 'hooks' | 'terminal'
 
 interface ConnectionFormProps {
   connectionId?: string
@@ -54,6 +59,7 @@ interface FormState {
   customCommand: string
   tags: string
   sshOptions: Record<string, string>
+  multiplexer: MultiplexerConfig
   termColorScheme: string
   termBackgroundTint: string
   termBackgroundPreset: 'production' | 'staging' | 'development' | 'custom'
@@ -82,6 +88,7 @@ const defaultForm: FormState = {
   customCommand: '',
   tags: '',
   sshOptions: {},
+  multiplexer: { ...defaultMultiplexer },
   termColorScheme: '',
   termBackgroundTint: '#0d0d0f',
   termBackgroundPreset: 'development',
@@ -109,6 +116,7 @@ const AUTH_TABS: Array<{ id: AuthType; label: string }> = [
 
 const METHODS_WITH_TERMINAL: Method[] = ['ssh', 'mosh', 'telnet', 'local', 'custom']
 const METHODS_WITH_HOOKS: Method[] = ['ssh', 'mosh', 'telnet', 'local', 'custom']
+const METHODS_WITH_MULTIPLEXER: Method[] = ['ssh', 'mosh', 'local']
 
 function getFormTabs(method: Method): Array<{ id: FormTab; label: string }> {
   const tabs: Array<{ id: FormTab; label: string }> = [
@@ -116,6 +124,9 @@ function getFormTabs(method: Method): Array<{ id: FormTab; label: string }> {
   ]
   if (method === 'ssh' || method === 'mosh') {
     tabs.push({ id: 'advanced', label: 'ADVANCED SSH' })
+  }
+  if (METHODS_WITH_MULTIPLEXER.includes(method)) {
+    tabs.push({ id: 'session', label: 'SESSION' })
   }
   if (METHODS_WITH_HOOKS.includes(method)) {
     tabs.push({ id: 'hooks', label: 'HOOKS' })
@@ -194,6 +205,12 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
               return cfg.options ?? {}
             } catch { return {} }
           })(),
+          multiplexer: (() => {
+            try {
+              const cfg = conn.sshConfig ? JSON.parse(conn.sshConfig) : {}
+              return { ...defaultMultiplexer, ...(cfg.multiplexer ?? {}) }
+            } catch { return { ...defaultMultiplexer } }
+          })(),
           ...(() => {
             try {
               const tc = conn.terminalConfig ? JSON.parse(conn.terminalConfig) : {}
@@ -255,6 +272,7 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
       if (form.tags.trim()) sshConfigObj.tags = form.tags.trim()
       if (form.totpSecret.trim()) sshConfigObj.totpSecret = form.totpSecret.trim()
       if (Object.keys(form.sshOptions).length > 0) sshConfigObj.options = form.sshOptions
+      if (form.multiplexer.preferred !== 'none') sshConfigObj.multiplexer = form.multiplexer
       const sshConfig = Object.keys(sshConfigObj).length > 0 ? JSON.stringify(sshConfigObj) : undefined
 
       const termConfigObj: Record<string, unknown> = {}
@@ -648,6 +666,26 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
             <SshOptionsPanel
               options={form.sshOptions}
               onChange={(opts) => set('sshOptions', opts)}
+            />
+          </div>
+        )}
+
+        {/* ═══ SESSION TAB ═══ */}
+        {activeTab === 'session' && (
+          <div className="flex flex-col gap-4">
+            <p className="text-xs text-[var(--on-surface-variant)]">
+              Persist your shell across reconnects with dtach or tmux. Bifrost will probe the host
+              for the chosen tool and offer existing sessions to attach.
+            </p>
+            <MultiplexerPanel
+              value={form.multiplexer}
+              onChange={(next) => set('multiplexer', next)}
+              disabled={form.method === 'mosh'}
+              disabledReason={
+                form.method === 'mosh'
+                  ? 'Mosh already keeps sessions alive across disconnects, so a multiplexer is not needed.'
+                  : undefined
+              }
             />
           </div>
         )}

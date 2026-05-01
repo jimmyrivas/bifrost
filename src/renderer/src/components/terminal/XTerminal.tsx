@@ -4,6 +4,7 @@ import { useTerminal } from '@renderer/hooks/useTerminal'
 import { useSessionsStore, type TerminalStyle } from '@renderer/stores/sessions.store'
 import { TerminalContextMenu } from './TerminalContextMenu'
 import { PasteWarning } from './PasteWarning'
+import { MultiplexerPicker } from './MultiplexerPicker'
 import { cn } from '@renderer/lib/utils'
 import '@xterm/xterm/css/xterm.css'
 
@@ -18,7 +19,17 @@ interface XTerminalProps {
 }
 
 export function XTerminal({ paneId, tabId, connectionId, terminalStyle, shell, shellArgs, onTerminalCreated }: XTerminalProps): JSX.Element {
-  const { containerRef, terminalIdRef, pendingPaste, confirmPaste, cancelPaste, dynamicTitle, detectedErrors } = useTerminal({
+  const {
+    containerRef,
+    terminalIdRef,
+    pendingPaste,
+    confirmPaste,
+    cancelPaste,
+    pendingMuxPick,
+    resolveMuxPick,
+    dynamicTitle,
+    detectedErrors
+  } = useTerminal({
     paneId,
     tabId,
     connectionId,
@@ -270,6 +281,26 @@ export function XTerminal({ paneId, tabId, connectionId, terminalStyle, shell, s
           text={pendingPaste.text}
           onConfirm={confirmPaste}
           onCancel={cancelPaste}
+        />
+      )}
+
+      {/* Multiplexer picker */}
+      {pendingMuxPick && (
+        <MultiplexerPicker
+          hostLabel={pendingMuxPick.hostLabel}
+          defaultPrefix={pendingMuxPick.defaultPrefix}
+          probe={pendingMuxPick.probe}
+          onResolve={resolveMuxPick}
+          onKillSession={async (kind, target) => {
+            await window.bifrost.multiplexer.killSession(pendingMuxPick.transport, kind, target)
+          }}
+          onCleanStale={async (kind) => {
+            return window.bifrost.multiplexer.cleanStale(
+              pendingMuxPick.transport,
+              kind,
+              pendingMuxPick.socketDir
+            )
+          }}
         />
       )}
     </div>

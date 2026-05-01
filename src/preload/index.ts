@@ -13,6 +13,7 @@ import type { AuditEvent, AuditEventType } from '../main/services/audit-log'
 import type { SignedCertificateResult, VaultSignOptions, LocalCaSignOptions } from '../main/services/ssh-ca'
 import type { RecordingInfo } from '../main/services/session-recorder'
 import type { TerraformHost } from '../main/services/terraform-parser'
+import type { ProbeResult as MultiplexerProbeResult } from '../main/services/multiplexer'
 
 export interface AiChunkCallback {
   (text: string, done: boolean): void
@@ -20,7 +21,7 @@ export interface AiChunkCallback {
 
 export interface BifrostApi {
   terminal: {
-    create: (cols: number, rows: number, shell?: string, shellArgs?: string[]) => Promise<string>
+    create: (cols: number, rows: number, shell?: string, shellArgs?: string[], multiplexerCmd?: string) => Promise<string>
     write: (id: string, data: string) => void
     resize: (id: string, cols: number, rows: number) => void
     destroy: (id: string) => Promise<void>
@@ -72,7 +73,7 @@ export interface BifrostApi {
   }
   ssh: {
     connect: (connectionId: string) => Promise<string>
-    openShell: (sessionId: string, cols: number, rows: number, connectionId?: string) => Promise<void>
+    openShell: (sessionId: string, cols: number, rows: number, connectionId?: string, multiplexerCmd?: string) => Promise<void>
     write: (sessionId: string, data: string) => void
     resize: (sessionId: string, cols: number, rows: number) => void
     disconnect: (sessionId: string) => Promise<void>
@@ -347,6 +348,30 @@ export interface BifrostApi {
     getLogs: (lines?: number) => Promise<string[]>
     generateToken: () => Promise<string>
   }
+  multiplexer: {
+    probe: (
+      transport: { type: 'ssh'; sessionId: string } | { type: 'local' },
+      req: { preferred: 'dtach' | 'tmux'; fallback?: 'dtach' | 'tmux'; socketDir?: string }
+    ) => Promise<{
+      primary: MultiplexerProbeResult
+      fallback?: MultiplexerProbeResult
+    }>
+    buildAttachCmd: (
+      kind: 'dtach' | 'tmux',
+      target: string,
+      opts?: { shell?: string; createIfMissing?: boolean }
+    ) => Promise<string>
+    killSession: (
+      transport: { type: 'ssh'; sessionId: string } | { type: 'local' },
+      kind: 'dtach' | 'tmux',
+      target: string
+    ) => Promise<void>
+    cleanStale: (
+      transport: { type: 'ssh'; sessionId: string } | { type: 'local' },
+      kind: 'dtach' | 'tmux',
+      socketDir?: string
+    ) => Promise<number>
+  }
   window: {
     toggleFullscreen: () => Promise<void>
     showConfirmDialog: (message: string) => Promise<boolean>
@@ -360,7 +385,7 @@ export interface BifrostApi {
 
 const api: BifrostApi = {
   terminal: {
-    create: (cols, rows, shell?, shellArgs?) => ipcRenderer.invoke('terminal:create', cols, rows, shell, shellArgs),
+    create: (cols, rows, shell?, shellArgs?, multiplexerCmd?) => ipcRenderer.invoke('terminal:create', cols, rows, shell, shellArgs, multiplexerCmd),
     write: (id, data) => ipcRenderer.send('terminal:write', id, data),
     resize: (id, cols, rows) => ipcRenderer.send('terminal:resize', id, cols, rows),
     destroy: (id) => ipcRenderer.invoke('terminal:destroy', id),
@@ -414,7 +439,7 @@ const api: BifrostApi = {
   },
   ssh: {
     connect: (connectionId) => ipcRenderer.invoke('ssh:connect', connectionId),
-    openShell: (sessionId, cols, rows, connectionId?) => ipcRenderer.invoke('ssh:openShell', sessionId, cols, rows, connectionId),
+    openShell: (sessionId, cols, rows, connectionId?, multiplexerCmd?) => ipcRenderer.invoke('ssh:openShell', sessionId, cols, rows, connectionId, multiplexerCmd),
     write: (sessionId, data) => ipcRenderer.send('ssh:write', sessionId, data),
     resize: (sessionId, cols, rows) => ipcRenderer.send('ssh:resize', sessionId, cols, rows),
     disconnect: (sessionId) => ipcRenderer.invoke('ssh:disconnect', sessionId),
@@ -493,6 +518,15 @@ const api: BifrostApi = {
     listRecordings: () => ipcRenderer.invoke('ssh:listRecordings'),
     getRecording: (recordingId) => ipcRenderer.invoke('ssh:getRecording', recordingId),
     deleteRecording: (recordingId) => ipcRenderer.invoke('ssh:deleteRecording', recordingId)
+  },
+  multiplexer: {
+    probe: (transport, req) => ipcRenderer.invoke('multiplexer:probe', transport, req),
+    buildAttachCmd: (kind, target, opts) =>
+      ipcRenderer.invoke('multiplexer:buildAttachCmd', kind, target, opts),
+    killSession: (transport, kind, target) =>
+      ipcRenderer.invoke('multiplexer:killSession', transport, kind, target),
+    cleanStale: (transport, kind, socketDir) =>
+      ipcRenderer.invoke('multiplexer:cleanStale', transport, kind, socketDir)
   },
   sftp: {
     open: (sshSessionId) => ipcRenderer.invoke('sftp:open', sshSessionId),

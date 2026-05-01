@@ -12,7 +12,7 @@ import { AIAssistant } from '@renderer/components/terminal/AIAssistant'
 import { SftpPanel } from '@renderer/components/terminal/SftpPanel'
 import { ClusterManagerUI } from '@renderer/components/cluster/ClusterManagerUI'
 import { PCCBar } from '@renderer/components/cluster/PCCBar'
-import { TmuxManager } from '@renderer/components/terminal/TmuxManager'
+import { MultiplexerManager } from '@renderer/components/terminal/MultiplexerManager'
 import { ExpectEditor } from '@renderer/components/automation/ExpectEditor'
 import { ScriptEditor } from '@renderer/components/automation/ScriptEditor'
 import { RemoteCommandsEditor } from '@renderer/components/automation/RemoteCommandsEditor'
@@ -163,7 +163,9 @@ export function AppShell(): JSX.Element {
           <div className="flex flex-col gap-6 h-full overflow-y-auto">
             <ClusterManagerUI />
             <div className="px-6 pb-6">
-              <TmuxManager
+              <MultiplexerManager
+                terminalId={tabs.find((t) => t.id === activeTabId)?.rootPane.terminalId ?? null}
+                connectionId={tabs.find((t) => t.id === activeTabId)?.connectionId ?? null}
                 onSendCommand={(cmd) => {
                   const tab = tabs.find((t) => t.id === activeTabId)
                   const termId = tab?.rootPane.terminalId
@@ -174,7 +176,6 @@ export function AppShell(): JSX.Element {
                     window.bifrost?.terminal?.write(termId, cmd + '\n')
                   }
                 }}
-                isSSH={!!tabs.find((t) => t.id === activeTabId)?.connectionId}
               />
             </div>
           </div>

@@ -526,7 +526,8 @@ export class SshManager extends EventEmitter {
   openShell(
     sessionId: string,
     cols: number,
-    rows: number
+    rows: number,
+    initialCommand?: string
   ): Promise<ClientChannel> {
     return new Promise((resolve, reject) => {
       const session = sessions.get(sessionId)
@@ -547,6 +548,25 @@ export class SshManager extends EventEmitter {
           single: false,
           screen: 0
         }
+      }
+
+      // Multiplexer: bypass interactive shell with `exec ... ; pty: true`
+      // so dtach/tmux runs directly. When the user detaches or the multiplexer
+      // exits, the SSH channel closes — same as a normal shell exit.
+      if (initialCommand) {
+        session.client.exec(
+          initialCommand,
+          { pty: shellOptions },
+          (err, stream) => {
+            if (err) {
+              reject(err)
+              return
+            }
+            session.shell = stream
+            resolve(stream)
+          }
+        )
+        return
       }
 
       session.client.shell(
