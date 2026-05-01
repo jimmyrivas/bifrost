@@ -43,7 +43,18 @@ export interface AttachOptions {
   createIfMissing?: boolean
   /** Zellij-only: run resurrected commands immediately on exited-session attach. */
   forceRunCommands?: boolean
+  /** Absolute path to the binary on the remote (from probe). When set, the
+   *  attach command uses it directly instead of relying on PATH at exec time. */
+  binaryPath?: string
 }
+
+/**
+ * PATH prefix used by every probe so we can find binaries installed in common
+ * non-system locations (cargo, ~/.local/bin, etc.) over a non-interactive
+ * non-login SSH exec — which doesn't source the user's shell rc files.
+ */
+export const PROBE_PATH_PREFIX =
+  'PATH="$HOME/.cargo/bin:$HOME/.local/bin:$HOME/bin:/usr/local/bin:$PATH"'
 
 export interface Multiplexer {
   kind: MultiplexerKind

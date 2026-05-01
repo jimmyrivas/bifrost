@@ -293,7 +293,7 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
           return window.bifrost.multiplexer.buildAttachCmd(
             probe.primary.kind,
             primaryLive[0].target,
-            { createIfMissing: false }
+            { createIfMissing: false, binaryPath: probe.primary.path }
           )
         }
       }
@@ -312,10 +312,19 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
 
       if (pick.type === 'skip') return undefined
 
+      // Resolve the absolute binary path from the matching probe result so the
+      // attach command works even when the remote shell's PATH is minimal.
+      const binaryPath = pick.kind === probe.primary.kind
+        ? probe.primary.path
+        : probe.fallback?.kind === pick.kind
+          ? probe.fallback.path
+          : undefined
+
       if (pick.type === 'attach') {
         return window.bifrost.multiplexer.buildAttachCmd(pick.kind, pick.target, {
           createIfMissing: false,
-          forceRunCommands: pick.forceRunCommands
+          forceRunCommands: pick.forceRunCommands,
+          binaryPath
         })
       }
 
@@ -329,7 +338,8 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
         target = `${dir}/${pick.name}.sock`
       }
       return window.bifrost.multiplexer.buildAttachCmd(pick.kind, target, {
-        createIfMissing: true
+        createIfMissing: true,
+        binaryPath
       })
     },
     []

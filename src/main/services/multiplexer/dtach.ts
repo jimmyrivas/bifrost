@@ -1,5 +1,6 @@
 import {
   shellQuote,
+  PROBE_PATH_PREFIX,
   type AttachOptions,
   type Multiplexer,
   type MultiplexerSession,
@@ -27,7 +28,7 @@ export const dtach: Multiplexer = {
   async probe(exec: RemoteExecutor, opts: ProbeOptions): Promise<ProbeResult> {
     const dir = opts.socketDir || DEFAULT_SOCKET_DIR
 
-    const which = await exec.run('command -v dtach 2>/dev/null')
+    const which = await exec.run(`${PROBE_PATH_PREFIX} command -v dtach 2>/dev/null`)
     const path = which.stdout.trim().split('\n')[0]
     if (which.code !== 0 || !path) {
       return { kind: 'dtach', installed: false, sessions: [] }
@@ -74,12 +75,13 @@ done`
     // -E: disable detach character (avoids hijacking common keys)
     // -z: blocking-IO mode (better with line-buffered shells)
     const quoted = dquote(target)
+    const bin = opts.binaryPath ? shellQuote(opts.binaryPath) : 'dtach'
     if (create) {
       // mkdir -p the parent dir defensively — in case probe was skipped
       // or the directory was removed between probe and attach.
-      return `mkdir -p "$(dirname ${quoted})" 2>/dev/null; dtach -A ${quoted} -E -z ${shell}`
+      return `mkdir -p "$(dirname ${quoted})" 2>/dev/null; ${bin} -A ${quoted} -E -z ${shell}`
     }
-    return `dtach -a ${quoted} -E -z`
+    return `${bin} -a ${quoted} -E -z`
   },
 
   async killSession(exec: RemoteExecutor, target: string): Promise<void> {

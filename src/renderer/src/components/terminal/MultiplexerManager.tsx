@@ -111,7 +111,8 @@ export function MultiplexerManager({
 
   const handleAttach = async (target: string): Promise<void> => {
     const cmd = await window.bifrost.multiplexer.buildAttachCmd(active, target, {
-      createIfMissing: false
+      createIfMissing: false,
+      binaryPath: activeProbe?.path
     })
     onSendCommand(cmd)
   }
@@ -126,7 +127,8 @@ export function MultiplexerManager({
       target = `${dir}/${name}.sock`
     }
     const cmd = await window.bifrost.multiplexer.buildAttachCmd(active, target, {
-      createIfMissing: true
+      createIfMissing: true,
+      binaryPath: activeProbe?.path
     })
     onSendCommand(cmd)
     setNewName('')

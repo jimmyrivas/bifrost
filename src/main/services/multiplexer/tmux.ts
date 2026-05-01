@@ -1,5 +1,6 @@
 import {
   shellQuote,
+  PROBE_PATH_PREFIX,
   type AttachOptions,
   type Multiplexer,
   type MultiplexerSession,
@@ -12,7 +13,7 @@ export const tmux: Multiplexer = {
   kind: 'tmux',
 
   async probe(exec: RemoteExecutor, _opts: ProbeOptions): Promise<ProbeResult> {
-    const which = await exec.run('command -v tmux 2>/dev/null')
+    const which = await exec.run(`${PROBE_PATH_PREFIX} command -v tmux 2>/dev/null`)
     const path = which.stdout.trim().split('\n')[0]
     if (which.code !== 0 || !path) {
       return { kind: 'tmux', installed: false, sessions: [] }
@@ -20,7 +21,9 @@ export const tmux: Multiplexer = {
 
     // Format: name|attached|created
     const fmt = `"#{session_name}|#{session_attached}|#{session_created}"`
-    const list = await exec.run(`tmux list-sessions -F ${fmt} 2>/dev/null`)
+    const list = await exec.run(
+      `${PROBE_PATH_PREFIX} tmux list-sessions -F ${fmt} 2>/dev/null`
+    )
     const sessions = parseTmuxListOutput(list.stdout)
     return { kind: 'tmux', installed: true, path, sessions }
   },
@@ -28,15 +31,18 @@ export const tmux: Multiplexer = {
   buildAttachCmd(target: string, opts: AttachOptions): string {
     const create = opts.createIfMissing ?? true
     const shell = opts.shell ? ` ${shellQuote(opts.shell)}` : ''
+    const bin = opts.binaryPath ? shellQuote(opts.binaryPath) : 'tmux'
     if (create) {
       // new-session -A: attach if exists, create otherwise.
-      return `tmux new-session -A -s ${shellQuote(target)}${shell}`
+      return `${bin} new-session -A -s ${shellQuote(target)}${shell}`
     }
-    return `tmux attach-session -t ${shellQuote(target)}`
+    return `${bin} attach-session -t ${shellQuote(target)}`
   },
 
   async killSession(exec: RemoteExecutor, target: string): Promise<void> {
-    await exec.run(`tmux kill-session -t ${shellQuote(target)} >/dev/null 2>&1`)
+    await exec.run(
+      `${PROBE_PATH_PREFIX} tmux kill-session -t ${shellQuote(target)} >/dev/null 2>&1`
+    )
   },
 
   async cleanStale(_exec: RemoteExecutor, _opts: ProbeOptions): Promise<number> {
