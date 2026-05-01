@@ -8,6 +8,17 @@ import {
   type RemoteExecutor
 } from './types'
 
+/**
+ * Quote a path for inclusion inside a double-quoted shell context.
+ * Preserves `$HOME` and similar so the remote shell can expand them — only
+ * escapes characters that would break a double-quoted string.
+ */
+function dquote(s: string): string {
+  // Escape \ and " (and ` to avoid command substitution surprises).
+  // We deliberately do NOT escape $ so $HOME / $USER / $XDG_RUNTIME_DIR work.
+  return `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/`/g, '\\`')}"`
+}
+
 const DEFAULT_SOCKET_DIR = '~/.dtach'
 
 export const dtach: Multiplexer = {
@@ -59,12 +70,16 @@ done`
   buildAttachCmd(target: string, opts: AttachOptions): string {
     const create = opts.createIfMissing ?? true
     const shell = opts.shell || '"$SHELL"'
+    // Use double quotes so $HOME / $XDG_* / etc. expand on the remote.
     // -E: disable detach character (avoids hijacking common keys)
     // -z: blocking-IO mode (better with line-buffered shells)
+    const quoted = dquote(target)
     if (create) {
-      return `dtach -A ${shellQuote(target)} -E -z ${shell}`
+      // mkdir -p the parent dir defensively — in case probe was skipped
+      // or the directory was removed between probe and attach.
+      return `mkdir -p "$(dirname ${quoted})" 2>/dev/null; dtach -A ${quoted} -E -z ${shell}`
     }
-    return `dtach -a ${shellQuote(target)} -E -z`
+    return `dtach -a ${quoted} -E -z`
   },
 
   async killSession(exec: RemoteExecutor, target: string): Promise<void> {

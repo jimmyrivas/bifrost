@@ -317,7 +317,10 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
       // create
       let target = pick.name
       if (pick.kind === 'dtach') {
-        const dir = (cfg.socketDir || '~/.dtach').replace(/\/$/, '')
+        // Expand ~ → $HOME so the remote shell expands it inside double quotes.
+        let dir = (cfg.socketDir || '~/.dtach').replace(/\/$/, '')
+        if (dir === '~') dir = '$HOME'
+        else if (dir.startsWith('~/')) dir = '$HOME/' + dir.slice(2)
         target = `${dir}/${pick.name}.sock`
       }
       return window.bifrost.multiplexer.buildAttachCmd(pick.kind, target, {

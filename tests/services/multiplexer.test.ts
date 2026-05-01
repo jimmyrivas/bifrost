@@ -47,25 +47,33 @@ describe('shellQuote', () => {
 })
 
 describe('dtach.buildAttachCmd', () => {
-  it('uses -A when create-if-missing (default)', () => {
+  it('uses -A when create-if-missing (default) and ensures parent dir', () => {
     const cmd = dtach.buildAttachCmd('/home/u/.dtach/work.sock', {})
+    expect(cmd).toContain('mkdir -p')
     expect(cmd).toContain('dtach -A')
-    expect(cmd).toContain(`'/home/u/.dtach/work.sock'`)
+    expect(cmd).toContain(`"/home/u/.dtach/work.sock"`)
     expect(cmd).toContain('"$SHELL"')
     expect(cmd).toContain('-E -z')
   })
-  it('uses -a when not creating', () => {
+  it('uses -a when not creating and skips mkdir', () => {
     const cmd = dtach.buildAttachCmd('/tmp/x.sock', { createIfMissing: false })
-    expect(cmd).toMatch(/dtach -a/)
+    expect(cmd).toMatch(/^dtach -a/)
+    expect(cmd).not.toContain('mkdir')
     expect(cmd).not.toContain('"$SHELL"')
   })
   it('honors a custom shell', () => {
     const cmd = dtach.buildAttachCmd('/tmp/x.sock', { shell: '/bin/zsh' })
     expect(cmd).toContain('/bin/zsh')
   })
-  it('escapes paths with single quotes', () => {
-    const cmd = dtach.buildAttachCmd(`/tmp/o'connor.sock`, {})
-    expect(cmd).toContain(`'/tmp/o'\\''connor.sock'`)
+  it('preserves $HOME so the remote shell expands it', () => {
+    const cmd = dtach.buildAttachCmd('$HOME/.dtach/work.sock', {})
+    // $ must not be escaped — otherwise it would arrive as literal $HOME
+    expect(cmd).toContain(`"$HOME/.dtach/work.sock"`)
+    expect(cmd).not.toContain('\\$HOME')
+  })
+  it('escapes characters that would break the double-quoted string', () => {
+    const cmd = dtach.buildAttachCmd(`/tmp/with"quote.sock`, { createIfMissing: false })
+    expect(cmd).toContain(`"/tmp/with\\"quote.sock"`)
   })
 })
 

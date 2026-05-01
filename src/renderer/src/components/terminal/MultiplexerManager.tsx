@@ -107,7 +107,9 @@ export function MultiplexerManager({
     const name = newName.trim() || `bifrost-${Date.now().toString(36)}`
     let target = name
     if (active === 'dtach') {
-      const dir = (config.socketDir || '~/.dtach').replace(/\/$/, '')
+      let dir = (config.socketDir || '~/.dtach').replace(/\/$/, '')
+      if (dir === '~') dir = '$HOME'
+      else if (dir.startsWith('~/')) dir = '$HOME/' + dir.slice(2)
       target = `${dir}/${name}.sock`
     }
     const cmd = await window.bifrost.multiplexer.buildAttachCmd(active, target, {
