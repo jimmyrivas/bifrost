@@ -169,7 +169,7 @@ export interface BifrostApi {
     connectTelnet: (host: string, port: number) => Promise<string>
     writeTelnet: (sessionId: string, data: string) => void
     // #41: Mosh
-    connectMosh: (host: string, user?: string, port?: number, extraArgs?: string[]) => Promise<string>
+    connectMosh: (host: string, user?: string, port?: number, extraArgs?: string[], connectionId?: string) => Promise<string>
     // #89: AWS SSM
     connectSSM: (instanceId: string, region: string) => Promise<string>
     // #42: FTP
@@ -549,8 +549,8 @@ const api: BifrostApi = {
       ipcRenderer.invoke('protocols:connectVNC', host, port, password, preferredViewer),
     connectTelnet: (host, port) => ipcRenderer.invoke('protocols:connectTelnet', host, port),
     writeTelnet: (sessionId, data) => ipcRenderer.send('protocols:writeTelnet', sessionId, data),
-    connectMosh: (host, user?, port?, extraArgs?) =>
-      ipcRenderer.invoke('protocols:connectMosh', host, user, port, extraArgs),
+    connectMosh: (host, user?, port?, extraArgs?, connectionId?) =>
+      ipcRenderer.invoke('protocols:connectMosh', host, user, port, extraArgs, connectionId),
     connectSSM: (instanceId, region) =>
       ipcRenderer.invoke('protocols:connectSSM', instanceId, region),
     connectFTP: (host, port, user?, password?) =>

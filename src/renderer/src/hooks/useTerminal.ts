@@ -618,7 +618,13 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
             const host = conn?.host ?? 'localhost'
             const user = conn?.username ?? undefined
             const port = conn?.port ?? undefined
-            const moshSessionId = await window.bifrost.protocols.connectMosh(host, user, port)
+            const moshSessionId = await window.bifrost.protocols.connectMosh(
+              host,
+              user,
+              port,
+              undefined,
+              connectionId
+            )
             terminalIdRef.current = `mosh:${moshSessionId}`
             onTerminalCreated?.(`mosh:${moshSessionId}`)
 

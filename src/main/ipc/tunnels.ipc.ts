@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm'
 import { randomUUID } from 'crypto'
 import { sshManager } from '../services/ssh-manager'
 import { trayManager } from '../services/tray-manager'
+import { resolveJumpChainForJson, sealInlinePasswords } from '../services/jump-host/runtime'
 
 export interface TunnelData {
   id?: string
@@ -15,6 +16,7 @@ export interface TunnelData {
   privateKeyPath?: string
   forwards: string // JSON array of {type, localPort, remoteHost?, remotePort?}
   autoStart?: boolean
+  jumpServerConfig?: string | null // JSON, see jump-host/types.ts
 }
 
 export interface TunnelForward {
@@ -58,6 +60,7 @@ export function registerTunnelsIpc(): void {
         privateKeyPath: data.privateKeyPath ?? null,
         forwards: data.forwards ?? '[]',
         autoStart: data.autoStart ?? false,
+        jumpServerConfig: sealInlinePasswords(data.jumpServerConfig ?? null),
         createdAt: now,
         updatedAt: now
       })
@@ -76,6 +79,7 @@ export function registerTunnelsIpc(): void {
     if (data.privateKeyPath !== undefined) updates.privateKeyPath = data.privateKeyPath
     if (data.forwards !== undefined) updates.forwards = data.forwards
     if (data.autoStart !== undefined) updates.autoStart = data.autoStart
+    if (data.jumpServerConfig !== undefined) updates.jumpServerConfig = sealInlinePasswords(data.jumpServerConfig)
     db.update(schema.tunnels).set(updates).where(eq(schema.tunnels.id, id)).run()
   })
 
@@ -99,6 +103,8 @@ export function registerTunnelsIpc(): void {
     if (!tunnel) return { ok: false, message: 'Tunnel not found' }
 
     try {
+      const jumpChain = await resolveJumpChainForJson(tunnel.jumpServerConfig)
+
       // Connect SSH (no shell)
       const sessionId = await sshManager.connect({
         host: tunnel.host,
@@ -107,7 +113,8 @@ export function registerTunnelsIpc(): void {
         authType: (tunnel.authType as 'userpass' | 'key' | 'key_pass') ?? 'key',
         privateKeyPath: tunnel.privateKeyPath ?? undefined,
         encryptedPassword: tunnel.encryptedPassword ?? undefined,
-        encryptedPassphrase: tunnel.encryptedPassphrase ?? undefined
+        encryptedPassphrase: tunnel.encryptedPassphrase ?? undefined,
+        jumpChain: jumpChain.length > 0 ? jumpChain : undefined
       })
 
       // Set up forwards
@@ -206,6 +213,7 @@ export async function autoStartTunnels(): Promise<void> {
       // Trigger start via the same logic
       const { ipcMain: ipc } = require('electron')
       // We can't invoke our own handler, so duplicate minimal logic
+      const jumpChain = await resolveJumpChainForJson(tunnel.jumpServerConfig)
       const sessionId = await sshManager.connect({
         host: tunnel.host,
         port: tunnel.port ?? 22,
@@ -213,7 +221,8 @@ export async function autoStartTunnels(): Promise<void> {
         authType: (tunnel.authType as 'userpass' | 'key' | 'key_pass') ?? 'key',
         privateKeyPath: tunnel.privateKeyPath ?? undefined,
         encryptedPassword: tunnel.encryptedPassword ?? undefined,
-        encryptedPassphrase: tunnel.encryptedPassphrase ?? undefined
+        encryptedPassphrase: tunnel.encryptedPassphrase ?? undefined,
+        jumpChain: jumpChain.length > 0 ? jumpChain : undefined
       })
       const forwards: TunnelForward[] = JSON.parse(tunnel.forwards || '[]')
       for (const fwd of forwards) {

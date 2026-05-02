@@ -12,12 +12,13 @@ import {
   defaultMultiplexer,
   type MultiplexerConfig
 } from './MultiplexerPanel'
+import { JumpHostEditor, type JumpChain } from './JumpHostEditor'
 import { ConnectionStats } from './ConnectionStats'
 import { COLOR_SCHEMES } from '@renderer/lib/color-schemes'
 
 type Method = 'ssh' | 'mosh' | 'rdp' | 'vnc' | 'telnet' | 'local' | 'ftp' | 'custom'
 type AuthType = 'userpass' | 'key' | 'key_pass' | 'fido2' | 'manual'
-type FormTab = 'general' | 'advanced' | 'session' | 'hooks' | 'terminal'
+type FormTab = 'general' | 'advanced' | 'routing' | 'session' | 'hooks' | 'terminal'
 
 interface ConnectionFormProps {
   connectionId?: string
@@ -60,6 +61,7 @@ interface FormState {
   tags: string
   sshOptions: Record<string, string>
   multiplexer: MultiplexerConfig
+  jumpChain: JumpChain
   termColorScheme: string
   termBackgroundTint: string
   termBackgroundPreset: 'production' | 'staging' | 'development' | 'custom'
@@ -89,6 +91,7 @@ const defaultForm: FormState = {
   tags: '',
   sshOptions: {},
   multiplexer: { ...defaultMultiplexer },
+  jumpChain: [],
   termColorScheme: '',
   termBackgroundTint: '#0d0d0f',
   termBackgroundPreset: 'development',
@@ -117,6 +120,7 @@ const AUTH_TABS: Array<{ id: AuthType; label: string }> = [
 const METHODS_WITH_TERMINAL: Method[] = ['ssh', 'mosh', 'telnet', 'local', 'custom']
 const METHODS_WITH_HOOKS: Method[] = ['ssh', 'mosh', 'telnet', 'local', 'custom']
 const METHODS_WITH_MULTIPLEXER: Method[] = ['ssh', 'mosh', 'local']
+const METHODS_WITH_ROUTING: Method[] = ['ssh', 'mosh']
 
 function getFormTabs(method: Method): Array<{ id: FormTab; label: string }> {
   const tabs: Array<{ id: FormTab; label: string }> = [
@@ -124,6 +128,9 @@ function getFormTabs(method: Method): Array<{ id: FormTab; label: string }> {
   ]
   if (method === 'ssh' || method === 'mosh') {
     tabs.push({ id: 'advanced', label: 'ADVANCED SSH' })
+  }
+  if (METHODS_WITH_ROUTING.includes(method)) {
+    tabs.push({ id: 'routing', label: 'ROUTING' })
   }
   if (METHODS_WITH_MULTIPLEXER.includes(method)) {
     tabs.push({ id: 'session', label: 'SESSION' })
@@ -149,6 +156,14 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
   const { t } = useTranslation()
   const createConnection = useConnectionsStore((s) => s.createConnection)
   const updateConnection = useConnectionsStore((s) => s.updateConnection)
+  const allConnections = useConnectionsStore((s) => s.connections)
+  const connectionsList = allConnections.map((c) => ({
+    id: c.id,
+    name: c.name,
+    host: c.host,
+    username: c.username,
+    method: c.method
+  }))
 
   const [form, setForm] = useState<FormState>({ ...defaultForm, ...initialData })
   const [showPassword, setShowPassword] = useState(false)
@@ -210,6 +225,31 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
               const cfg = conn.sshConfig ? JSON.parse(conn.sshConfig) : {}
               return { ...defaultMultiplexer, ...(cfg.multiplexer ?? {}) }
             } catch { return { ...defaultMultiplexer } }
+          })(),
+          jumpChain: (() => {
+            try {
+              const cfg = conn.jumpServerConfig ? JSON.parse(conn.jumpServerConfig) : null
+              if (Array.isArray(cfg?.chain) && cfg.chain.length > 0) return cfg.chain
+              // One-shot migration of legacy `sshConfig.options.ProxyJump`
+              // (dead code in older versions). Translates `user@host:port,…`
+              // into inline agent-auth hops. The user can refine in the UI.
+              const sshCfg = conn.sshConfig ? JSON.parse(conn.sshConfig) : null
+              const proxy = sshCfg?.options?.ProxyJump
+              if (typeof proxy === 'string' && proxy.trim()) {
+                return proxy.split(',').map((part: string) => {
+                  const trimmed = part.trim()
+                  const at = trimmed.lastIndexOf('@')
+                  if (at <= 0) return null
+                  const username = trimmed.slice(0, at)
+                  const rest = trimmed.slice(at + 1)
+                  const colon = rest.lastIndexOf(':')
+                  const host = colon > 0 ? rest.slice(0, colon) : rest
+                  const port = colon > 0 ? parseInt(rest.slice(colon + 1), 10) : undefined
+                  return host ? { inline: { host, port, username, authType: 'agent' as const } } : null
+                }).filter(Boolean)
+              }
+              return []
+            } catch { return [] }
           })(),
           ...(() => {
             try {
@@ -275,6 +315,9 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
       if (form.multiplexer.preferred !== 'none') sshConfigObj.multiplexer = form.multiplexer
       const sshConfig = Object.keys(sshConfigObj).length > 0 ? JSON.stringify(sshConfigObj) : undefined
 
+      const jumpServerConfig =
+        form.jumpChain.length > 0 ? JSON.stringify({ chain: form.jumpChain }) : null
+
       const termConfigObj: Record<string, unknown> = {}
       if (form.termColorScheme) termConfigObj.colorScheme = form.termColorScheme
       if (form.termBackgroundTint && form.termBackgroundTint !== '#0d0d0f') termConfigObj.backgroundColor = form.termBackgroundTint
@@ -296,7 +339,8 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
         sendIntervalSeconds: form.sendIntervalSeconds || undefined,
         sendIdleOnly: form.sendIdleOnly, groupId: null as string | null,
         sshConfig,
-        terminalConfig
+        terminalConfig,
+        jumpServerConfig
       }
       let savedId = connectionId
       if (connectionId) {
@@ -666,6 +710,22 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
             <SshOptionsPanel
               options={form.sshOptions}
               onChange={(opts) => set('sshOptions', opts)}
+            />
+          </div>
+        )}
+
+        {/* ═══ ROUTING TAB ═══ */}
+        {activeTab === 'routing' && (
+          <div className="flex flex-col gap-4">
+            <p className="text-xs text-[var(--on-surface-variant)]">
+              Route this connection through one or more bastions. Each hop opens an SSH-over-SSH tunnel
+              to the next; the target sees the final hop as if it were connecting directly.
+            </p>
+            <JumpHostEditor
+              value={form.jumpChain}
+              onChange={(next) => set('jumpChain', next)}
+              selfId={connectionId}
+              connections={connectionsList}
             />
           </div>
         )}

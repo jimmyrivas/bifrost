@@ -26,8 +26,7 @@ const SSH_OPTIONS: Array<{ key: string; description: string; defaultValue: strin
   { key: 'KexAlgorithms', description: 'Key exchange algorithms', defaultValue: '' },
   { key: 'HostKeyAlgorithms', description: 'Host key algorithms', defaultValue: '' },
   { key: 'RekeyLimit', description: 'Re-key limit', defaultValue: 'default none' },
-  { key: 'ProxyCommand', description: 'Proxy command', defaultValue: '' },
-  { key: 'ProxyJump', description: 'Jump host', defaultValue: '' },
+  // ProxyJump / ProxyCommand removed: configure jump hosts in the ROUTING tab.
   { key: 'LocalForward', description: 'Local port forward', defaultValue: '' },
   { key: 'RemoteForward', description: 'Remote port forward', defaultValue: '' },
   { key: 'DynamicForward', description: 'SOCKS proxy forward', defaultValue: '' },

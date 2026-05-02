@@ -7,6 +7,8 @@ import { app } from 'electron'
 import { createHash } from 'crypto'
 import { EventEmitter } from 'events'
 import { createServer, createConnection, type Server, type Socket } from 'net'
+import type { ResolvedHop } from './jump-host/types'
+import { establishJumpChain, type ChainClient } from './jump-host/chain'
 
 export interface SshAlgorithms {
   ciphers?: string[]
@@ -35,6 +37,10 @@ export interface SshConnectionConfig {
   x11Forward?: boolean
   httpProxy?: HttpProxyConfig
   useFido2?: boolean
+  /** Jump host chain (already resolved & decrypted by the caller).
+   *  When set, ssh2 connects to each hop in order and tunnels the next leg
+   *  via forwardOut, finally landing on the target through `sock`. */
+  jumpChain?: ResolvedHop[]
 }
 
 export interface PortForward {
@@ -54,6 +60,9 @@ export interface SshSession {
   forwards: Map<string, PortForward>
   /** Number of subsystems using this connection (shell, sftp, forwards) */
   usageCount: number
+  /** Upstream clients for the jump-host chain, oldest first.
+   *  Closed in reverse order on disconnect. */
+  chainClients?: ChainClient[]
 }
 
 export interface HostKeyInfo {
@@ -286,7 +295,38 @@ export class SshManager extends EventEmitter {
     }
   }
 
-  connect(config: SshConnectionConfig): Promise<string> {
+  async connect(config: SshConnectionConfig): Promise<string> {
+    // Pre-establish the jump-host chain (if any). Each hop opens a TCP forward
+    // channel for the next leg; the final sock becomes the underlying transport
+    // for the target ssh2 client.
+    let upstreamSock: Socket | undefined
+    let chainClients: ChainClient[] = []
+    if (config.jumpChain && config.jumpChain.length > 0) {
+      const target = { host: config.host, port: config.port }
+      try {
+        const result = await establishJumpChain(config.jumpChain, target, {
+          hostKeyHooks: {
+            hostKey: (h, p) => this.hostKey(h, p),
+            computeFingerprint: (k) => this.computeFingerprint(k),
+            loadKnownHosts: () => this.loadKnownHosts(),
+            storeHostKey: (h, p, f, a) => this.storeHostKey(h, p, f, a)
+          }
+        })
+        upstreamSock = result.sock
+        chainClients = result.clients
+      } catch (err) {
+        const e = err instanceof Error ? err : new Error(String(err))
+        auditLogger.log({
+          connectionId: '',
+          connectionName: config.host,
+          host: config.host,
+          event: 'error',
+          details: { stage: 'jump-chain', message: e.message }
+        })
+        throw new Error(`Jump chain failed: ${e.message}`)
+      }
+    }
+
     return new Promise((resolveConnect, rejectConnect) => {
       const id = `ssh-${++sshIdCounter}`
       const client = new Client()
@@ -436,14 +476,26 @@ export class SshManager extends EventEmitter {
       })
 
       client.on('ready', () => {
-        sessions.set(id, { id, client, shell: null, config, forwards: new Map(), usageCount: 1 })
+        sessions.set(id, {
+          id,
+          client,
+          shell: null,
+          config,
+          forwards: new Map(),
+          usageCount: 1,
+          chainClients: chainClients.length > 0 ? chainClients : undefined
+        })
 
         auditLogger.log({
           connectionId: id,
           connectionName: config.host,
           host: config.host,
           event: 'connect',
-          details: { username: config.username, authType: config.authType }
+          details: {
+            username: config.username,
+            authType: config.authType,
+            jumpHops: chainClients.length || undefined
+          }
         })
 
         resolveConnect(id)
@@ -452,6 +504,12 @@ export class SshManager extends EventEmitter {
       client.on('error', (err) => {
         sessions.delete(id)
         this.pendingKeyboardPrompts.delete(id)
+
+        // Tear down the upstream chain so we don't leak the bastion sessions
+        // when the target leg fails.
+        chainClients.slice().reverse().forEach((c) => {
+          try { c.end() } catch { /* ignore */ }
+        })
 
         auditLogger.log({
           connectionId: id,
@@ -464,14 +522,19 @@ export class SshManager extends EventEmitter {
         rejectConnect(err)
       })
 
-      // #19: HTTP CONNECT proxy support
-      if (config.httpProxy) {
+      // Inject the chained sock so ssh2 uses it as the transport.
+      if (upstreamSock) {
+        connectConfig.sock = upstreamSock
+        client.connect(connectConfig)
+      } else if (config.httpProxy) {
+        // #19: HTTP CONNECT proxy support
         this.connectViaHttpProxy(client, connectConfig, config.httpProxy)
       } else {
         client.connect(connectConfig)
       }
     })
   }
+
 
   /**
    * #19: Connect via HTTP CONNECT proxy.
@@ -618,6 +681,12 @@ export class SshManager extends EventEmitter {
 
       session.shell?.close()
       session.client.end()
+
+      // Close upstream jump chain in reverse order — innermost first.
+      session.chainClients?.slice().reverse().forEach((c) => {
+        try { c.end() } catch { /* ignore */ }
+      })
+
       sessions.delete(sessionId)
 
       auditLogger.log({
@@ -625,7 +694,7 @@ export class SshManager extends EventEmitter {
         connectionName: session.config.host,
         host: session.config.host,
         event: 'disconnect',
-        details: {}
+        details: { jumpHops: session.chainClients?.length || undefined }
       })
     }
   }

@@ -157,6 +157,7 @@ export const tunnels = sqliteTable('tunnels', {
   encryptedPassphrase: blob('encrypted_passphrase', { mode: 'buffer' }),
   forwards: text('forwards').notNull().default('[]'), // JSON array
   autoStart: integer('auto_start', { mode: 'boolean' }).default(false),
+  jumpServerConfig: text('jump_server_config'), // JSON, see jump-host/types.ts
   createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
   updatedAt: text('updated_at').default('CURRENT_TIMESTAMP')
 })

@@ -294,12 +294,16 @@ class ExternalProtocolManager extends EventEmitter {
   /**
    * #41: Connect via Mosh (mobile shell).
    * Spawns `mosh {user}@{host}` via node-pty for proper terminal emulation.
+   *
+   * Accepts an optional resolved jump chain (decrypted credentials).
+   * When set, mosh's `--ssh=` flag is built from the chain via OpenSSH `-J`.
    */
   connectMosh(
     host: string,
     user?: string,
     port?: number,
-    extraArgs?: string[]
+    extraArgs?: string[],
+    jumpChain?: import('./jump-host/types').ResolvedHop[]
   ): string {
     if (isWindows()) {
       throw new Error('Mosh is not available on Windows. Use SSH instead, or install Mosh via WSL.')
@@ -308,9 +312,22 @@ class ExternalProtocolManager extends EventEmitter {
     const target = user ? `${user}@${host}` : host
 
     const args: string[] = []
-    if (port) {
-      args.push('--ssh=ssh -p ' + port)
+
+    let sshFlag: string | null = null
+    if (jumpChain && jumpChain.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { buildMoshSshFlag } = require('./jump-host/mosh') as typeof import('./jump-host/mosh')
+      const r = buildMoshSshFlag(jumpChain)
+      if (!r.flag) {
+        throw new Error(`Mosh + jump host: ${r.reason ?? 'unsupported configuration'}`)
+      }
+      sshFlag = r.flag
+      if (port && port !== 22) sshFlag += ` -p ${port}`
+    } else if (port) {
+      sshFlag = `ssh -p ${port}`
     }
+    if (sshFlag) args.push(`--ssh=${sshFlag}`)
+
     if (extraArgs) {
       args.push(...extraArgs)
     }

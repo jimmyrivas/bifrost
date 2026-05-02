@@ -14,6 +14,7 @@ import {
   deleteRecording
 } from '../services/session-recorder'
 import { auditLogger } from '../services/audit-log'
+import { resolveJumpChainForJson } from '../services/jump-host/runtime'
 
 export function registerSshIpc(mainWindow: BrowserWindow): void {
   ipcMain.handle(
@@ -29,6 +30,8 @@ export function registerSshIpc(mainWindow: BrowserWindow): void {
       if (!conn) throw new Error(`Connection ${connectionId} not found`)
       if (!conn.host) throw new Error('Host is required for SSH connection')
 
+      const jumpChain = await resolveJumpChainForJson(conn.jumpServerConfig)
+
       const config: SshConnectionConfig = {
         host: conn.host,
         port: conn.port ?? 22,
@@ -37,7 +40,8 @@ export function registerSshIpc(mainWindow: BrowserWindow): void {
         encryptedPassword: conn.encryptedPassword,
         privateKeyPath: conn.privateKeyPath,
         encryptedPassphrase: conn.encryptedPassphrase,
-        useFido2: conn.authType === 'fido2'
+        useFido2: conn.authType === 'fido2',
+        jumpChain: jumpChain.length > 0 ? jumpChain : undefined
       }
 
       return sshManager.connect(config)

@@ -208,6 +208,13 @@ const migrations: Migration[] = [
         created_at TEXT NOT NULL
       );
     `)
+  },
+
+  // Migration 5: Jump host support for tunnels.
+  // Uses ALTER TABLE ADD COLUMN — runs exactly once thanks to the
+  // user_version gate at the bottom of this file.
+  (db) => {
+    db.exec(`ALTER TABLE tunnels ADD COLUMN jump_server_config TEXT;`)
   }
 ]
 

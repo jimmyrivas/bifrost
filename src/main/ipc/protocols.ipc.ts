@@ -1,5 +1,8 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { externalProtocolManager, type RdpOptions } from '../services/external-protocol'
+import { getDatabase, schema } from '../db'
+import { eq } from 'drizzle-orm'
+import { resolveJumpChainForJson } from '../services/jump-host/runtime'
 
 export function registerProtocolsIpc(mainWindow: BrowserWindow): void {
   // RDP
@@ -41,8 +44,27 @@ export function registerProtocolsIpc(mainWindow: BrowserWindow): void {
   // === #41: Mosh ===
   ipcMain.handle(
     'protocols:connectMosh',
-    (_event, host: string, user?: string, port?: number, extraArgs?: string[]): string => {
-      return externalProtocolManager.connectMosh(host, user, port, extraArgs)
+    async (
+      _event,
+      host: string,
+      user?: string,
+      port?: number,
+      extraArgs?: string[],
+      connectionId?: string
+    ): Promise<string> => {
+      let jumpChain: Awaited<ReturnType<typeof resolveJumpChainForJson>> = []
+      if (connectionId) {
+        const db = getDatabase()
+        const conn = db
+          .select()
+          .from(schema.connections)
+          .where(eq(schema.connections.id, connectionId))
+          .get()
+        if (conn?.jumpServerConfig) {
+          jumpChain = await resolveJumpChainForJson(conn.jumpServerConfig)
+        }
+      }
+      return externalProtocolManager.connectMosh(host, user, port, extraArgs, jumpChain)
     }
   )
 

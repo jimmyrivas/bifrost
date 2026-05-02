@@ -4,6 +4,8 @@ import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { Switch } from '@renderer/components/ui/switch'
 import { cn } from '@renderer/lib/utils'
+import { JumpHostEditor, type JumpChain } from '@renderer/components/connections/JumpHostEditor'
+import { useConnectionsStore } from '@renderer/stores/connections.store'
 
 interface Tunnel {
   id: string
@@ -15,6 +17,7 @@ interface Tunnel {
   privateKeyPath: string | null
   forwards: string
   autoStart: boolean
+  jumpServerConfig?: string | null
 }
 
 interface TunnelForward {
@@ -55,7 +58,16 @@ export function TunnelManager(): JSX.Element {
   const [keyPath, setKeyPath] = useState('')
   const [autoStart, setAutoStart] = useState(false)
   const [forwards, setForwards] = useState<TunnelForward[]>([])
+  const [jumpChain, setJumpChain] = useState<JumpChain>([])
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
+  const allConnections = useConnectionsStore((s) => s.connections)
+  const connectionsList = allConnections.map((c) => ({
+    id: c.id,
+    name: c.name,
+    host: c.host,
+    username: c.username,
+    method: c.method
+  }))
 
   const loadTunnels = useCallback(async () => {
     if (!window.bifrost?.tunnels) return
@@ -88,6 +100,10 @@ export function TunnelManager(): JSX.Element {
     setKeyPath(t.privateKeyPath ?? '')
     setAutoStart(t.autoStart ?? false)
     try { setForwards(JSON.parse(t.forwards || '[]')) } catch { setForwards([]) }
+    try {
+      const cfg = t.jumpServerConfig ? JSON.parse(t.jumpServerConfig) : null
+      setJumpChain(Array.isArray(cfg?.chain) ? cfg.chain : [])
+    } catch { setJumpChain([]) }
     setStatusMsg(null)
   }, [])
 
@@ -101,6 +117,7 @@ export function TunnelManager(): JSX.Element {
     setKeyPath('')
     setAutoStart(false)
     setForwards([])
+    setJumpChain([])
     setStatusMsg(null)
   }, [])
 
@@ -112,7 +129,8 @@ export function TunnelManager(): JSX.Element {
         name, host, port, username: username || undefined,
         authType, privateKeyPath: keyPath || undefined,
         forwards: JSON.stringify(forwards),
-        autoStart
+        autoStart,
+        jumpServerConfig: jumpChain.length > 0 ? JSON.stringify({ chain: jumpChain }) : null
       }
       if (selectedId) {
         await window.bifrost.tunnels.update(selectedId, data)
@@ -124,7 +142,7 @@ export function TunnelManager(): JSX.Element {
       setStatusMsg('Saved')
       setTimeout(() => setStatusMsg(null), 2000)
     } finally { setSaving(false) }
-  }, [selectedId, name, host, port, username, authType, keyPath, autoStart, forwards, loadTunnels])
+  }, [selectedId, name, host, port, username, authType, keyPath, autoStart, forwards, jumpChain, loadTunnels])
 
   const handleDelete = useCallback(async () => {
     if (!window.bifrost?.tunnels || !selectedId) return
@@ -286,6 +304,16 @@ export function TunnelManager(): JSX.Element {
             <Switch checked={autoStart} onCheckedChange={setAutoStart} />
             <span className="text-xs text-[var(--on-surface-variant)]">Start automatically when Bifrost opens</span>
           </label>
+
+          {/* Jump host (ProxyJump) */}
+          <div>
+            <span className={sectionLabel}>JUMP HOST</span>
+            <JumpHostEditor
+              value={jumpChain}
+              onChange={setJumpChain}
+              connections={connectionsList}
+            />
+          </div>
 
           {/* Forwards table */}
           <div className="flex-1 min-h-0 overflow-y-auto">

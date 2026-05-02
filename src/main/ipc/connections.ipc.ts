@@ -3,6 +3,7 @@ import { getDatabase, schema } from '../db'
 import { eq } from 'drizzle-orm'
 import { randomUUID } from 'crypto'
 import { variableEngine, type VariableContext } from '../services/variable-engine'
+import { checkCycleForJson, sealInlinePasswords } from '../services/jump-host/runtime'
 
 export interface ConnectionData {
   id?: string
@@ -79,10 +80,15 @@ export function registerConnectionsIpc(): void {
     return db.select().from(schema.connections).where(eq(schema.connections.id, id)).get()
   })
 
-  ipcMain.handle('connections:create', (_event, data: ConnectionData) => {
+  ipcMain.handle('connections:create', async (_event, data: ConnectionData) => {
     const db = getDatabase()
     const id = data.id ?? randomUUID()
     const now = new Date().toISOString()
+    if (data.jumpServerConfig) {
+      const cycle = await checkCycleForJson(id, data.jumpServerConfig)
+      if (cycle) throw new Error(cycle)
+    }
+    const sealedJump = sealInlinePasswords(data.jumpServerConfig ?? null)
     db.insert(schema.connections)
       .values({
         id,
@@ -106,7 +112,7 @@ export function registerConnectionsIpc(): void {
         sendIdleOnly: data.sendIdleOnly ?? false,
         networkMode: data.networkMode ?? 'global',
         proxyConfig: data.proxyConfig ?? null,
-        jumpServerConfig: data.jumpServerConfig ?? null,
+        jumpServerConfig: sealedJump,
         terminalOverride: data.terminalOverride ?? false,
         terminalConfig: data.terminalConfig ?? null,
         sshConfig: data.sshConfig ?? null,
@@ -119,10 +125,18 @@ export function registerConnectionsIpc(): void {
     return id
   })
 
-  ipcMain.handle('connections:update', (_event, id: string, data: Partial<ConnectionData>) => {
+  ipcMain.handle('connections:update', async (_event, id: string, data: Partial<ConnectionData>) => {
     const db = getDatabase()
+    if (data.jumpServerConfig !== undefined && data.jumpServerConfig !== null) {
+      const cycle = await checkCycleForJson(id, data.jumpServerConfig)
+      if (cycle) throw new Error(cycle)
+    }
+    const patch: Partial<ConnectionData> = { ...data }
+    if (data.jumpServerConfig !== undefined) {
+      patch.jumpServerConfig = sealInlinePasswords(data.jumpServerConfig)
+    }
     db.update(schema.connections)
-      .set({ ...data, updatedAt: new Date().toISOString() })
+      .set({ ...patch, updatedAt: new Date().toISOString() })
       .where(eq(schema.connections.id, id))
       .run()
   })
