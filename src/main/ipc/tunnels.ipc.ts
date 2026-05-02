@@ -4,16 +4,24 @@ import { eq } from 'drizzle-orm'
 import { randomUUID } from 'crypto'
 import { sshManager } from '../services/ssh-manager'
 import { trayManager } from '../services/tray-manager'
+import { credentialStore } from '../services/credential-store'
 import { resolveJumpChainForJson, sealInlinePasswords } from '../services/jump-host/runtime'
 
 export interface TunnelData {
   id?: string
   name: string
-  host: string
+  /** When set, host/port/user/auth/credentials come from the referenced
+   *  connection. Inline fields below are ignored. */
+  connectionId?: string | null
+  host?: string | null
   port?: number
   username?: string
   authType?: 'userpass' | 'key' | 'key_pass'
   privateKeyPath?: string
+  /** Plain password from the renderer; encrypted server-side. Empty string
+   *  means "no change"; null clears it. */
+  password?: string | null
+  passphrase?: string | null
   forwards: string // JSON array of {type, localPort, remoteHost?, remotePort?}
   autoStart?: boolean
   jumpServerConfig?: string | null // JSON, see jump-host/types.ts
@@ -49,15 +57,23 @@ export function registerTunnelsIpc(): void {
     const db = getDatabase()
     const id = randomUUID()
     const now = new Date().toISOString()
+    const usingRef = !!data.connectionId
     db.insert(schema.tunnels)
       .values({
         id,
         name: data.name,
-        host: data.host,
-        port: data.port ?? 22,
-        username: data.username ?? null,
-        authType: data.authType ?? null,
-        privateKeyPath: data.privateKeyPath ?? null,
+        connectionId: data.connectionId ?? null,
+        host: usingRef ? null : (data.host ?? null),
+        port: usingRef ? 22 : (data.port ?? 22),
+        username: usingRef ? null : (data.username ?? null),
+        authType: usingRef ? null : (data.authType ?? null),
+        privateKeyPath: usingRef ? null : (data.privateKeyPath ?? null),
+        encryptedPassword: usingRef || !data.password
+          ? null
+          : credentialStore.encrypt(data.password),
+        encryptedPassphrase: usingRef || !data.passphrase
+          ? null
+          : credentialStore.encrypt(data.passphrase),
         forwards: data.forwards ?? '[]',
         autoStart: data.autoStart ?? false,
         jumpServerConfig: sealInlinePasswords(data.jumpServerConfig ?? null),
@@ -72,11 +88,35 @@ export function registerTunnelsIpc(): void {
     const db = getDatabase()
     const updates: Record<string, unknown> = { updatedAt: new Date().toISOString() }
     if (data.name !== undefined) updates.name = data.name
-    if (data.host !== undefined) updates.host = data.host
-    if (data.port !== undefined) updates.port = data.port
-    if (data.username !== undefined) updates.username = data.username
-    if (data.authType !== undefined) updates.authType = data.authType
-    if (data.privateKeyPath !== undefined) updates.privateKeyPath = data.privateKeyPath
+    // Switching to a saved connection wipes inline fields so they can't drift.
+    if (data.connectionId !== undefined) {
+      updates.connectionId = data.connectionId
+      if (data.connectionId) {
+        updates.host = null
+        updates.username = null
+        updates.authType = null
+        updates.privateKeyPath = null
+        updates.encryptedPassword = null
+        updates.encryptedPassphrase = null
+      }
+    }
+    // Only honor inline fields when not in saved-connection mode.
+    if (!data.connectionId) {
+      if (data.host !== undefined) updates.host = data.host
+      if (data.port !== undefined) updates.port = data.port
+      if (data.username !== undefined) updates.username = data.username
+      if (data.authType !== undefined) updates.authType = data.authType
+      if (data.privateKeyPath !== undefined) updates.privateKeyPath = data.privateKeyPath
+      // password/passphrase: empty string = leave alone, null = clear, value = re-encrypt
+      if (data.password === null) updates.encryptedPassword = null
+      else if (typeof data.password === 'string' && data.password.length > 0) {
+        updates.encryptedPassword = credentialStore.encrypt(data.password)
+      }
+      if (data.passphrase === null) updates.encryptedPassphrase = null
+      else if (typeof data.passphrase === 'string' && data.passphrase.length > 0) {
+        updates.encryptedPassphrase = credentialStore.encrypt(data.passphrase)
+      }
+    }
     if (data.forwards !== undefined) updates.forwards = data.forwards
     if (data.autoStart !== undefined) updates.autoStart = data.autoStart
     if (data.jumpServerConfig !== undefined) updates.jumpServerConfig = sealInlinePasswords(data.jumpServerConfig)
@@ -103,17 +143,17 @@ export function registerTunnelsIpc(): void {
     if (!tunnel) return { ok: false, message: 'Tunnel not found' }
 
     try {
-      const jumpChain = await resolveJumpChainForJson(tunnel.jumpServerConfig)
+      const connectArgs = await resolveTunnelConnectArgs(tunnel)
+      if (!connectArgs) {
+        return { ok: false, message: 'Referenced connection not found or unsupported' }
+      }
+      const jumpChain = await resolveJumpChainForJson(
+        tunnel.jumpServerConfig ?? connectArgs.jumpServerConfig
+      )
 
       // Connect SSH (no shell)
       const sessionId = await sshManager.connect({
-        host: tunnel.host,
-        port: tunnel.port ?? 22,
-        username: tunnel.username ?? 'root',
-        authType: (tunnel.authType as 'userpass' | 'key' | 'key_pass') ?? 'key',
-        privateKeyPath: tunnel.privateKeyPath ?? undefined,
-        encryptedPassword: tunnel.encryptedPassword ?? undefined,
-        encryptedPassphrase: tunnel.encryptedPassphrase ?? undefined,
+        ...connectArgs.connect,
         jumpChain: jumpChain.length > 0 ? jumpChain : undefined
       })
 
@@ -150,7 +190,7 @@ export function registerTunnelsIpc(): void {
           try {
             new Notification({
               title: 'Bifrost Tunnel Disconnected',
-              body: `Tunnel "${tunnel.name}" (${tunnel.host}) disconnected`
+              body: `Tunnel "${tunnel.name}" (${connectArgs.displayHost}) disconnected`
             }).show()
           } catch { /* notifications may not be available */ }
         }
@@ -204,24 +244,78 @@ export function registerTunnelsIpc(): void {
   })
 }
 
+/**
+ * Build the SSH connect arguments for a tunnel row, transparently resolving
+ * a referenced connection when `connectionId` is set.
+ *
+ * Returns null when the row references a connection that has been deleted or
+ * has an unsupported authType (fido2/manual/null) — caller surfaces a useful
+ * message to the user.
+ */
+async function resolveTunnelConnectArgs(
+  tunnel: typeof schema.tunnels.$inferSelect
+): Promise<{
+  connect: Parameters<typeof sshManager.connect>[0]
+  jumpServerConfig: string | null
+  displayHost: string
+} | null> {
+  if (tunnel.connectionId) {
+    const db = getDatabase()
+    const conn = db
+      .select()
+      .from(schema.connections)
+      .where(eq(schema.connections.id, tunnel.connectionId))
+      .get()
+    if (!conn || !conn.host) return null
+    if (conn.authType === 'fido2' || conn.authType === 'manual' || conn.authType == null) {
+      return null
+    }
+    return {
+      connect: {
+        host: conn.host,
+        port: conn.port ?? 22,
+        username: conn.username ?? 'root',
+        authType: conn.authType as 'userpass' | 'key' | 'key_pass',
+        privateKeyPath: conn.privateKeyPath ?? undefined,
+        encryptedPassword: conn.encryptedPassword ?? undefined,
+        encryptedPassphrase: conn.encryptedPassphrase ?? undefined
+      },
+      jumpServerConfig: conn.jumpServerConfig ?? null,
+      displayHost: conn.host
+    }
+  }
+  // Inline mode
+  return {
+    connect: {
+      host: tunnel.host ?? '',
+      port: tunnel.port ?? 22,
+      username: tunnel.username ?? 'root',
+      authType: (tunnel.authType as 'userpass' | 'key' | 'key_pass') ?? 'key',
+      privateKeyPath: tunnel.privateKeyPath ?? undefined,
+      encryptedPassword: tunnel.encryptedPassword ?? undefined,
+      encryptedPassphrase: tunnel.encryptedPassphrase ?? undefined
+    },
+    jumpServerConfig: null,
+    displayHost: tunnel.host ?? '(no host)'
+  }
+}
+
 // Auto-start tunnels on app ready
 export async function autoStartTunnels(): Promise<void> {
   const db = getDatabase()
   const autoStartList = db.select().from(schema.tunnels).all().filter((t) => t.autoStart)
   for (const tunnel of autoStartList) {
     try {
-      // Trigger start via the same logic
-      const { ipcMain: ipc } = require('electron')
-      // We can't invoke our own handler, so duplicate minimal logic
-      const jumpChain = await resolveJumpChainForJson(tunnel.jumpServerConfig)
+      const connectArgs = await resolveTunnelConnectArgs(tunnel)
+      if (!connectArgs) {
+        console.warn(`[tunnels] Auto-start skipped for ${tunnel.name}: connection not resolvable`)
+        continue
+      }
+      const jumpChain = await resolveJumpChainForJson(
+        tunnel.jumpServerConfig ?? connectArgs.jumpServerConfig
+      )
       const sessionId = await sshManager.connect({
-        host: tunnel.host,
-        port: tunnel.port ?? 22,
-        username: tunnel.username ?? 'root',
-        authType: (tunnel.authType as 'userpass' | 'key' | 'key_pass') ?? 'key',
-        privateKeyPath: tunnel.privateKeyPath ?? undefined,
-        encryptedPassword: tunnel.encryptedPassword ?? undefined,
-        encryptedPassphrase: tunnel.encryptedPassphrase ?? undefined,
+        ...connectArgs.connect,
         jumpChain: jumpChain.length > 0 ? jumpChain : undefined
       })
       const forwards: TunnelForward[] = JSON.parse(tunnel.forwards || '[]')
@@ -233,7 +327,7 @@ export async function autoStartTunnels(): Promise<void> {
         }
       }
       activeTunnels.set(tunnel.id, { sessionId, startedAt: Date.now() })
-      console.log(`[tunnels] Auto-started: ${tunnel.name} (${tunnel.host})`)
+      console.log(`[tunnels] Auto-started: ${tunnel.name} (${connectArgs.displayHost})`)
     } catch (err) {
       console.warn(`[tunnels] Auto-start failed for ${tunnel.name}:`, err)
     }

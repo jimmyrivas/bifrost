@@ -148,7 +148,10 @@ export const remoteCommands = sqliteTable('remote_commands', {
 export const tunnels = sqliteTable('tunnels', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
-  host: text('host').notNull(),
+  /** When set, host/port/username/auth/credentials are read from
+   *  `connections` at start time. Inline fields are ignored in that mode. */
+  connectionId: text('connection_id').references(() => connections.id, { onDelete: 'set null' }),
+  host: text('host'),
   port: integer('port').default(22),
   username: text('username'),
   authType: text('auth_type', { enum: ['userpass', 'key', 'key_pass'] }),

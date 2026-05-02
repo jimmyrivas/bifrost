@@ -215,6 +215,45 @@ const migrations: Migration[] = [
   // user_version gate at the bottom of this file.
   (db) => {
     db.exec(`ALTER TABLE tunnels ADD COLUMN jump_server_config TEXT;`)
+  },
+
+  // Migration 6: tunnels can now reference an existing connection.
+  // SQLite cannot ALTER COLUMN to drop NOT NULL on `host`, so we recreate
+  // the table. Existing rows are dump→restore preserved.
+  (db) => {
+    db.exec(`
+      CREATE TABLE tunnels_new (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        connection_id TEXT REFERENCES connections(id) ON DELETE SET NULL,
+        host TEXT,
+        port INTEGER DEFAULT 22,
+        username TEXT,
+        auth_type TEXT CHECK(auth_type IN ('userpass','key','key_pass')),
+        private_key_path TEXT,
+        encrypted_password BLOB,
+        encrypted_passphrase BLOB,
+        forwards TEXT NOT NULL DEFAULT '[]',
+        auto_start BOOLEAN DEFAULT 0,
+        jump_server_config TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      INSERT INTO tunnels_new (
+        id, name, connection_id, host, port, username, auth_type,
+        private_key_path, encrypted_password, encrypted_passphrase,
+        forwards, auto_start, jump_server_config, created_at, updated_at
+      )
+      SELECT
+        id, name, NULL, host, port, username, auth_type,
+        private_key_path, encrypted_password, encrypted_passphrase,
+        forwards, auto_start, jump_server_config, created_at, updated_at
+      FROM tunnels;
+
+      DROP TABLE tunnels;
+      ALTER TABLE tunnels_new RENAME TO tunnels;
+    `)
   }
 ]
 

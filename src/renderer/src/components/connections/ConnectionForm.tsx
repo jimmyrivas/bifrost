@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { FolderOpen, Eye, EyeOff, Tag, X, Trash2 } from 'lucide-react'
+import { FolderOpen, Eye, EyeOff, Tag, X } from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { Switch } from '@renderer/components/ui/switch'
@@ -702,11 +702,6 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
         {/* ═══ ADVANCED SSH TAB ═══ */}
         {activeTab === 'advanced' && (
           <div className="flex flex-col gap-6">
-            {/* Port Forwarding */}
-            <PortForwardingSection
-              options={form.sshOptions}
-              onChange={(opts) => set('sshOptions', opts)}
-            />
             <SshOptionsPanel
               options={form.sshOptions}
               onChange={(opts) => set('sshOptions', opts)}
@@ -903,74 +898,6 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
           </div>
         )}
       </div>
-    </div>
-  )
-}
-
-function PortForwardingSection({ options, onChange }: { options: Record<string, string>; onChange: (opts: Record<string, string>) => void }): JSX.Element {
-  const types = [
-    { key: 'LocalForward', label: 'Local', placeholder: '8080 localhost:80', desc: 'Forward local port to remote' },
-    { key: 'RemoteForward', label: 'Remote', placeholder: '9090 localhost:3000', desc: 'Forward remote port to local' },
-    { key: 'DynamicForward', label: 'Dynamic (SOCKS)', placeholder: '1080', desc: 'SOCKS proxy on local port' }
-  ] as const
-
-  const addForward = (key: string, value: string): void => {
-    const existing = options[key]
-    const next = { ...options }
-    // Append with semicolon separator for multiple forwards
-    next[key] = existing ? `${existing};${value}` : value
-    onChange(next)
-  }
-
-  const removeForward = (key: string, idx: number): void => {
-    const parts = (options[key] ?? '').split(';').filter(Boolean)
-    parts.splice(idx, 1)
-    const next = { ...options }
-    if (parts.length === 0) {
-      delete next[key]
-    } else {
-      next[key] = parts.join(';')
-    }
-    onChange(next)
-  }
-
-  return (
-    <div className="flex flex-col gap-3">
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--on-surface-variant)]">
-        Port Forwarding
-      </span>
-      {types.map(({ key, label, placeholder, desc }) => {
-        const forwards = (options[key] ?? '').split(';').filter(Boolean)
-        return (
-          <div key={key} className="flex flex-col gap-1">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-[var(--on-surface)]">{label}</span>
-              <button
-                onClick={() => {
-                  const val = window.prompt(`${label} forward (e.g. ${placeholder}):`)
-                  if (val?.trim()) addForward(key, val.trim())
-                }}
-                className="text-[9px] text-[#6bd5ff] hover:underline"
-              >
-                + Add
-              </button>
-            </div>
-            <span className="text-[9px] text-[var(--on-surface-variant)]">{desc}</span>
-            {forwards.length > 0 && (
-              <div className="flex flex-col gap-0.5 pl-2">
-                {forwards.map((fwd, idx) => (
-                  <div key={idx} className="flex items-center gap-2 text-[10px]">
-                    <span className="font-[family-name:var(--font-mono)] text-[var(--on-surface)] flex-1">{fwd}</span>
-                    <button onClick={() => removeForward(key, idx)} className="text-[var(--on-surface-variant)] hover:text-[var(--error)] p-0.5">
-                      <Trash2 size={10} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )
-      })}
     </div>
   )
 }

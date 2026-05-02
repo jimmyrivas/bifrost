@@ -27,9 +27,8 @@ const SSH_OPTIONS: Array<{ key: string; description: string; defaultValue: strin
   { key: 'HostKeyAlgorithms', description: 'Host key algorithms', defaultValue: '' },
   { key: 'RekeyLimit', description: 'Re-key limit', defaultValue: 'default none' },
   // ProxyJump / ProxyCommand removed: configure jump hosts in the ROUTING tab.
-  { key: 'LocalForward', description: 'Local port forward', defaultValue: '' },
-  { key: 'RemoteForward', description: 'Remote port forward', defaultValue: '' },
-  { key: 'DynamicForward', description: 'SOCKS proxy forward', defaultValue: '' },
+  // LocalForward / RemoteForward / DynamicForward removed: use the dedicated
+  // Tunnels view (top-level "Tunnels" sidebar entry) for port forwarding.
   { key: 'SendEnv', description: 'Environment variables to send', defaultValue: '' },
   { key: 'SetEnv', description: 'Set remote env variables', defaultValue: '' },
   { key: 'RequestTTY', description: 'Request TTY', defaultValue: 'auto' },
