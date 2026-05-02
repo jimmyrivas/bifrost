@@ -528,23 +528,23 @@ export function TunnelManager(): JSX.Element {
               <Button variant="ghost" size="sm" onClick={() => handleStop(selectedId!)} className="text-[var(--error)]">
                 <Square className="h-3 w-3" /> STOP
               </Button>
-            ) : (
+            ) : selectedId ? (
               <Button
                 variant="spectral"
                 size="sm"
-                onClick={() => selectedId ? handleStart(selectedId) : handleSave()}
+                onClick={() => handleStart(selectedId)}
                 disabled={!name.trim() || (sourceMode === 'inline' ? !host.trim() : !connectionId)}
               >
-                {selectedId ? <><Play className="h-3 w-3" /> START</> : <><Plus className="h-3 w-3" /> SAVE</>}
+                <Play className="h-3 w-3" /> START
               </Button>
-            )}
+            ) : null}
             <Button
-              variant="outline"
+              variant={selectedId ? 'outline' : 'spectral'}
               size="sm"
               onClick={handleSave}
               disabled={saving || !name.trim() || (sourceMode === 'inline' ? !host.trim() : !connectionId)}
             >
-              {saving ? 'SAVING...' : 'SAVE'}
+              {saving ? 'SAVING...' : selectedId ? 'SAVE' : (<><Plus className="h-3 w-3" /> SAVE</>)}
             </Button>
             {selectedId && (
               <Button variant="ghost" size="sm" onClick={handleDelete} className="ml-auto text-[var(--error)]">
