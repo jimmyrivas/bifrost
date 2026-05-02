@@ -1,5 +1,9 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import {
+  defaultMultiplexer,
+  type MultiplexerConfig
+} from '@renderer/components/connections/MultiplexerPanel'
 
 export interface TerminalPreferences {
   fontFamily: string
@@ -18,12 +22,16 @@ export interface TerminalPreferences {
 
 interface PreferencesState {
   terminal: TerminalPreferences
+  /** Multiplexer config applied to local PTY tabs (no SSH). Per-connection
+   *  config is stored on the connection itself; this covers "local" tabs. */
+  localMultiplexer: MultiplexerConfig
   language: 'en' | 'es'
   pasteWarningDismissedForSession: boolean
   setTerminalPref: <K extends keyof TerminalPreferences>(
     key: K,
     value: TerminalPreferences[K]
   ) => void
+  setLocalMultiplexer: (cfg: MultiplexerConfig) => void
   setLanguage: (lang: 'en' | 'es') => void
   dismissPasteWarningForSession: () => void
 }
@@ -43,10 +51,16 @@ const defaultTerminal: TerminalPreferences = {
   tabTitleTemplate: ''
 }
 
+const defaultLocalMultiplexer: MultiplexerConfig = {
+  ...defaultMultiplexer,
+  sessionPrefix: 'bifrost-local'
+}
+
 export const usePreferencesStore = create<PreferencesState>()(
   persist(
     (set) => ({
       terminal: { ...defaultTerminal },
+      localMultiplexer: { ...defaultLocalMultiplexer },
       language: navigator.language.startsWith('es') ? 'es' : 'en',
       pasteWarningDismissedForSession: false,
 
@@ -55,6 +69,8 @@ export const usePreferencesStore = create<PreferencesState>()(
           terminal: { ...state.terminal, [key]: value }
         })),
 
+      setLocalMultiplexer: (cfg) => set({ localMultiplexer: cfg }),
+
       setLanguage: (lang) => set({ language: lang }),
 
       dismissPasteWarningForSession: () =>
@@ -62,7 +78,14 @@ export const usePreferencesStore = create<PreferencesState>()(
     }),
     {
       name: 'bifrost-preferences',
-      version: 1
+      version: 2,
+      migrate: (persisted, version) => {
+        const state = (persisted ?? {}) as Partial<PreferencesState>
+        if (version < 2 && !state.localMultiplexer) {
+          state.localMultiplexer = { ...defaultLocalMultiplexer }
+        }
+        return state as PreferencesState
+      }
     }
   )
 )

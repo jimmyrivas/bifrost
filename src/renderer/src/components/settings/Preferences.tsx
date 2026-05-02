@@ -11,6 +11,7 @@ import { ConfigSync } from './ConfigSync'
 import { PluginManager } from './PluginManager'
 import { KeyBindings } from './KeyBindings'
 import { KnownHostsPanel } from './KnownHostsPanel'
+import { MultiplexerPanel } from '@renderer/components/connections/MultiplexerPanel'
 import { setSecretRedactionEnabled, isSecretRedactionEnabled } from '@renderer/lib/secret-redactor'
 
 type PrefsTab = 'terminal' | 'ai' | 'ssh' | 'security' | 'keybindings' | 'language' | 'network' | 'keepass' | 'sync' | 'plugins' | 'mcp'
@@ -43,6 +44,8 @@ interface KeePassState { dbPath: string; keyPath: string }
 export function Preferences(): JSX.Element {
   const { t, i18n } = useTranslation()
   const terminal = usePreferencesStore((s) => s.terminal)
+  const localMultiplexer = usePreferencesStore((s) => s.localMultiplexer)
+  const setLocalMultiplexer = usePreferencesStore((s) => s.setLocalMultiplexer)
   const language = usePreferencesStore((s) => s.language)
   const setTerminalPref = usePreferencesStore((s) => s.setTerminalPref)
   const setLanguage = usePreferencesStore((s) => s.setLanguage)
@@ -163,6 +166,21 @@ export function Preferences(): JSX.Element {
             </div>
             <div className={sectionCard}>
               <ColorSchemeSelector />
+            </div>
+            <div className={sectionCard}>
+              <h4 className="text-xs font-semibold text-[var(--on-surface)] uppercase tracking-wider mb-1">
+                Local session persistence
+              </h4>
+              <p className="text-[10px] text-[var(--on-surface-variant)] mb-3">
+                Wrap new local terminal tabs in dtach, tmux or zellij so the
+                shell survives accidental tab closes and app restarts. Pick a
+                multiplexer here and Bifrost will offer you any existing
+                sessions when you open a new local tab.
+              </p>
+              <MultiplexerPanel
+                value={localMultiplexer}
+                onChange={setLocalMultiplexer}
+              />
             </div>
           </div>
         )}

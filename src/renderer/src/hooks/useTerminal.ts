@@ -756,8 +756,17 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
       initConnection()
     } else {
       // === LOCAL PTY MODE ===
-      const { cols, rows } = terminal
-      window.bifrost.terminal.create(cols, rows, shell, shellArgs).then((id: string) => {
+      const initLocal = async (): Promise<void> => {
+        const muxConfig = usePreferencesStore.getState().localMultiplexer
+        const muxCmd = await resolveMultiplexerCmd(
+          { type: 'local' },
+          muxConfig,
+          'local',
+          'local'
+        )
+
+        const { cols, rows } = terminal
+        const id = await window.bifrost.terminal.create(cols, rows, shell, shellArgs, muxCmd)
         terminalIdRef.current = id
         onTerminalCreated?.(id)
 
@@ -774,6 +783,10 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
         terminal.onResize(({ cols, rows }: { cols: number; rows: number }) => {
           window.bifrost.terminal.resize(id, cols, rows)
         })
+      }
+      initLocal().catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err)
+        terminal.write(`\x1b[31mLocal terminal failed: ${msg}\x1b[0m\r\n`)
       })
 
       removeDataListener = window.bifrost.terminal.onData((id: string, data: string) => {
