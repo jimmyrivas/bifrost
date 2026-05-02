@@ -522,6 +522,27 @@ export class SshManager extends EventEmitter {
         rejectConnect(err)
       })
 
+      // When the SSH session ends (server timeout, network drop, remote
+      // close), close any local-forward TCP listeners so they don't accept
+      // new connections that would crash on `forwardOut: Not connected`.
+      // Also notify listeners (tunnels.ipc.ts auto-cleanup, etc).
+      const handleClose = (): void => {
+        const session = sessions.get(id)
+        if (session) {
+          for (const fwd of session.forwards.values()) {
+            try { fwd.server?.close() } catch { /* ignore */ }
+          }
+          session.forwards.clear()
+          sessions.delete(id)
+        }
+        chainClients.slice().reverse().forEach((c) => {
+          try { c.end() } catch { /* ignore */ }
+        })
+        this.emit('session:closed', id)
+      }
+      client.on('close', handleClose)
+      client.on('end', handleClose)
+
       // Inject the chained sock so ssh2 uses it as the transport.
       if (upstreamSock) {
         connectConfig.sock = upstreamSock
@@ -735,19 +756,38 @@ export class SshManager extends EventEmitter {
       const fwdId = `fwd-${++forwardIdCounter}`
 
       const server = createServer((socket) => {
-        session.client.forwardOut(
-          socket.remoteAddress ?? '127.0.0.1',
-          socket.remotePort ?? 0,
-          remoteHost,
-          remotePort,
-          (err, stream) => {
-            if (err) {
-              socket.end()
-              return
+        // Swallow socket errors so peer aborts (RST, ECONNRESET) don't crash
+        // the main process. The listener is enough to keep Node from rethrowing.
+        socket.on('error', () => { /* ignore */ })
+
+        // If the SSH session was dropped (e.g. server-side timeout) but this
+        // TCP server is still accepting connections, `forwardOut` throws
+        // "Not connected" synchronously. Catching it here keeps the main
+        // process alive; we also close the listening server so subsequent
+        // attempts fail fast rather than retriggering the same crash.
+        if (!sessions.has(sessionId)) {
+          socket.destroy()
+          try { server.close() } catch { /* ignore */ }
+          return
+        }
+        try {
+          session.client.forwardOut(
+            socket.remoteAddress ?? '127.0.0.1',
+            socket.remotePort ?? 0,
+            remoteHost,
+            remotePort,
+            (err, stream) => {
+              if (err) {
+                socket.destroy()
+                return
+              }
+              stream.on('error', () => { /* ignore */ })
+              socket.pipe(stream).pipe(socket)
             }
-            socket.pipe(stream).pipe(socket)
-          }
-        )
+          )
+        } catch {
+          socket.destroy()
+        }
       })
 
       server.on('error', (err) => {
