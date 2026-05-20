@@ -10,6 +10,7 @@ import {
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { cn } from '@renderer/lib/utils'
+import { uniqueSessionName } from '@renderer/lib/multiplexer-naming'
 
 export type MultiplexerKind = 'dtach' | 'tmux' | 'zellij'
 
@@ -65,7 +66,7 @@ export function MultiplexerPicker({
       : null
 
   const [active, setActive] = useState<MultiplexerKind | null>(initialKind)
-  const [newName, setNewName] = useState(defaultPrefix)
+  const [newName, setNewName] = useState('')
   const [busy, setBusy] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
@@ -79,6 +80,14 @@ export function MultiplexerPicker({
   const liveSessions = activeProbe?.sessions.filter((s) => s.alive) ?? []
   const inactiveSessions = activeProbe?.sessions.filter((s) => !s.alive) ?? []
   const [forceRunBy, setForceRunBy] = useState<Record<string, boolean>>({})
+
+  // Suggested name = defaultPrefix + first free 3-digit suffix vs the
+  // currently-listed sessions. Recomputed when the active kind changes so
+  // the placeholder stays correct as the user toggles tmux/dtach/zellij.
+  const suggestedName = useMemo(() => {
+    const names = activeProbe?.sessions.map((s) => s.name) ?? []
+    return uniqueSessionName(defaultPrefix, names)
+  }, [activeProbe, defaultPrefix])
 
   // Available kinds (the ones we have a probe result for)
   const availableKinds: MultiplexerKind[] = []
@@ -96,7 +105,10 @@ export function MultiplexerPicker({
 
   const handleCreate = (): void => {
     if (!active) return
-    const name = newName.trim() || defaultPrefix
+    const typed = newName.trim()
+    const base = typed || defaultPrefix
+    const names = activeProbe?.sessions.map((s) => s.name) ?? []
+    const name = uniqueSessionName(base, names)
     onResolve({ type: 'create', kind: active, name })
   }
 
@@ -335,7 +347,7 @@ export function MultiplexerPicker({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleCreate()
                 }}
-                placeholder={defaultPrefix}
+                placeholder={suggestedName}
                 className="h-8 text-xs flex-1"
               />
               <Button onClick={handleCreate} size="sm" disabled={busy}>

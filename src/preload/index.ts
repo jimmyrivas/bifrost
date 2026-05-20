@@ -359,7 +359,13 @@ export interface BifrostApi {
     buildAttachCmd: (
       kind: 'dtach' | 'tmux' | 'zellij',
       target: string,
-      opts?: { shell?: string; createIfMissing?: boolean; forceRunCommands?: boolean; binaryPath?: string }
+      opts?: {
+        shell?: string
+        createIfMissing?: boolean
+        forceRunCommands?: boolean
+        binaryPath?: string
+        disableMouseCapture?: boolean
+      }
     ) => Promise<string>
     killSession: (
       transport: { type: 'ssh'; sessionId: string } | { type: 'local' },

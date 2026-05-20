@@ -32,11 +32,18 @@ export const tmux: Multiplexer = {
     const create = opts.createIfMissing ?? true
     const shell = opts.shell ? ` ${shellQuote(opts.shell)}` : ''
     const bin = opts.binaryPath ? shellQuote(opts.binaryPath) : 'tmux'
+    // `set -g mouse off` is server-global, but `set -t <target> mouse off`
+    // pins the override to this session so user defaults elsewhere are not
+    // disturbed. The chain runs before attach so the override is in effect
+    // by the time xterm starts dispatching mouse events.
+    const mouseOff = opts.disableMouseCapture
+      ? `${bin} set-option -t ${shellQuote(target)} -q mouse off >/dev/null 2>&1; `
+      : ''
     if (create) {
       // new-session -A: attach if exists, create otherwise.
-      return `${bin} new-session -A -s ${shellQuote(target)}${shell}`
+      return `${mouseOff}${bin} new-session -A -s ${shellQuote(target)}${shell}`
     }
-    return `${bin} attach-session -t ${shellQuote(target)}`
+    return `${mouseOff}${bin} attach-session -t ${shellQuote(target)}`
   },
 
   async killSession(exec: RemoteExecutor, target: string): Promise<void> {

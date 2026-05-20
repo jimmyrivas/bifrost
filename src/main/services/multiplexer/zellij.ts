@@ -34,10 +34,14 @@ export const zellij: Multiplexer = {
     const force = opts.forceRunCommands ? ' --force-run-commands' : ''
     // Use absolute path from probe when available — independent of remote PATH.
     const bin = opts.binaryPath ? shellQuote(opts.binaryPath) : 'zellij'
+    // `attach … options --mouse-mode false` is a per-attach runtime override.
+    // Without it zellij's mouse-tracking redraws clobber xterm.js selection
+    // even with Shift held. Tail position is required by zellij's CLI parser.
+    const mouseOverride = opts.disableMouseCapture ? ' options --mouse-mode false' : ''
     if (create) {
-      return `${bin} attach --create${force} ${shellQuote(target)}`
+      return `${bin} attach --create${force} ${shellQuote(target)}${mouseOverride}`
     }
-    return `${bin} attach${force} ${shellQuote(target)}`
+    return `${bin} attach${force} ${shellQuote(target)}${mouseOverride}`
   },
 
   async killSession(exec: RemoteExecutor, target: string): Promise<void> {

@@ -293,7 +293,11 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
           return window.bifrost.multiplexer.buildAttachCmd(
             probe.primary.kind,
             primaryLive[0].target,
-            { createIfMissing: false, binaryPath: probe.primary.path }
+            {
+              createIfMissing: false,
+              binaryPath: probe.primary.path,
+              disableMouseCapture: cfg.disableMouseCapture
+            }
           )
         }
       }
@@ -324,7 +328,8 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
         return window.bifrost.multiplexer.buildAttachCmd(pick.kind, pick.target, {
           createIfMissing: false,
           forceRunCommands: pick.forceRunCommands,
-          binaryPath
+          binaryPath,
+          disableMouseCapture: cfg.disableMouseCapture
         })
       }
 
@@ -339,7 +344,8 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
       }
       return window.bifrost.multiplexer.buildAttachCmd(pick.kind, target, {
         createIfMissing: true,
-        binaryPath
+        binaryPath,
+        disableMouseCapture: cfg.disableMouseCapture
       })
     },
     []
@@ -428,6 +434,26 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
     fitAddon.fit()
     terminalRef.current = terminal
     fitAddonRef.current = fitAddon
+
+    // ── OSC 52: clipboard set from inside the PTY ──
+    // xterm.js v6 doesn't auto-write OSC 52 to the system clipboard. Without
+    // this handler, copy keybindings inside zellij/tmux/vim/fzf appear to do
+    // nothing. Format: `\e]52;<selection>;<base64-data>\a` where <selection>
+    // is the PRIMARY/CLIPBOARD/cut-buffer indicator (we accept any).
+    terminal.parser.registerOscHandler(52, (data: string) => {
+      const semi = data.indexOf(';')
+      if (semi < 0) return false
+      const payload = data.slice(semi + 1)
+      // `?` is a query for the current clipboard — we don't expose it.
+      if (payload === '?' || payload.length === 0) return true
+      try {
+        const decoded = atob(payload)
+        navigator.clipboard.writeText(decoded).catch(() => { /* permission denied */ })
+        return true
+      } catch {
+        return false
+      }
+    })
 
     const resizeObserver = new ResizeObserver(() => fitAddon.fit())
     resizeObserver.observe(containerRef.current)

@@ -13,6 +13,10 @@ export interface MultiplexerConfig {
   sessionPrefix: string
   autoAttachSingle: boolean
   alwaysAsk: boolean
+  /** When true, the attach command tells the multiplexer to release mouse
+   *  capture so xterm.js can do native click-and-drag selection. Defaults
+   *  to true because zellij's mouse mode otherwise breaks selection. */
+  disableMouseCapture: boolean
 }
 
 export const defaultMultiplexer: MultiplexerConfig = {
@@ -21,7 +25,8 @@ export const defaultMultiplexer: MultiplexerConfig = {
   socketDir: '~/.dtach',
   sessionPrefix: 'bifrost-{conn}',
   autoAttachSingle: true,
-  alwaysAsk: false
+  alwaysAsk: false,
+  disableMouseCapture: true
 }
 
 interface MultiplexerPanelProps {
@@ -177,6 +182,22 @@ export function MultiplexerPanel({
               onCheckedChange={(checked) => update('alwaysAsk', checked)}
             />
           </label>
+
+          {value.preferred !== 'dtach' && (
+            <label className="flex items-center justify-between cursor-pointer p-2 rounded-[var(--radius)] bg-[var(--surface-container-high)]">
+              <div>
+                <span className="text-xs text-[var(--on-surface)]">Disable multiplexer mouse capture</span>
+                <span className="text-[9px] text-[var(--on-surface-variant)] block">
+                  Restores native click-and-drag selection. Required for zellij — its
+                  mouse mode otherwise clears any selection on every redraw.
+                </span>
+              </div>
+              <Switch
+                checked={value.disableMouseCapture}
+                onCheckedChange={(checked) => update('disableMouseCapture', checked)}
+              />
+            </label>
+          )}
         </>
       )}
     </div>

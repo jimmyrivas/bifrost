@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { Layers, RefreshCw, Plus, Power, Trash2 } from 'lucide-react'
 import { cn } from '@renderer/lib/utils'
 import type {
@@ -7,6 +7,7 @@ import type {
   MultiplexerProbeResult
 } from './MultiplexerPicker'
 import { defaultMultiplexer } from '@renderer/components/connections/MultiplexerPanel'
+import { uniqueSessionName } from '@renderer/lib/multiplexer-naming'
 
 interface MultiplexerManagerProps {
   /** Active terminal id, e.g. "ssh:ssh-3" or "terminal-1". null = nothing to manage. */
@@ -112,13 +113,16 @@ export function MultiplexerManager({
   const handleAttach = async (target: string): Promise<void> => {
     const cmd = await window.bifrost.multiplexer.buildAttachCmd(active, target, {
       createIfMissing: false,
-      binaryPath: activeProbe?.path
+      binaryPath: activeProbe?.path,
+      disableMouseCapture: config.disableMouseCapture
     })
     onSendCommand(cmd)
   }
 
   const handleCreate = async (): Promise<void> => {
-    const name = newName.trim() || `bifrost-${Date.now().toString(36)}`
+    const base = newName.trim() || 'bifrost'
+    const existing = activeProbe?.sessions.map((s) => s.name) ?? []
+    const name = uniqueSessionName(base, existing)
     let target = name
     if (active === 'dtach') {
       let dir = (config.socketDir || '~/.dtach').replace(/\/$/, '')
@@ -128,7 +132,8 @@ export function MultiplexerManager({
     }
     const cmd = await window.bifrost.multiplexer.buildAttachCmd(active, target, {
       createIfMissing: true,
-      binaryPath: activeProbe?.path
+      binaryPath: activeProbe?.path,
+      disableMouseCapture: config.disableMouseCapture
     })
     onSendCommand(cmd)
     setNewName('')
@@ -166,6 +171,11 @@ export function MultiplexerManager({
 
   const liveSessions = activeProbe?.sessions.filter((s) => s.alive) ?? []
   const staleSessions = activeProbe?.sessions.filter((s) => !s.alive) ?? []
+
+  const suggestedName = useMemo(() => {
+    const names = activeProbe?.sessions.map((s) => s.name) ?? []
+    return uniqueSessionName(newName.trim() || 'bifrost', names)
+  }, [activeProbe, newName])
 
   return (
     <div className="flex flex-col gap-2">
@@ -283,7 +293,7 @@ export function MultiplexerManager({
             onKeyDown={(e) => {
               if (e.key === 'Enter') handleCreate()
             }}
-            placeholder="Session name"
+            placeholder={suggestedName}
             className={cn(
               'flex-1 bg-[var(--surface-container-highest)] rounded-[var(--radius)] px-2 py-1',
               'text-xs text-[var(--on-surface)] placeholder-[var(--on-surface-variant)]/50 outline-none ghost-border'

@@ -46,6 +46,11 @@ export interface AttachOptions {
   /** Absolute path to the binary on the remote (from probe). When set, the
    *  attach command uses it directly instead of relying on PATH at exec time. */
   binaryPath?: string
+  /** When true, disable the multiplexer's own mouse capture so xterm.js can
+   *  perform native click-and-drag selection. Restoring native selection is
+   *  the only reliable fix for selection that disappears under zellij's
+   *  mouse-tracking redraws and keeps OSC 52 copy paths predictable. */
+  disableMouseCapture?: boolean
 }
 
 /**

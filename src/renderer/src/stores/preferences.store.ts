@@ -78,11 +78,22 @@ export const usePreferencesStore = create<PreferencesState>()(
     }),
     {
       name: 'bifrost-preferences',
-      version: 2,
+      version: 3,
       migrate: (persisted, version) => {
         const state = (persisted ?? {}) as Partial<PreferencesState>
         if (version < 2 && !state.localMultiplexer) {
           state.localMultiplexer = { ...defaultLocalMultiplexer }
+        }
+        // v3: disableMouseCapture added to MultiplexerConfig. Pre-existing
+        // localMultiplexer objects lack the field; backfill with the safe
+        // default (true) so zellij users get working selection on first run.
+        if (version < 3 && state.localMultiplexer) {
+          state.localMultiplexer = {
+            ...defaultLocalMultiplexer,
+            ...state.localMultiplexer,
+            disableMouseCapture:
+              state.localMultiplexer.disableMouseCapture ?? true
+          }
         }
         return state as PreferencesState
       }
