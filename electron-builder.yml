@@ -17,8 +17,6 @@ asarUnpack:
 linux:
   target:
     - AppImage
-    - deb
-    - rpm
   maintainer: Jimmy Rivas
   category: Utility
   icon: resources/icon.png

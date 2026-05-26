@@ -57,6 +57,8 @@ export function MultiplexerManager({
         // Bias initial active to user's preference
         if (next.preferred === 'dtach' || next.preferred === 'auto') setActive('dtach')
         else if (next.preferred === 'tmux') setActive('tmux')
+        else if (next.preferred === 'zellij') setActive('zellij')
+        else if (next.preferred === 'rmux') setActive('rmux')
       } catch {
         /* keep default */
       }
@@ -68,8 +70,8 @@ export function MultiplexerManager({
     setBusy(true)
     setError(null)
     try {
-      // Probe all three tools so the user can switch between them.
-      const [tmuxR, dtachR, zellijR] = await Promise.all([
+      // Probe every supported tool so the user can switch between them.
+      const [tmuxR, dtachR, zellijR, rmuxR] = await Promise.all([
         window.bifrost.multiplexer.probe(transport, {
           preferred: 'tmux',
           socketDir: config.socketDir
@@ -81,14 +83,22 @@ export function MultiplexerManager({
         window.bifrost.multiplexer.probe(transport, {
           preferred: 'zellij',
           socketDir: config.socketDir
+        }),
+        window.bifrost.multiplexer.probe(transport, {
+          preferred: 'rmux',
+          socketDir: config.socketDir
         })
       ])
-      // Stash all three results in a single "extended" probe shape (panel-internal).
+      // Stash every result in a single "extended" probe shape (panel-internal).
       setProbe({
         primary: tmuxR.primary,
         fallback: dtachR.primary,
-        zellij: zellijR.primary
-      } as MultiplexerProbeResponse & { zellij?: MultiplexerProbeResult })
+        zellij: zellijR.primary,
+        rmux: rmuxR.primary
+      } as MultiplexerProbeResponse & {
+        zellij?: MultiplexerProbeResult
+        rmux?: MultiplexerProbeResult
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -105,8 +115,12 @@ export function MultiplexerManager({
     if (!probe) return undefined
     if (probe.primary.kind === active) return probe.primary
     if (probe.fallback?.kind === active) return probe.fallback
-    const ext = probe as MultiplexerProbeResponse & { zellij?: MultiplexerProbeResult }
+    const ext = probe as MultiplexerProbeResponse & {
+      zellij?: MultiplexerProbeResult
+      rmux?: MultiplexerProbeResult
+    }
     if (ext.zellij?.kind === active) return ext.zellij
+    if (ext.rmux?.kind === active) return ext.rmux
     return undefined
   })()
 
@@ -198,11 +212,15 @@ export function MultiplexerManager({
 
       {/* Kind tabs */}
       <div className="flex gap-1">
-        {(['tmux', 'dtach', 'zellij'] as const).map((kind) => {
-          const ext = probe as (MultiplexerProbeResponse & { zellij?: MultiplexerProbeResult }) | null
+        {(['tmux', 'dtach', 'zellij', 'rmux'] as const).map((kind) => {
+          const ext = probe as (MultiplexerProbeResponse & {
+            zellij?: MultiplexerProbeResult
+            rmux?: MultiplexerProbeResult
+          }) | null
           const r = probe?.primary.kind === kind ? probe.primary
                   : probe?.fallback?.kind === kind ? probe.fallback
                   : ext?.zellij?.kind === kind ? ext.zellij
+                  : ext?.rmux?.kind === kind ? ext.rmux
                   : undefined
           return (
             <button

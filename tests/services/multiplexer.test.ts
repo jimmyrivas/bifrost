@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { dtach, parseDtachListOutput } from '../../src/main/services/multiplexer/dtach'
 import { tmux, parseTmuxListOutput } from '../../src/main/services/multiplexer/tmux'
 import { zellij, parseZellijListOutput } from '../../src/main/services/multiplexer/zellij'
+import { rmux } from '../../src/main/services/multiplexer/rmux'
 import { shellQuote, type RemoteExecutor } from '../../src/main/services/multiplexer/types'
 
 function fakeExecutor(
@@ -303,6 +304,52 @@ describe('zellij.cleanStale', () => {
     expect(deleteCalls[1]).toContain(`'exited-c'`)
     // Alive session must NOT be touched
     expect(calls.some((c) => c.includes('delete-session') && c.includes('alive-a'))).toBe(false)
+  })
+})
+
+describe('rmux.buildAttachCmd', () => {
+  it('uses new-session -A by default (tmux-compatible CLI)', () => {
+    expect(rmux.buildAttachCmd('work', {})).toBe(`rmux new-session -A -s 'work'`)
+  })
+  it('uses attach-session when not creating', () => {
+    expect(rmux.buildAttachCmd('work', { createIfMissing: false })).toBe(
+      `rmux attach-session -t 'work'`
+    )
+  })
+  it('appends a custom shell when creating', () => {
+    expect(rmux.buildAttachCmd('work', { shell: '/bin/fish' })).toBe(
+      `rmux new-session -A -s 'work' '/bin/fish'`
+    )
+  })
+  it('prefixes set-option mouse off when disableMouseCapture is set', () => {
+    const cmd = rmux.buildAttachCmd('work', { disableMouseCapture: true })
+    expect(cmd).toContain(`rmux set-option -t 'work' -q mouse off`)
+    expect(cmd).toContain(`rmux new-session -A -s 'work'`)
+  })
+  it('uses the absolute binary path when provided', () => {
+    const cmd = rmux.buildAttachCmd('work', { binaryPath: '/home/u/.cargo/bin/rmux' })
+    expect(cmd).toBe(`'/home/u/.cargo/bin/rmux' new-session -A -s 'work'`)
+  })
+})
+
+describe('rmux.probe', () => {
+  it('returns installed=false when binary missing', async () => {
+    const { exec } = fakeExecutor([{ match: /command -v rmux/, code: 1 }])
+    const r = await rmux.probe(exec, {})
+    expect(r.installed).toBe(false)
+    expect(r.sessions).toEqual([])
+  })
+  it('parses listed sessions using the tmux output format', async () => {
+    const { exec } = fakeExecutor([
+      { match: /command -v rmux/, stdout: '/home/u/.cargo/bin/rmux\n' },
+      { match: /list-sessions/, stdout: 'main|0|1700000000\nlogs|1|1700000100\n' }
+    ])
+    const r = await rmux.probe(exec, {})
+    expect(r.installed).toBe(true)
+    expect(r.path).toBe('/home/u/.cargo/bin/rmux')
+    expect(r.sessions).toHaveLength(2)
+    expect(r.sessions[0]).toMatchObject({ name: 'main', alive: true, attached: false })
+    expect(r.sessions[1]).toMatchObject({ name: 'logs', attached: true })
   })
 })
 

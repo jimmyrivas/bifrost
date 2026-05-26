@@ -274,9 +274,14 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
 
       if (!probe.primary.installed && !probe.fallback?.installed) {
         // Neither installed: notify user via xterm and proceed plain.
-        const installHint = preferred === 'dtach'
-          ? 'sudo apt install dtach   (or dnf/yum/pacman equivalent)'
-          : 'sudo apt install tmux    (or dnf/yum/pacman equivalent)'
+        const installHint =
+          preferred === 'dtach'
+            ? 'sudo apt install dtach   (or dnf/yum/pacman equivalent)'
+            : preferred === 'zellij'
+              ? 'cargo install --locked zellij   (or your distro package)'
+              : preferred === 'rmux'
+                ? 'cargo install rmux --locked   (or curl -fsSL https://rmux.io/install.sh | sh)'
+                : 'sudo apt install tmux    (or dnf/yum/pacman equivalent)'
         terminalRef.current?.write(
           `\r\n\x1b[33mMultiplexer ${preferred} not installed on ${hostLabel}.\x1b[0m\r\n` +
           `\x1b[90mTo enable session persistence: ${installHint}\x1b[0m\r\n`

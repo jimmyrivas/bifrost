@@ -3,8 +3,8 @@ import { Switch } from '@renderer/components/ui/switch'
 import { Input } from '@renderer/components/ui/input'
 import { cn } from '@renderer/lib/utils'
 
-export type MultiplexerKind = 'none' | 'dtach' | 'tmux' | 'zellij' | 'auto'
-export type MultiplexerFallback = 'none' | 'dtach' | 'tmux' | 'zellij'
+export type MultiplexerKind = 'none' | 'dtach' | 'tmux' | 'zellij' | 'rmux' | 'auto'
+export type MultiplexerFallback = 'none' | 'dtach' | 'tmux' | 'zellij' | 'rmux'
 
 export interface MultiplexerConfig {
   preferred: MultiplexerKind
@@ -41,6 +41,7 @@ const KIND_OPTIONS: Array<{ id: MultiplexerKind; label: string; hint: string }> 
   { id: 'dtach', label: 'DTACH', hint: 'Lightweight, transparent persistence.' },
   { id: 'tmux', label: 'TMUX', hint: 'Multi-window/pane persistence with scrollback.' },
   { id: 'zellij', label: 'ZELLIJ', hint: 'Modern multiplexer with built-in scrollback, panes, and session resurrection.' },
+  { id: 'rmux', label: 'RMUX', hint: 'Rust multiplexer with tmux-compatible CLI, daemon-backed and scriptable.' },
   { id: 'auto', label: 'AUTO', hint: 'Try dtach first, fall back to tmux.' }
 ]
 
@@ -48,7 +49,8 @@ const FALLBACK_OPTIONS: Array<{ id: MultiplexerFallback; label: string }> = [
   { id: 'none', label: 'None' },
   { id: 'dtach', label: 'dtach' },
   { id: 'tmux', label: 'tmux' },
-  { id: 'zellij', label: 'zellij' }
+  { id: 'zellij', label: 'zellij' },
+  { id: 'rmux', label: 'rmux' }
 ]
 
 export function MultiplexerPanel({
@@ -67,7 +69,11 @@ export function MultiplexerPanel({
   const enabled = value.preferred !== 'none'
   const showDtachOptions = value.preferred === 'dtach' || value.preferred === 'auto'
   // Fallback applies whenever we have a non-tmux primary that could be missing.
-  const showFallback = value.preferred === 'dtach' || value.preferred === 'zellij' || value.preferred === 'auto'
+  const showFallback =
+    value.preferred === 'dtach' ||
+    value.preferred === 'zellij' ||
+    value.preferred === 'rmux' ||
+    value.preferred === 'auto'
 
   return (
     <div className={cn('flex flex-col gap-3', disabled && 'opacity-50 pointer-events-none')}>
@@ -81,7 +87,7 @@ export function MultiplexerPanel({
         <label className="block text-xs text-[var(--on-surface-variant)] mb-2">
           Session multiplexer
         </label>
-        <div className="grid grid-cols-5 gap-1">
+        <div className="grid grid-cols-6 gap-1">
           {KIND_OPTIONS.map((opt) => (
             <button
               key={opt.id}

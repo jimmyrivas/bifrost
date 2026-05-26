@@ -12,7 +12,7 @@ import { Input } from '@renderer/components/ui/input'
 import { cn } from '@renderer/lib/utils'
 import { uniqueSessionName } from '@renderer/lib/multiplexer-naming'
 
-export type MultiplexerKind = 'dtach' | 'tmux' | 'zellij'
+export type MultiplexerKind = 'dtach' | 'tmux' | 'zellij' | 'rmux'
 
 export interface MultiplexerProbeSession {
   name: string
