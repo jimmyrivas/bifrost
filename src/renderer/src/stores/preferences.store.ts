@@ -18,6 +18,12 @@ export interface TerminalPreferences {
   fontLigatures: boolean
   copyOnSelect: boolean
   tabTitleTemplate: string
+  /** When pasting an image on an SSH tab, upload it and type the remote path. */
+  imagePasteEnabled: boolean
+  /** Remote directory for uploaded images. `~` is expanded on the server. */
+  imagePasteDir: string
+  /** Delete uploaded images from the server when the app window closes. */
+  imagePasteDeleteOnClose: boolean
 }
 
 interface PreferencesState {
@@ -48,7 +54,10 @@ const defaultTerminal: TerminalPreferences = {
   autoReconnect: true,
   fontLigatures: true,
   copyOnSelect: false,
-  tabTitleTemplate: ''
+  tabTitleTemplate: '',
+  imagePasteEnabled: true,
+  imagePasteDir: '~/.bifrost/pastes',
+  imagePasteDeleteOnClose: false
 }
 
 const defaultLocalMultiplexer: MultiplexerConfig = {
@@ -78,7 +87,7 @@ export const usePreferencesStore = create<PreferencesState>()(
     }),
     {
       name: 'bifrost-preferences',
-      version: 3,
+      version: 4,
       migrate: (persisted, version) => {
         const state = (persisted ?? {}) as Partial<PreferencesState>
         if (version < 2 && !state.localMultiplexer) {
@@ -94,6 +103,10 @@ export const usePreferencesStore = create<PreferencesState>()(
             disableMouseCapture:
               state.localMultiplexer.disableMouseCapture ?? true
           }
+        }
+        // v4: image-paste preferences added. Backfill onto persisted terminal.
+        if (version < 4) {
+          state.terminal = { ...defaultTerminal, ...(state.terminal ?? {}) }
         }
         return state as PreferencesState
       }

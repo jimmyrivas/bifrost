@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react'
 import {
   ClipboardCopy,
   ClipboardPaste,
+  ImageUp,
   Search,
   SplitSquareHorizontal,
   SplitSquareVertical,
@@ -448,6 +449,16 @@ export function TerminalContextMenu({
           Paste
           <ContextMenuShortcut>Ctrl+Shift+V</ContextMenuShortcut>
         </ContextMenuItem>
+        {connectionId && (
+          <ContextMenuItem
+            onClick={() => document.dispatchEvent(new CustomEvent('terminal:paste-image'))}
+            className="gap-2"
+          >
+            <ImageUp size={14} strokeWidth={1.5} />
+            Paste Image to Server
+            <ContextMenuShortcut>Ctrl+Shift+I</ContextMenuShortcut>
+          </ContextMenuItem>
+        )}
 
         <ContextMenuSeparator />
 

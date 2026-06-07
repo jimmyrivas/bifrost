@@ -10,6 +10,8 @@ import { registerExpectIpc } from './ipc/expect.ipc'
 import { registerClusterIpc } from './ipc/cluster.ipc'
 import { registerSystemIpc } from './ipc/system.ipc'
 import { registerSftpIpc } from './ipc/sftp.ipc'
+import { registerClipboardIpc } from './ipc/clipboard.ipc'
+import { hasPendingCleanup, cleanupImagePastes } from './services/image-paste'
 import { registerProtocolsIpc } from './ipc/protocols.ipc'
 import { registerPasswordManagerIpc } from './ipc/password-manager.ipc'
 import { registerSnippetsIpc } from './ipc/snippets.ipc'
@@ -148,6 +150,7 @@ app.whenReady().then(() => {
   registerClusterIpc()
   registerSystemIpc()
   registerSftpIpc()
+  registerClipboardIpc()
   registerPasswordManagerIpc()
   registerSnippetsIpc()
   registerScriptsIpc()
@@ -337,7 +340,18 @@ app.on('window-all-closed', () => {
   }
 })
 
-app.on('before-quit', () => {
+let imageCleanupStarted = false
+
+app.on('before-quit', (event) => {
+  // Delete pasted-image uploads first, while SSH channels are still alive.
+  // Defer the actual teardown until that async work finishes, then re-quit.
+  if (!imageCleanupStarted && hasPendingCleanup()) {
+    imageCleanupStarted = true
+    event.preventDefault()
+    cleanupImagePastes().finally(() => app.quit())
+    return
+  }
+
   stopMcpOnExit()
   deactivatePlugins()
   stopAllRecordings()

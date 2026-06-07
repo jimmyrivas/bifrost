@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { Radio, AlertTriangle, Clock, Bot, X as XIcon, Loader2 } from 'lucide-react'
+import { Radio, AlertTriangle, Clock, Bot, X as XIcon, Loader2, ImageUp } from 'lucide-react'
 import { useTerminal } from '@renderer/hooks/useTerminal'
 import { useSessionsStore, type TerminalStyle } from '@renderer/stores/sessions.store'
 import { TerminalContextMenu } from './TerminalContextMenu'
@@ -28,7 +28,8 @@ export function XTerminal({ paneId, tabId, connectionId, terminalStyle, shell, s
     pendingMuxPick,
     resolveMuxPick,
     dynamicTitle,
-    detectedErrors
+    detectedErrors,
+    imagePasteStatus
   } = useTerminal({
     paneId,
     tabId,
@@ -74,6 +75,19 @@ export function XTerminal({ paneId, tabId, connectionId, terminalStyle, shell, s
   }, [dynamicTitle, tabId, renameTab])
   const broadcastMode = useSessionsStore((s) => s.broadcastMode)
   const [showSearch, setShowSearch] = useState(false)
+
+  // Error badge auto-hide + dismissable
+  const [errorBadgeVisible, setErrorBadgeVisible] = useState(false)
+  const lastSeenErrorTsRef = useRef<number>(0)
+  useEffect(() => {
+    const latest = detectedErrors[detectedErrors.length - 1]
+    if (!latest) return
+    if (latest.timestamp <= lastSeenErrorTsRef.current) return
+    lastSeenErrorTsRef.current = latest.timestamp
+    setErrorBadgeVisible(true)
+    const t = setTimeout(() => setErrorBadgeVisible(false), 8000)
+    return () => clearTimeout(t)
+  }, [detectedErrors])
 
   const handleFindToggle = useCallback(() => {
     setShowSearch((prev) => !prev)
@@ -263,15 +277,37 @@ export function XTerminal({ paneId, tabId, connectionId, terminalStyle, shell, s
         <TerminalSearchBar paneId={paneId} onClose={() => setShowSearch(false)} />
       )}
 
-      {/* Error indicator (#99) */}
-      {detectedErrors.length > 0 && (
+      {/* Image-paste-to-server status */}
+      {imagePasteStatus && (
         <div
-          className="absolute bottom-2 right-2 z-10 flex items-center gap-1.5 bg-[var(--error)]/15 text-[var(--error)] px-2 py-1 rounded-[var(--radius)] text-[10px] font-semibold cursor-help"
+          className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 max-w-[90%] bg-[var(--surface-bright)] text-[var(--on-surface)] px-3 py-1.5 rounded-[var(--radius)] text-[11px] shadow-lg backdrop-blur-[12px]"
+          role="status"
+          aria-live="polite"
+        >
+          {imagePasteStatus.startsWith('Uploading')
+            ? <Loader2 size={13} className="text-[#6bd5ff] animate-spin shrink-0" />
+            : <ImageUp size={13} className="text-[#6bd5ff] shrink-0" />}
+          <span className="truncate font-mono">{imagePasteStatus}</span>
+        </div>
+      )}
+
+      {/* Error indicator (#99) */}
+      {errorBadgeVisible && detectedErrors.length > 0 && (
+        <div
+          className="absolute bottom-2 right-2 z-10 flex items-center gap-1.5 bg-[var(--error)]/15 text-[var(--error)] pl-2 pr-1 py-1 rounded-[var(--radius)] text-[10px] font-semibold"
           title={detectedErrors[detectedErrors.length - 1]?.pattern.suggestion}
           role="status"
         >
           <AlertTriangle size={11} />
-          {detectedErrors[detectedErrors.length - 1]?.pattern.label}
+          <span className="cursor-help">{detectedErrors[detectedErrors.length - 1]?.pattern.label}</span>
+          <button
+            type="button"
+            onClick={() => setErrorBadgeVisible(false)}
+            className="ml-0.5 -mr-0.5 p-0.5 rounded hover:bg-[var(--error)]/20 cursor-pointer"
+            aria-label="Dismiss error"
+          >
+            <XIcon size={11} />
+          </button>
         </div>
       )}
 

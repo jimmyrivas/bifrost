@@ -77,6 +77,7 @@ interface UseTerminalReturn {
   resolveMuxPick: (pick: MultiplexerPick) => void
   dynamicTitle: string | null
   detectedErrors: DetectedError[]
+  imagePasteStatus: string | null
 }
 
 const MIN_FONT_SIZE = 8
@@ -144,6 +145,7 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
 
   const [pendingPaste, setPendingPaste] = useState<PasteRequest | null>(null)
   const [pendingMuxPick, setPendingMuxPick] = useState<PendingMuxPick | null>(null)
+  const [imagePasteStatus, setImagePasteStatus] = useState<string | null>(null)
   const detectedErrorsRef = useRef<DetectedError[]>([])
   const dynamicTitleRef = useRef<string | null>(null)
   const errorBufferRef = useRef('')
@@ -370,34 +372,108 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
     const handleZoomOut = (): void => zoomOut()
     const handleZoomReset = (): void => resetZoom()
 
-    const handlePaste = (): void => {
-      // Only paste to the active tab's terminal
+    // Returns true if the clipboard held an image and it was handled (uploaded
+    // to the remote host, or attempted). When true, the caller must NOT fall
+    // through to text paste. SSH tabs only — local PTYs have no remote target.
+    const tryImagePaste = async (myTermId: string): Promise<boolean> => {
+      if (!myTermId.startsWith('ssh:')) return false
+      let hasImage = false
+      try {
+        hasImage = await window.bifrost.clipboard.hasImage()
+      } catch {
+        return false
+      }
+      if (!hasImage) return false
+
+      const sid = myTermId.slice(4)
+      const prefs = usePreferencesStore.getState().terminal
+      setImagePasteStatus('Uploading image…')
+      try {
+        const remotePath = await window.bifrost.clipboard.pasteImageToRemote(
+          sid,
+          prefs.imagePasteDir,
+          prefs.imagePasteDeleteOnClose
+        )
+        if (!remotePath) {
+          setImagePasteStatus(null)
+          return false
+        }
+        window.bifrost.ssh.write(sid, remotePath)
+        setImagePasteStatus(`Uploaded: ${remotePath}`)
+        setTimeout(() => setImagePasteStatus(null), 4000)
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        setImagePasteStatus(`Image upload failed: ${msg}`)
+        setTimeout(() => setImagePasteStatus(null), 5000)
+      }
+      return true
+    }
+
+    const isActiveTerminal = (): string | null => {
       const { activeTabId, tabs } = useSessionsStore.getState()
       const activeTab = tabs.find((t) => t.id === activeTabId)
       const activeTermId = activeTab?.rootPane?.terminalId
       const myTermId = terminalIdRef.current
-      if (!myTermId || myTermId !== activeTermId) return
+      if (!myTermId || myTermId !== activeTermId) return null
+      return myTermId
+    }
 
-      navigator.clipboard.readText().then((text) => {
-        if (!text) return
-        if (myTermId.startsWith('ssh:')) {
-          window.bifrost?.ssh?.write(myTermId.slice(4), text)
-        } else {
-          window.bifrost?.terminal?.write(myTermId, text)
+    const handlePaste = (): void => {
+      const myTermId = isActiveTerminal()
+      if (!myTermId) return
+
+      const pasteText = (): void => {
+        navigator.clipboard.readText().then((text) => {
+          if (!text) return
+          if (myTermId.startsWith('ssh:')) {
+            window.bifrost?.ssh?.write(myTermId.slice(4), text)
+          } else {
+            window.bifrost?.terminal?.write(myTermId, text)
+          }
+        }).catch(() => { /* clipboard denied */ })
+      }
+
+      // When auto image-paste is enabled, an image on the clipboard is uploaded
+      // instead of pasting text. Otherwise paste text as usual.
+      if (usePreferencesStore.getState().terminal.imagePasteEnabled) {
+        tryImagePaste(myTermId).then((handled) => {
+          if (!handled) pasteText()
+        })
+      } else {
+        pasteText()
+      }
+    }
+
+    // Dedicated "paste image to server" gesture (Ctrl+Shift+I / context menu).
+    // Always attempts an image upload regardless of the auto-paste toggle.
+    const handlePasteImage = (): void => {
+      const myTermId = isActiveTerminal()
+      if (!myTermId) return
+      if (!myTermId.startsWith('ssh:')) {
+        setImagePasteStatus('Image paste only works on SSH sessions')
+        setTimeout(() => setImagePasteStatus(null), 3000)
+        return
+      }
+      tryImagePaste(myTermId).then((handled) => {
+        if (!handled) {
+          setImagePasteStatus('No image in clipboard')
+          setTimeout(() => setImagePasteStatus(null), 3000)
         }
-      }).catch(() => { /* clipboard denied */ })
+      })
     }
 
     document.addEventListener('terminal:zoom-in', handleZoomIn)
     document.addEventListener('terminal:zoom-out', handleZoomOut)
     document.addEventListener('terminal:zoom-reset', handleZoomReset)
     document.addEventListener('terminal:paste', handlePaste)
+    document.addEventListener('terminal:paste-image', handlePasteImage)
 
     return () => {
       document.removeEventListener('terminal:zoom-in', handleZoomIn)
       document.removeEventListener('terminal:zoom-out', handleZoomOut)
       document.removeEventListener('terminal:zoom-reset', handleZoomReset)
       document.removeEventListener('terminal:paste', handlePaste)
+      document.removeEventListener('terminal:paste-image', handlePasteImage)
     }
   }, [zoomIn, zoomOut, resetZoom])
 
@@ -890,6 +966,7 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
     pendingMuxPick,
     resolveMuxPick,
     dynamicTitle: dynamicTitleRef.current,
-    detectedErrors: detectedErrorsRef.current
+    detectedErrors: detectedErrorsRef.current,
+    imagePasteStatus
   }
 }

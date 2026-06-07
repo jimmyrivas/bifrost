@@ -149,6 +149,32 @@ export function Preferences(): JSX.Element {
                   <span className="text-xs text-[var(--on-surface-variant)]">Copy on Select</span>
                   <Switch checked={terminal.copyOnSelect} onCheckedChange={(v) => setTermPref('copyOnSelect', v)} />
                 </label>
+                <label className="flex items-center justify-between col-span-2 cursor-pointer">
+                  <span className="text-xs text-[var(--on-surface-variant)]">
+                    Paste image to server
+                    <span className="block text-[9px] text-[var(--on-surface-variant)]/70">
+                      On SSH tabs, pasting an image uploads it and types the remote path
+                    </span>
+                  </span>
+                  <Switch checked={terminal.imagePasteEnabled} onCheckedChange={(v) => setTermPref('imagePasteEnabled', v)} />
+                </label>
+                <div className="col-span-2">
+                  <label className={fieldLabel} htmlFor="pref-image-dir">IMAGE UPLOAD DIRECTORY (REMOTE)</label>
+                  <Input
+                    id="pref-image-dir"
+                    value={terminal.imagePasteDir}
+                    onChange={(e) => setTermPref('imagePasteDir', e.target.value)}
+                    placeholder="~/.bifrost/pastes"
+                    className="font-['JetBrains_Mono'] text-xs"
+                  />
+                  <span className="text-[9px] text-[var(--on-surface-variant)] mt-0.5 block">
+                    Where pasted images are stored on the server. <code>~</code> expands to the remote home.
+                  </span>
+                </div>
+                <label className="flex items-center justify-between col-span-2 cursor-pointer">
+                  <span className="text-xs text-[var(--on-surface-variant)]">Delete uploaded images on app close</span>
+                  <Switch checked={terminal.imagePasteDeleteOnClose} onCheckedChange={(v) => setTermPref('imagePasteDeleteOnClose', v)} />
+                </label>
                 <div className="col-span-2">
                   <label className={fieldLabel} htmlFor="pref-tab-title">DEFAULT TAB TITLE TEMPLATE</label>
                   <Input

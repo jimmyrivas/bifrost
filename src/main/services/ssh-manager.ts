@@ -3,6 +3,13 @@ import { credentialStore } from './credential-store'
 import { auditLogger } from './audit-log'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { join } from 'path'
+import { homedir } from 'os'
+
+function expandHome(p: string): string {
+  if (p === '~') return homedir()
+  if (p.startsWith('~/')) return join(homedir(), p.slice(2))
+  return p
+}
 import { app } from 'electron'
 import { createHash } from 'crypto'
 import { EventEmitter } from 'events'
@@ -434,14 +441,22 @@ export class SshManager extends EventEmitter {
           if (config.privateKeyContent) {
             connectConfig.privateKey = config.privateKeyContent
           } else if (config.privateKeyPath) {
-            connectConfig.privateKey = readFileSync(config.privateKeyPath)
+            const keyPath = expandHome(config.privateKeyPath)
+            if (!existsSync(keyPath)) {
+              throw new Error(`Private key not found: ${keyPath}`)
+            }
+            connectConfig.privateKey = readFileSync(keyPath)
           }
           break
         case 'key_pass':
           if (config.privateKeyContent) {
             connectConfig.privateKey = config.privateKeyContent
           } else if (config.privateKeyPath) {
-            connectConfig.privateKey = readFileSync(config.privateKeyPath)
+            const keyPath = expandHome(config.privateKeyPath)
+            if (!existsSync(keyPath)) {
+              throw new Error(`Private key not found: ${keyPath}`)
+            }
+            connectConfig.privateKey = readFileSync(keyPath)
           }
           if (config.encryptedPassphrase) {
             connectConfig.passphrase = credentialStore.decrypt(config.encryptedPassphrase)
@@ -454,6 +469,14 @@ export class SshManager extends EventEmitter {
         case 'manual':
           // No automatic auth
           break
+      }
+
+      // Offer the user's ssh-agent (if running) as an additional auth source
+      // for every method except explicit 'manual'. This matches the behavior
+      // of the system `ssh` command and lets agent-loaded keys work even when
+      // the user picked a specific privateKeyPath that the server doesn't accept.
+      if (config.authType !== 'manual' && process.env.SSH_AUTH_SOCK) {
+        connectConfig.agent = process.env.SSH_AUTH_SOCK
       }
 
       // #96: Handle keyboard-interactive prompts (TOTP/MFA)
@@ -518,6 +541,23 @@ export class SshManager extends EventEmitter {
           event: 'error',
           details: { message: err.message }
         })
+
+        // Surface a more actionable message when the server rejected every
+        // offered credential — almost always means the key isn't authorized
+        // or no method matched what the server allows.
+        const level = (err as { level?: string }).level
+        if (level === 'client-authentication') {
+          const offered: string[] = []
+          if (connectConfig.privateKey) offered.push('key file')
+          if (connectConfig.password) offered.push('password')
+          if (connectConfig.agent) offered.push('ssh-agent')
+          if (connectConfig.tryKeyboard) offered.push('keyboard-interactive')
+          const hint = offered.length > 0
+            ? ` (server rejected: ${offered.join(', ')})`
+            : ' (no credentials configured)'
+          rejectConnect(new Error(`SSH authentication failed${hint}. Verify the key is in the server's authorized_keys for user "${config.username}".`))
+          return
+        }
 
         rejectConnect(err)
       })

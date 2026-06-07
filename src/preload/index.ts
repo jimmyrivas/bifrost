@@ -157,6 +157,14 @@ export interface BifrostApi {
     close: (sftpId: string) => Promise<void>
     isOpen: (sftpId: string) => Promise<boolean>
   }
+  clipboard: {
+    hasImage: () => Promise<boolean>
+    pasteImageToRemote: (
+      sshSessionId: string,
+      remoteDir: string,
+      deleteOnClose: boolean
+    ) => Promise<string | null>
+  }
   protocols: {
     connectRDP: (
       host: string,
@@ -547,6 +555,11 @@ const api: BifrostApi = {
     stat: (sftpId, path) => ipcRenderer.invoke('sftp:stat', sftpId, path),
     close: (sftpId) => ipcRenderer.invoke('sftp:close', sftpId),
     isOpen: (sftpId) => ipcRenderer.invoke('sftp:isOpen', sftpId)
+  },
+  clipboard: {
+    hasImage: () => ipcRenderer.invoke('clipboard:hasImage'),
+    pasteImageToRemote: (sshSessionId, remoteDir, deleteOnClose) =>
+      ipcRenderer.invoke('terminal:pasteImageToRemote', sshSessionId, remoteDir, deleteOnClose)
   },
   protocols: {
     connectRDP: (host, port, username, password, options) =>

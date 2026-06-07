@@ -137,6 +137,12 @@ export function App(): JSX.Element {
         document.dispatchEvent(new CustomEvent('terminal:paste'))
         return
       }
+      // Ctrl+Shift+I: Paste image from clipboard to the connected server
+      if (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i')) {
+        e.preventDefault()
+        document.dispatchEvent(new CustomEvent('terminal:paste-image'))
+        return
+      }
       // Ctrl+Shift+D: Disconnect/close session
       if (e.ctrlKey && e.shiftKey && e.key === 'D') {
         e.preventDefault()
