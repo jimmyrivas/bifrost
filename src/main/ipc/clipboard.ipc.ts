@@ -6,8 +6,18 @@ export function registerClipboardIpc(): void {
 
   ipcMain.handle(
     'terminal:pasteImageToRemote',
-    (_event, sshSessionId: string, remoteDir: string, deleteOnClose: boolean): Promise<string | null> => {
-      return pasteImageToRemote(sshSessionId, remoteDir, deleteOnClose)
+    async (
+      _event,
+      sshSessionId: string,
+      remoteDir: string,
+      deleteOnClose: boolean
+    ): Promise<string | null> => {
+      try {
+        return await pasteImageToRemote(sshSessionId, remoteDir, deleteOnClose)
+      } catch (err) {
+        console.error('[image-paste] IPC failed', err)
+        throw err
+      }
     }
   )
 }

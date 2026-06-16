@@ -376,17 +376,25 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
     // to the remote host, or attempted). When true, the caller must NOT fall
     // through to text paste. SSH tabs only — local PTYs have no remote target.
     const tryImagePaste = async (myTermId: string): Promise<boolean> => {
-      if (!myTermId.startsWith('ssh:')) return false
+      if (!myTermId.startsWith('ssh:')) {
+        console.debug('[image-paste] skip: terminal is not SSH', myTermId)
+        return false
+      }
       let hasImage = false
       try {
         hasImage = await window.bifrost.clipboard.hasImage()
-      } catch {
+      } catch (err) {
+        console.warn('[image-paste] clipboard.hasImage threw', err)
         return false
       }
-      if (!hasImage) return false
+      if (!hasImage) {
+        console.debug('[image-paste] skip: no image on clipboard')
+        return false
+      }
 
       const sid = myTermId.slice(4)
       const prefs = usePreferencesStore.getState().terminal
+      console.debug('[image-paste] uploading via SSH session', sid, 'dir=', prefs.imagePasteDir)
       setImagePasteStatus('Uploading image…')
       try {
         const remotePath = await window.bifrost.clipboard.pasteImageToRemote(
@@ -395,6 +403,7 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
           prefs.imagePasteDeleteOnClose
         )
         if (!remotePath) {
+          console.warn('[image-paste] backend returned null path (no image?)')
           setImagePasteStatus(null)
           return false
         }
@@ -403,8 +412,9 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
         setTimeout(() => setImagePasteStatus(null), 4000)
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
+        console.error('[image-paste] upload failed', err)
         setImagePasteStatus(`Image upload failed: ${msg}`)
-        setTimeout(() => setImagePasteStatus(null), 5000)
+        setTimeout(() => setImagePasteStatus(null), 8000)
       }
       return true
     }
@@ -448,10 +458,14 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
     // Always attempts an image upload regardless of the auto-paste toggle.
     const handlePasteImage = (): void => {
       const myTermId = isActiveTerminal()
-      if (!myTermId) return
+      if (!myTermId) {
+        console.warn('[image-paste] no active terminal for this hook instance')
+        return
+      }
       if (!myTermId.startsWith('ssh:')) {
-        setImagePasteStatus('Image paste only works on SSH sessions')
-        setTimeout(() => setImagePasteStatus(null), 3000)
+        const kind = myTermId.startsWith('mosh:') ? 'Mosh' : 'this protocol'
+        setImagePasteStatus(`Image paste not supported for ${kind} sessions (SSH only)`)
+        setTimeout(() => setImagePasteStatus(null), 4000)
         return
       }
       tryImagePaste(myTermId).then((handled) => {

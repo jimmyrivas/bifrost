@@ -66,24 +66,57 @@ export async function pasteImageToRemote(
   deleteOnClose: boolean
 ): Promise<string | null> {
   const image = clipboard.readImage()
-  if (image.isEmpty()) return null
+  if (image.isEmpty()) {
+    console.warn('[image-paste] clipboard image is empty')
+    return null
+  }
 
   const session = sshManager.getSession(sshSessionId)
   if (!session) throw new Error(`SSH session ${sshSessionId} not found`)
 
+  const hops = session.chainClients?.length ?? 0
   const buf = image.toPNG()
-  const sftp = await openSftp(session.client)
+  console.info(
+    `[image-paste] session=${sshSessionId} host=${session.config.host} hops=${hops} bytes=${buf.length}`
+  )
+
+  let sftp: SFTPWrapper
+  try {
+    sftp = await openSftp(session.client)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    throw new Error(
+      `SFTP channel open failed (${hops > 0 ? `${hops} jump hop(s), ` : ''}target ${session.config.host}): ${msg}`
+    )
+  }
+
   try {
     let dir = (remoteDir || '~/.bifrost/pastes').trim().replace(/\/+$/, '')
     if (dir === '~' || dir.startsWith('~/')) {
-      const home = await realpath(sftp, '.')
-      dir = dir === '~' ? home : `${home}/${dir.slice(2)}`
+      try {
+        const home = await realpath(sftp, '.')
+        dir = dir === '~' ? home : `${home}/${dir.slice(2)}`
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        throw new Error(`SFTP realpath('.') failed on ${session.config.host}: ${msg}`)
+      }
     }
-    await mkdirp(sftp, dir)
+    try {
+      await mkdirp(sftp, dir)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      throw new Error(`Cannot create remote dir ${dir} on ${session.config.host}: ${msg}`)
+    }
 
     const name = `paste-${timestamp()}-${Math.random().toString(36).slice(2, 6)}.png`
     const remotePath = `${dir}/${name}`
-    await writeBuffer(sftp, remotePath, buf)
+    try {
+      await writeBuffer(sftp, remotePath, buf)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      throw new Error(`SFTP write ${remotePath} failed: ${msg}`)
+    }
+    console.info(`[image-paste] uploaded ${remotePath} (${buf.length} bytes)`)
 
     if (deleteOnClose) {
       const entry = uploads.get(sshSessionId) ?? { paths: [], deleteOnClose: true }
