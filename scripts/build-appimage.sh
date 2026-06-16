@@ -28,31 +28,38 @@ echo "=== Bifrost AppImage Builder ==="
 echo "Version: $VERSION  (tag: ${GIT_TAG:-none})"
 echo ""
 
-# 1. Check dependencies
+# 1. Check dependencies — this project is pinned to pnpm (packageManager field)
 echo "[1/5] Checking dependencies..."
 command -v node >/dev/null || { echo "ERROR: node not found"; exit 1; }
-command -v npm  >/dev/null || { echo "ERROR: npm not found";  exit 1; }
-echo "  Node $(node --version)  npm $(npm --version)"
+command -v pnpm >/dev/null || { echo "ERROR: pnpm not found (run: corepack enable)"; exit 1; }
+echo "  Node $(node --version)  pnpm $(pnpm --version)"
 
 # 2. Install dependencies if needed
 if [ ! -d node_modules ]; then
   echo "[2/5] Installing dependencies..."
-  npm ci
+  pnpm install --frozen-lockfile
 else
   echo "[2/5] Dependencies OK"
 fi
 
-# 3. Rebuild native modules for Electron
+# 3. Rebuild native modules for Electron's ABI.
+#    Use --only so electron-rebuild does NOT touch cpu-features, an OPTIONAL
+#    ssh2 dependency whose git submodule pnpm doesn't fetch — building it fails
+#    with "buildcheck.gypi not found" and would abort before the modules we
+#    actually need. ssh2 loads cpu-features via try/catch and works without it.
 echo "[3/5] Rebuilding native modules (better-sqlite3, node-pty)..."
-npx electron-rebuild -f -w better-sqlite3 node-pty 2>&1 | tail -5
+pnpm exec electron-rebuild --only better-sqlite3,node-pty 2>&1 | tail -5
 
 # 4. Build with electron-vite
 echo "[4/5] Building with electron-vite..."
-npx electron-vite build 2>&1 | tail -10
+pnpm exec electron-vite build 2>&1 | tail -10
 
-# 5. Package AppImage
+# 5. Package AppImage.
+#    npmRebuild=false: native modules were already rebuilt in step 3. Letting
+#    electron-builder rebuild them again would re-trigger the cpu-features
+#    failure described above.
 echo "[5/5] Packaging AppImage..."
-npx electron-builder --linux AppImage 2>&1 | tail -15
+pnpm exec electron-builder --linux -c.npmRebuild=false 2>&1 | tail -15
 
 echo ""
 echo "=== Done ==="

@@ -60,10 +60,15 @@ describe('findMarkdownPaths', () => {
     expect(out[0].start).toBeLessThan(out[1].start)
   })
 
-  it('ignores relative paths (v1 limitation)', () => {
+  it('ignores relative paths by default (no includeRelative)', () => {
     expect(findMarkdownPaths('./README.md')).toHaveLength(0)
     expect(findMarkdownPaths('../docs/x.md')).toHaveLength(0)
     expect(findMarkdownPaths('docs/setup.md')).toHaveLength(0)
+  })
+
+  it('flags absolute/home matches as non-relative', () => {
+    expect(findMarkdownPaths('/a/x.md')[0].relative).toBe(false)
+    expect(findMarkdownPaths('~/a/x.md')[0].relative).toBe(false)
   })
 
   it('ignores http(s) URLs ending in .md', () => {
@@ -90,6 +95,56 @@ describe('findMarkdownPaths', () => {
     const line = '   /deep/nested/dir/file.md   '
     const [m] = findMarkdownPaths(line)
     expect(line.slice(m.start, m.end)).toBe(m.path)
+  })
+})
+
+describe('findMarkdownPaths — includeRelative', () => {
+  const REL = { includeRelative: true }
+
+  it('matches ./ and ../ prefixed paths', () => {
+    const a = findMarkdownPaths('./README.md', REL)
+    expect(a).toHaveLength(1)
+    expect(a[0].path).toBe('./README.md')
+    expect(a[0].relative).toBe(true)
+
+    const b = findMarkdownPaths('../docs/x.md', REL)
+    expect(b[0].path).toBe('../docs/x.md')
+    expect(b[0].relative).toBe(true)
+  })
+
+  it('matches dir/name.md without a leading dot', () => {
+    const out = findMarkdownPaths('docs/setup.md', REL)
+    expect(out).toHaveLength(1)
+    expect(out[0].path).toBe('docs/setup.md')
+    expect(out[0].relative).toBe(true)
+  })
+
+  it('matches a bare filename', () => {
+    const out = findMarkdownPaths('the file is README.md here', REL)
+    expect(out).toHaveLength(1)
+    expect(out[0].path).toBe('README.md')
+    expect(out[0].relative).toBe(true)
+  })
+
+  it('still flags absolute/home as non-relative in this mode', () => {
+    expect(findMarkdownPaths('/a/x.md', REL)[0].relative).toBe(false)
+    expect(findMarkdownPaths('~/x.md', REL)[0].relative).toBe(false)
+  })
+
+  it('still ignores URLs in relative mode', () => {
+    expect(findMarkdownPaths('https://host/path/x.md', REL)).toHaveLength(0)
+    expect(findMarkdownPaths('see http://h/a.md', REL)).toHaveLength(0)
+  })
+
+  it('strips :line from a relative path', () => {
+    const out = findMarkdownPaths('docs/x.md:12 here', REL)
+    expect(out[0].path).toBe('docs/x.md')
+  })
+
+  it('handles a mix of absolute and relative on one line', () => {
+    const out = findMarkdownPaths('/abs/a.md vs ./rel/b.md', REL)
+    expect(out.map((m) => m.path)).toEqual(['/abs/a.md', './rel/b.md'])
+    expect(out.map((m) => m.relative)).toEqual([false, true])
   })
 })
 

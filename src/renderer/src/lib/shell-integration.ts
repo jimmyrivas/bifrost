@@ -74,3 +74,23 @@ if [ -n "$BIFROST_SHELL_INTEGRATION" ]; then
   preexec() { printf '\\e]133;B\\a' }
 fi
 `.trim()
+
+/**
+ * One-shot command written to the remote PTY to make the shell report its
+ * working directory via OSC 7 (`file://host/abs/path`) on every prompt. Lets
+ * Bifrost resolve relative `.md` links without the user editing their rc files.
+ *
+ * Detects bash vs zsh, hooks the prompt, and emits once immediately so the cwd
+ * is known right away. `\\033` (ESC) / `\\007` are kept literal so the remote
+ * `printf` emits the real control bytes. Idempotent (guards against double
+ * registration on bash).
+ */
+export const OSC7_CWD_SETUP =
+  `{ if [ -n "$ZSH_VERSION" ]; then ` +
+  `__bifrost_osc7(){ printf '\\033]7;file://%s%s\\007' "\${HOST:-$HOSTNAME}" "$PWD"; }; ` +
+  `typeset -ga precmd_functions; ` +
+  `case " \${precmd_functions[*]} " in *" __bifrost_osc7 "*) ;; *) precmd_functions+=(__bifrost_osc7);; esac; ` +
+  `elif [ -n "$BASH_VERSION" ]; then ` +
+  `__bifrost_osc7(){ printf '\\033]7;file://%s%s\\007' "$HOSTNAME" "$PWD"; }; ` +
+  `case "$PROMPT_COMMAND" in *__bifrost_osc7*) ;; *) PROMPT_COMMAND="__bifrost_osc7;\${PROMPT_COMMAND}";; esac; ` +
+  `fi; __bifrost_osc7; }`

@@ -244,18 +244,36 @@ export class SftpManager {
           else resolve(result!)
         }
 
-        sftp.stat(remotePath, (statErr, stats) => {
+        // SFTP does not expand `~` (that's a shell feature). Resolve it against
+        // the user's home via realpath('.') before stat/read, matching the
+        // behavior the user sees in their interactive shell.
+        const withResolvedPath = (cb: (p: string) => void): void => {
+          if (remotePath === '~' || remotePath.startsWith('~/')) {
+            sftp.realpath('.', (rpErr, home) => {
+              if (rpErr) {
+                done(new Error(`SFTP realpath('.') failed on ${host}: ${rpErr.message}`))
+                return
+              }
+              cb(remotePath === '~' ? home : `${home}/${remotePath.slice(2)}`)
+            })
+          } else {
+            cb(remotePath)
+          }
+        }
+
+        withResolvedPath((path) => {
+        sftp.stat(path, (statErr, stats) => {
           if (statErr) {
-            done(new Error(`SFTP stat ${remotePath} failed on ${host}: ${statErr.message}`))
+            done(new Error(`SFTP stat ${path} failed on ${host}: ${statErr.message}`))
             return
           }
           if ((stats.mode & 0o170000) === 0o040000) {
-            done(new Error(`${remotePath} is a directory, not a file`))
+            done(new Error(`${path} is a directory, not a file`))
             return
           }
 
           const totalSize = stats.size
-          const stream = sftp.createReadStream(remotePath, { start: 0, end: maxBytes - 1 })
+          const stream = sftp.createReadStream(path, { start: 0, end: maxBytes - 1 })
           const chunks: Buffer[] = []
           let received = 0
 
@@ -264,7 +282,7 @@ export class SftpManager {
             chunks.push(chunk)
           })
           stream.on('error', (readErr: Error) => {
-            done(new Error(`SFTP read ${remotePath} failed on ${host}: ${readErr.message}`))
+            done(new Error(`SFTP read ${path} failed on ${host}: ${readErr.message}`))
           })
           stream.on('end', () => {
             const buf = Buffer.concat(chunks)
@@ -274,6 +292,7 @@ export class SftpManager {
               truncated: totalSize > received
             })
           })
+        })
         })
       })
     })

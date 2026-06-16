@@ -29,6 +29,7 @@ import {
   Circle,
   Radio,
   FileText,
+  FolderTree,
   StickyNote
 } from 'lucide-react'
 import {
@@ -45,6 +46,7 @@ import {
 import { useSessionsStore } from '@renderer/stores/sessions.store'
 import type { ScriptContext } from '@renderer/lib/script-runner'
 import { hasParams, promptForParams } from '@renderer/lib/workflow-params'
+import { OSC7_CWD_SETUP } from '@renderer/lib/shell-integration'
 
 interface TerminalContextMenuProps {
   children: React.ReactNode
@@ -249,6 +251,14 @@ export function TerminalContextMenu({
       if (raw) setRunbooks(JSON.parse(raw) ?? [])
     } catch { /* ignore */ }
   }, [])
+
+  const handleEnableShellIntegration = useCallback(() => {
+    const paneEl = document.querySelector(`[data-pane-id="${paneId}"]`)
+    const termId = paneEl?.getAttribute('data-terminal-id') ?? ''
+    if (!termId.startsWith('ssh:')) return
+    // Write the OSC 7 setup so the shell reports its cwd on every prompt.
+    window.bifrost.ssh.write(termId.slice(4), OSC7_CWD_SETUP + '\n')
+  }, [paneId])
 
   const handleRunRunbook = useCallback((rb: RunbookEntry) => {
     const paneEl = document.querySelector(`[data-pane-id="${paneId}"]`)
@@ -457,6 +467,12 @@ export function TerminalContextMenu({
             <ImageUp size={14} strokeWidth={1.5} />
             Paste Image to Server
             <ContextMenuShortcut>Ctrl+Shift+I</ContextMenuShortcut>
+          </ContextMenuItem>
+        )}
+        {connectionId && (
+          <ContextMenuItem onClick={handleEnableShellIntegration} className="gap-2">
+            <FolderTree size={14} strokeWidth={1.5} />
+            Enable cwd tracking (relative .md links)
           </ContextMenuItem>
         )}
 

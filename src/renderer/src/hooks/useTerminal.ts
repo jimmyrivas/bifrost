@@ -11,6 +11,7 @@ import { scanForErrors, type DetectedError } from '@renderer/lib/error-patterns'
 import { redactSecrets } from '@renderer/lib/secret-redactor'
 import { detectZmodem, notifyZmodemDetected } from '@renderer/lib/zmodem-handler'
 import { findMarkdownPaths } from '@renderer/lib/markdown-link-matcher'
+import { resolveRemotePath, parseCwdFromPrompt } from '@renderer/lib/markdown-path-resolver'
 import {
   defaultMultiplexer,
   type MultiplexerConfig
@@ -132,6 +133,9 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
   const currentFontSizeRef = useRef<number>(0)
   // Host label for this connection, used by the Markdown viewer modal header.
   const hostLabelRef = useRef<string | null>(null)
+  // Remote shell cwd captured via OSC 7 (preferred) — resolves relative .md
+  // links. Null until the shell reports it (or never, if it doesn't emit OSC 7).
+  const remoteCwdRef = useRef<string | null>(null)
   const globalFontFamily = usePreferencesStore((s) => s.terminal.fontFamily)
   const globalFontSize = usePreferencesStore((s) => s.terminal.fontSize)
   const globalCursorStyle = usePreferencesStore((s) => s.terminal.cursorStyle)
@@ -521,10 +525,42 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
     terminal.loadAddon(new WebLinksAddon())
     terminal.open(containerRef.current)
 
-    // ── Markdown file links (#feature) ──
-    // Turn absolute / ~-anchored `.md` paths in SSH output into links that open
-    // Bifrost's internal Markdown viewer. Only active on SSH tabs (remote paths
-    // need an SSH/SFTP session); resolves through JumpHost transparently.
+    // ── Remote cwd capture via OSC 7 ──
+    // Shells that emit OSC 7 report `file://host/abs/path` on every prompt.
+    // We cache the path so relative .md links can be resolved. Returning false
+    // lets any other OSC 7 consumer still see the sequence.
+    const osc7Disposable = terminal.parser.registerOscHandler(7, (payload: string) => {
+      try {
+        const m = payload.match(/^file:\/\/[^/]*(\/.*)$/)
+        if (m && m[1]) remoteCwdRef.current = decodeURIComponent(m[1])
+      } catch {
+        /* malformed OSC 7 — ignore */
+      }
+      return false
+    })
+
+    // Best-effort cwd from the prompt for shells without OSC 7. Returns the cwd
+    // (absolute or ~) using OSC 7 if present, else parsing the latest prompt.
+    const currentRemoteCwd = (): string | null => {
+      if (remoteCwdRef.current) return remoteCwdRef.current
+      try {
+        const buf = terminal.buffer.active
+        const start = Math.max(0, buf.length - 4)
+        let tail = ''
+        for (let y = start; y < buf.length; y++) {
+          tail += (buf.getLine(y)?.translateToString(true) ?? '') + '\n'
+        }
+        return parseCwdFromPrompt(tail)
+      } catch {
+        return null
+      }
+    }
+
+    // ── Markdown file links ──
+    // Turn `.md` paths in SSH output into links that open Bifrost's internal
+    // Markdown viewer. Only active on SSH tabs (remote paths need an SSH/SFTP
+    // session); resolves through JumpHost transparently. Relative paths are
+    // resolved against the remote cwd and dropped when the cwd is unknown.
     const markdownLinkDisposable = terminal.registerLinkProvider({
       provideLinks(bufferLineNumber, callback) {
         const prefs = usePreferencesStore.getState().terminal
@@ -539,32 +575,38 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
           return
         }
         const text = bufLine.translateToString(true)
-        const found = findMarkdownPaths(text)
+        const found = findMarkdownPaths(text, { includeRelative: true })
         if (found.length === 0) {
           callback(undefined)
           return
         }
         const sessionId = termId.slice(4)
-        callback(
-          found.map((match) => ({
-            text: match.path,
-            // xterm ranges are 1-based; end.x is the inclusive last cell.
-            range: {
-              start: { x: match.start + 1, y: bufferLineNumber },
-              end: { x: match.end, y: bufferLineNumber }
-            },
-            activate: (event: MouseEvent) => {
-              const requireCtrl =
-                usePreferencesStore.getState().terminal.markdownLinkActivation === 'ctrl-click'
-              if (requireCtrl && !(event.ctrlKey || event.metaKey)) return
-              document.dispatchEvent(
-                new CustomEvent('markdown:open', {
-                  detail: { sessionId, path: match.path, host: hostLabelRef.current }
-                })
-              )
+        const cwd = found.some((f) => f.relative) ? currentRemoteCwd() : null
+        const links = found
+          .map((match) => {
+            const resolved = resolveRemotePath(match.path, cwd)
+            if (!resolved) return null // relative path with unknown cwd — skip
+            return {
+              text: match.path,
+              // xterm ranges are 1-based; end.x is the inclusive last cell.
+              range: {
+                start: { x: match.start + 1, y: bufferLineNumber },
+                end: { x: match.end, y: bufferLineNumber }
+              },
+              activate: (event: MouseEvent) => {
+                const requireCtrl =
+                  usePreferencesStore.getState().terminal.markdownLinkActivation === 'ctrl-click'
+                if (requireCtrl && !(event.ctrlKey || event.metaKey)) return
+                document.dispatchEvent(
+                  new CustomEvent('markdown:open', {
+                    detail: { sessionId, path: resolved, host: hostLabelRef.current }
+                  })
+                )
+              }
             }
-          }))
-        )
+          })
+          .filter((l): l is NonNullable<typeof l> => l !== null)
+        callback(links.length > 0 ? links : undefined)
       }
     })
 
@@ -1002,6 +1044,7 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
       if (progressCheckTimer) clearInterval(progressCheckTimer)
       resizeObserver.disconnect()
       markdownLinkDisposable.dispose()
+      osc7Disposable.dispose()
       removeDataListener?.()
       removeExitListener?.()
       // Don't kill PTY/SSH if this tab is being detached (session transferred)

@@ -2,69 +2,82 @@
  * Detects Markdown file paths inside a single line of terminal output so they
  * can be turned into Ctrl+Click links that open Bifrost's internal viewer.
  *
- * v1 scope (intentionally conservative to avoid false positives in noisy
- * terminal output):
- *   - Absolute paths:            /home/user/README.md
- *   - Home-relative paths:       ~/docs/setup.md   ~/notes.markdown
- *   - Optionally quoted:         "/etc/app/CHANGES.md"   '~/x.md'
- *   - Optional :line / :line:col suffix is stripped from the returned path
+ * Two modes:
+ *   - Default (anchored only): absolute `/a/b.md` and home `~/a.md` paths.
+ *     These resolve without knowing the shell's cwd.
+ *   - `includeRelative`: also `./x.md`, `../docs/x.md`, `docs/x.md`, and bare
+ *     `README.md`. These need the remote shell cwd to resolve (see
+ *     resolveRemotePath); the caller drops any it can't resolve.
  *
- * Explicitly NOT matched in v1 (documented limitation, resolved later via
- * shell integration / OSC 7):
- *   - Relative paths:            ./README.md   ../docs/x.md   docs/x.md
- *   - URLs:                      https://host/x.md  (WebLinksAddon owns those)
+ * URLs (`https://host/x.md`) are never matched — WebLinksAddon owns those.
  */
 
 export interface MarkdownPathMatch {
-  /** Absolute or ~-anchored remote path, without surrounding quotes or :line. */
+  /** Path token, without surrounding quotes or a trailing :line[:col]. */
   path: string
   /** Inclusive start column (0-based) of the match within the line. */
   start: number
   /** Exclusive end column (0-based) of the match within the line. */
   end: number
+  /**
+   * True when `path` is relative (`./x`, `../x`, `dir/x`, bare `x.md`) and so
+   * needs the remote cwd to resolve. Absolute (`/…`) and home (`~/…`) are false.
+   */
+  relative: boolean
+}
+
+export interface FindOptions {
+  /** Also match relative and bare paths (default: false). */
+  includeRelative?: boolean
 }
 
 const MD_EXT = /\.(?:md|markdown)$/i
 
-// A path "core": starts at `/` or `~/`, followed by non-space, non-quote chars,
-// ending in a Markdown extension. The optional :line[:col] suffix is matched
-// separately so we can exclude it from the clickable range.
-//   group 1: the path core (what we want to open)
-//   group 2: optional :line or :line:col trailer (ignored)
+// A Markdown path token, optionally with a `:line[:col]` trailer (group 2).
+//   - lead:     `/` (abs) | `~/` (home) | one-or-more `./` or `../`
+//   - segments: `seg/seg/…`
+//   - name:     `file.md` / `file.markdown`
+// The negative lookbehind keeps us from matching inside a larger token (so the
+// `/a.md` inside `https://h/a.md` or `./a.md` is not picked up on its own).
 const PATH_RE =
-  /(~?\/(?:[^\s"'`:]|:(?![\s"'`]|\d+(?::\d+)?(?:[\s"'`]|$)))*\.(?:md|markdown))(:\d+(?::\d+)?)?/gi
+  /(?<![\w.@/~+-])((?:\/|~\/|(?:\.\.?\/)+)?(?:[\w.@+-]+\/)*[\w.@+-]+\.(?:md|markdown))(:\d+(?::\d+)?)?/gi
+
+function isRelative(path: string): boolean {
+  return !path.startsWith('/') && !path.startsWith('~')
+}
 
 /**
- * Find every Markdown path in `line`. Returns matches in left-to-right order.
- * `line` MUST already be stripped of ANSI escape sequences (see stripAnsi).
+ * Find every Markdown path in `line`, left to right. `line` MUST already be
+ * stripped of ANSI escape sequences (see stripAnsi).
  */
-export function findMarkdownPaths(line: string): MarkdownPathMatch[] {
-  if (!line || !line.includes('/')) return []
+export function findMarkdownPaths(line: string, opts: FindOptions = {}): MarkdownPathMatch[] {
+  if (!line) return []
+  // Fast bail when there's nothing that could end a Markdown path.
+  if (!/\.(?:md|markdown)\b/i.test(line)) return []
 
+  const includeRelative = opts.includeRelative ?? false
   const matches: MarkdownPathMatch[] = []
   PATH_RE.lastIndex = 0
   let m: RegExpExecArray | null
 
   while ((m = PATH_RE.exec(line)) !== null) {
     const core = m[1]
-    if (!core || !MD_EXT.test(core)) continue
+    if (!core || !MD_EXT.test(core)) {
+      if (PATH_RE.lastIndex <= m.index) PATH_RE.lastIndex = m.index + 1
+      continue
+    }
 
-    // Reject URL-like matches whose `/` is actually part of `://` (e.g. the
-    // path inside https://host/a.md). WebLinksAddon already handles URLs.
+    // Defense in depth against URLs even though the lookbehind blocks most.
     const before = line.slice(0, m.index)
     if (/[a-z][a-z0-9+.-]*:\/?$/i.test(before)) continue
 
-    // Reject relative paths: if the leading `/` is preceded by a token char,
-    // the real token is something like `./x.md`, `../x.md` or `docs/x.md`.
-    // v1 only links genuinely absolute or ~-anchored paths.
-    const prevChar = m.index > 0 ? line[m.index - 1] : ''
-    if (prevChar && /[A-Za-z0-9._~-]/.test(prevChar)) continue
+    const relative = isRelative(core)
+    if (relative && !includeRelative) continue
 
     const start = m.index
     const end = m.index + core.length
-    matches.push({ path: core, start, end })
+    matches.push({ path: core, start, end, relative })
 
-    // Guard against zero-length matches looping forever.
     if (PATH_RE.lastIndex <= start) PATH_RE.lastIndex = end
   }
 
