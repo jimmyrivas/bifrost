@@ -175,6 +175,50 @@ export function Preferences(): JSX.Element {
                   <span className="text-xs text-[var(--on-surface-variant)]">Delete uploaded images on app close</span>
                   <Switch checked={terminal.imagePasteDeleteOnClose} onCheckedChange={(v) => setTermPref('imagePasteDeleteOnClose', v)} />
                 </label>
+                <label className="flex items-center justify-between col-span-2 cursor-pointer">
+                  <span className="text-xs text-[var(--on-surface-variant)]">
+                    Markdown file links
+                    <span className="block text-[9px] text-[var(--on-surface-variant)]/70">
+                      Turn <code>.md</code> paths in SSH output into links that open an internal viewer
+                    </span>
+                  </span>
+                  <Switch checked={terminal.markdownLinksEnabled} onCheckedChange={(v) => setTermPref('markdownLinksEnabled', v)} />
+                </label>
+                <div className="col-span-2">
+                  <label className={fieldLabel} htmlFor="pref-md-activation">MARKDOWN LINK ACTIVATION</label>
+                  <select
+                    id="pref-md-activation"
+                    className={selectClass}
+                    value={terminal.markdownLinkActivation}
+                    onChange={(e) => setTermPref('markdownLinkActivation', e.target.value as TerminalPreferences['markdownLinkActivation'])}
+                  >
+                    <option value="ctrl-click">Ctrl+Click (recommended)</option>
+                    <option value="click">Single click</option>
+                  </select>
+                  <span className="text-[9px] text-[var(--on-surface-variant)] mt-0.5 block">
+                    Single click can interfere with text selection in the terminal.
+                  </span>
+                </div>
+                <div className="col-span-2">
+                  <label className={fieldLabel} htmlFor="pref-md-maxkb">MARKDOWN VIEWER SIZE LIMIT (KB)</label>
+                  <Input
+                    id="pref-md-maxkb"
+                    type="number"
+                    min={1}
+                    max={20000}
+                    value={Math.round(terminal.markdownMaxBytes / 1024)}
+                    onChange={(e) => {
+                      const kb = Number(e.target.value)
+                      if (Number.isFinite(kb) && kb > 0) {
+                        setTermPref('markdownMaxBytes', Math.min(Math.max(kb, 1), 20000) * 1024)
+                      }
+                    }}
+                    className="font-['JetBrains_Mono'] text-xs"
+                  />
+                  <span className="text-[9px] text-[var(--on-surface-variant)] mt-0.5 block">
+                    Files larger than this are truncated in the viewer. Default 2048 KB (2 MB).
+                  </span>
+                </div>
                 <div className="col-span-2">
                   <label className={fieldLabel} htmlFor="pref-tab-title">DEFAULT TAB TITLE TEMPLATE</label>
                   <Input

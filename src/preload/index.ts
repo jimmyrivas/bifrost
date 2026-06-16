@@ -149,6 +149,12 @@ export interface BifrostApi {
     open: (sshSessionId: string) => Promise<string>
     listDirectory: (sftpId: string, path: string) => Promise<SftpFileEntry[]>
     readFile: (sftpId: string, remotePath: string, localPath: string) => Promise<void>
+    /** Read a remote .md file into memory (for the internal Markdown viewer). */
+    readMarkdown: (
+      sshSessionId: string,
+      remotePath: string,
+      maxBytes?: number
+    ) => Promise<{ content: string; bytes: number; truncated: boolean }>
     writeFile: (sftpId: string, localPath: string, remotePath: string) => Promise<void>
     mkdir: (sftpId: string, path: string) => Promise<void>
     delete: (sftpId: string, path: string) => Promise<void>
@@ -547,6 +553,8 @@ const api: BifrostApi = {
     listDirectory: (sftpId, path) => ipcRenderer.invoke('sftp:listDirectory', sftpId, path),
     readFile: (sftpId, remotePath, localPath) =>
       ipcRenderer.invoke('sftp:readFile', sftpId, remotePath, localPath),
+    readMarkdown: (sshSessionId, remotePath, maxBytes) =>
+      ipcRenderer.invoke('sftp:readMarkdown', sshSessionId, remotePath, maxBytes),
     writeFile: (sftpId, localPath, remotePath) =>
       ipcRenderer.invoke('sftp:writeFile', sftpId, localPath, remotePath),
     mkdir: (sftpId, path) => ipcRenderer.invoke('sftp:mkdir', sftpId, path),

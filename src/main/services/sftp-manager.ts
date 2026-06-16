@@ -206,6 +206,79 @@ export class SftpManager {
     })
   }
 
+  /**
+   * Read a small remote text file fully into memory over a short-lived SFTP
+   * channel on the live SSH session. Reuses the target's authenticated client,
+   * so it works transparently through a JumpHost chain (the SFTP subsystem
+   * rides the same tunneled session). Used by the internal Markdown viewer.
+   *
+   * Bounds the read by `maxBytes`: if the file is larger, only the first
+   * `maxBytes` are returned and `truncated` is true. Throws with a stage-tagged
+   * message on channel-open / stat / read failures.
+   */
+  readFileToString(
+    sshSessionId: string,
+    remotePath: string,
+    maxBytes = 2_000_000
+  ): Promise<{ content: string; bytes: number; truncated: boolean }> {
+    return new Promise((resolve, reject) => {
+      const sshSession = sshManager.getSession(sshSessionId)
+      if (!sshSession) {
+        reject(new Error(`SSH session ${sshSessionId} not found`))
+        return
+      }
+
+      const host = sshSession.config.host
+      const hops = sshSession.chainClients?.length ?? 0
+      const hopLabel = hops > 0 ? `${hops} jump hop(s), ` : ''
+
+      sshSession.client.sftp((openErr, sftp) => {
+        if (openErr) {
+          reject(new Error(`SFTP channel open failed (${hopLabel}target ${host}): ${openErr.message}`))
+          return
+        }
+
+        const done = (err: Error | null, result?: { content: string; bytes: number; truncated: boolean }): void => {
+          try { sftp.end() } catch { /* already closed */ }
+          if (err) reject(err)
+          else resolve(result!)
+        }
+
+        sftp.stat(remotePath, (statErr, stats) => {
+          if (statErr) {
+            done(new Error(`SFTP stat ${remotePath} failed on ${host}: ${statErr.message}`))
+            return
+          }
+          if ((stats.mode & 0o170000) === 0o040000) {
+            done(new Error(`${remotePath} is a directory, not a file`))
+            return
+          }
+
+          const totalSize = stats.size
+          const stream = sftp.createReadStream(remotePath, { start: 0, end: maxBytes - 1 })
+          const chunks: Buffer[] = []
+          let received = 0
+
+          stream.on('data', (chunk: Buffer) => {
+            received += chunk.length
+            chunks.push(chunk)
+          })
+          stream.on('error', (readErr: Error) => {
+            done(new Error(`SFTP read ${remotePath} failed on ${host}: ${readErr.message}`))
+          })
+          stream.on('end', () => {
+            const buf = Buffer.concat(chunks)
+            done(null, {
+              content: buf.toString('utf-8'),
+              bytes: received,
+              truncated: totalSize > received
+            })
+          })
+        })
+      })
+    })
+  }
+
   closeSftp(sftpId: string): void {
     const session = sessions.get(sftpId)
     if (session) {

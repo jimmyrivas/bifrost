@@ -10,6 +10,7 @@ import { getSchemeByName, getDefaultScheme } from '@renderer/lib/color-schemes'
 import { scanForErrors, type DetectedError } from '@renderer/lib/error-patterns'
 import { redactSecrets } from '@renderer/lib/secret-redactor'
 import { detectZmodem, notifyZmodemDetected } from '@renderer/lib/zmodem-handler'
+import { findMarkdownPaths } from '@renderer/lib/markdown-link-matcher'
 import {
   defaultMultiplexer,
   type MultiplexerConfig
@@ -129,6 +130,8 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
   const fitAddonRef = useRef<FitAddon | null>(null)
   const terminalIdRef = useRef<string | null>(null)
   const currentFontSizeRef = useRef<number>(0)
+  // Host label for this connection, used by the Markdown viewer modal header.
+  const hostLabelRef = useRef<string | null>(null)
   const globalFontFamily = usePreferencesStore((s) => s.terminal.fontFamily)
   const globalFontSize = usePreferencesStore((s) => s.terminal.fontSize)
   const globalCursorStyle = usePreferencesStore((s) => s.terminal.cursorStyle)
@@ -518,6 +521,53 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
     terminal.loadAddon(new WebLinksAddon())
     terminal.open(containerRef.current)
 
+    // ── Markdown file links (#feature) ──
+    // Turn absolute / ~-anchored `.md` paths in SSH output into links that open
+    // Bifrost's internal Markdown viewer. Only active on SSH tabs (remote paths
+    // need an SSH/SFTP session); resolves through JumpHost transparently.
+    const markdownLinkDisposable = terminal.registerLinkProvider({
+      provideLinks(bufferLineNumber, callback) {
+        const prefs = usePreferencesStore.getState().terminal
+        const termId = terminalIdRef.current
+        if (!prefs.markdownLinksEnabled || !termId || !termId.startsWith('ssh:')) {
+          callback(undefined)
+          return
+        }
+        const bufLine = terminal.buffer.active.getLine(bufferLineNumber - 1)
+        if (!bufLine) {
+          callback(undefined)
+          return
+        }
+        const text = bufLine.translateToString(true)
+        const found = findMarkdownPaths(text)
+        if (found.length === 0) {
+          callback(undefined)
+          return
+        }
+        const sessionId = termId.slice(4)
+        callback(
+          found.map((match) => ({
+            text: match.path,
+            // xterm ranges are 1-based; end.x is the inclusive last cell.
+            range: {
+              start: { x: match.start + 1, y: bufferLineNumber },
+              end: { x: match.end, y: bufferLineNumber }
+            },
+            activate: (event: MouseEvent) => {
+              const requireCtrl =
+                usePreferencesStore.getState().terminal.markdownLinkActivation === 'ctrl-click'
+              if (requireCtrl && !(event.ctrlKey || event.metaKey)) return
+              document.dispatchEvent(
+                new CustomEvent('markdown:open', {
+                  detail: { sessionId, path: match.path, host: hostLabelRef.current }
+                })
+              )
+            }
+          }))
+        )
+      }
+    })
+
     try {
       const webglAddon = new WebglAddon()
       webglAddon.onContextLoss(() => webglAddon.dispose())
@@ -730,6 +780,7 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
         const muxConfig = parseMultiplexerConfig(conn?.sshConfig)
         const hostLabel = conn?.host || conn?.name || 'host'
         const connectionName = conn?.name || 'session'
+        hostLabelRef.current = hostLabel
 
         if (method === 'mosh') {
           // === MOSH MODE ===
@@ -950,6 +1001,7 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
       if (reconnectTimerId) clearTimeout(reconnectTimerId)
       if (progressCheckTimer) clearInterval(progressCheckTimer)
       resizeObserver.disconnect()
+      markdownLinkDisposable.dispose()
       removeDataListener?.()
       removeExitListener?.()
       // Don't kill PTY/SSH if this tab is being detached (session transferred)

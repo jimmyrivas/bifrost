@@ -24,6 +24,12 @@ export interface TerminalPreferences {
   imagePasteDir: string
   /** Delete uploaded images from the server when the app window closes. */
   imagePasteDeleteOnClose: boolean
+  /** Turn absolute/`~` .md paths in SSH output into clickable links. */
+  markdownLinksEnabled: boolean
+  /** Gesture that opens the Markdown viewer from a detected path. */
+  markdownLinkActivation: 'ctrl-click' | 'click'
+  /** Max bytes fetched for the Markdown viewer (larger files are truncated). */
+  markdownMaxBytes: number
 }
 
 interface PreferencesState {
@@ -57,7 +63,10 @@ const defaultTerminal: TerminalPreferences = {
   tabTitleTemplate: '',
   imagePasteEnabled: true,
   imagePasteDir: '~/.bifrost/pastes',
-  imagePasteDeleteOnClose: false
+  imagePasteDeleteOnClose: false,
+  markdownLinksEnabled: true,
+  markdownLinkActivation: 'ctrl-click',
+  markdownMaxBytes: 2_000_000
 }
 
 const defaultLocalMultiplexer: MultiplexerConfig = {
@@ -87,7 +96,7 @@ export const usePreferencesStore = create<PreferencesState>()(
     }),
     {
       name: 'bifrost-preferences',
-      version: 4,
+      version: 5,
       migrate: (persisted, version) => {
         const state = (persisted ?? {}) as Partial<PreferencesState>
         if (version < 2 && !state.localMultiplexer) {
@@ -106,6 +115,10 @@ export const usePreferencesStore = create<PreferencesState>()(
         }
         // v4: image-paste preferences added. Backfill onto persisted terminal.
         if (version < 4) {
+          state.terminal = { ...defaultTerminal, ...(state.terminal ?? {}) }
+        }
+        // v5: markdown-link viewer preferences added. Backfill defaults.
+        if (version < 5) {
           state.terminal = { ...defaultTerminal, ...(state.terminal ?? {}) }
         }
         return state as PreferencesState

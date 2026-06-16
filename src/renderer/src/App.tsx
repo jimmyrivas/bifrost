@@ -1,7 +1,15 @@
 import { useEffect, useCallback, useRef, useMemo } from 'react'
 import { AppShell } from '@renderer/components/layout/AppShell'
 import { DetachedTerminal } from '@renderer/components/terminal/DetachedTerminal'
+import { MarkdownViewer } from '@renderer/components/markdown/MarkdownViewer'
 import { useSessionsStore } from '@renderer/stores/sessions.store'
+import { useMarkdownViewerStore } from '@renderer/stores/markdownViewer.store'
+
+interface MarkdownOpenDetail {
+  sessionId: string
+  path: string
+  host?: string | null
+}
 
 const CHORD_TIMEOUT = 1000
 
@@ -25,6 +33,19 @@ export function App(): JSX.Element {
       createTab()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Open the internal Markdown viewer when a terminal Ctrl+Clicks a .md path.
+  useEffect(() => {
+    const onOpen = (e: Event): void => {
+      const detail = (e as CustomEvent<MarkdownOpenDetail>).detail
+      if (!detail?.sessionId || !detail?.path) return
+      useMarkdownViewerStore
+        .getState()
+        .openFor(detail.sessionId, detail.path, detail.host ?? undefined)
+    }
+    document.addEventListener('markdown:open', onOpen)
+    return () => document.removeEventListener('markdown:open', onOpen)
   }, [])
 
   const clearChord = useCallback(() => {
@@ -223,5 +244,10 @@ export function App(): JSX.Element {
     return <DetachedTerminal tabId={detachTabId} />
   }
 
-  return <AppShell />
+  return (
+    <>
+      <AppShell />
+      <MarkdownViewer />
+    </>
+  )
 }
