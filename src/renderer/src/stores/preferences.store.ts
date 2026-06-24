@@ -30,7 +30,15 @@ export interface TerminalPreferences {
   markdownLinkActivation: 'ctrl-click' | 'click'
   /** Max bytes fetched for the Markdown viewer (larger files are truncated). */
   markdownMaxBytes: number
+  /** Width of the docked AI Assistant side panel, in pixels (clamped 280–720). */
+  aiPanelWidthPx: number
 }
+
+/** Min/max bounds for the AI Assistant panel width (px). */
+export const AI_PANEL_MIN_PX = 280
+export const AI_PANEL_MAX_PX = 720
+export const clampAiPanelWidth = (px: number): number =>
+  Math.min(AI_PANEL_MAX_PX, Math.max(AI_PANEL_MIN_PX, Math.round(px)))
 
 interface PreferencesState {
   terminal: TerminalPreferences
@@ -66,7 +74,8 @@ const defaultTerminal: TerminalPreferences = {
   imagePasteDeleteOnClose: false,
   markdownLinksEnabled: true,
   markdownLinkActivation: 'ctrl-click',
-  markdownMaxBytes: 2_000_000
+  markdownMaxBytes: 2_000_000,
+  aiPanelWidthPx: 320
 }
 
 const defaultLocalMultiplexer: MultiplexerConfig = {
@@ -96,7 +105,7 @@ export const usePreferencesStore = create<PreferencesState>()(
     }),
     {
       name: 'bifrost-preferences',
-      version: 5,
+      version: 6,
       migrate: (persisted, version) => {
         const state = (persisted ?? {}) as Partial<PreferencesState>
         if (version < 2 && !state.localMultiplexer) {
@@ -119,6 +128,10 @@ export const usePreferencesStore = create<PreferencesState>()(
         }
         // v5: markdown-link viewer preferences added. Backfill defaults.
         if (version < 5) {
+          state.terminal = { ...defaultTerminal, ...(state.terminal ?? {}) }
+        }
+        // v6: AI panel width preference added. Backfill the default.
+        if (version < 6) {
           state.terminal = { ...defaultTerminal, ...(state.terminal ?? {}) }
         }
         return state as PreferencesState

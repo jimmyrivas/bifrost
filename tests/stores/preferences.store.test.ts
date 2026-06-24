@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { usePreferencesStore } from '../../src/renderer/src/stores/preferences.store'
+import {
+  usePreferencesStore,
+  clampAiPanelWidth,
+  AI_PANEL_MIN_PX,
+  AI_PANEL_MAX_PX
+} from '../../src/renderer/src/stores/preferences.store'
 
 describe('Preferences Store', () => {
   beforeEach(() => {
@@ -47,5 +52,27 @@ describe('Preferences Store', () => {
   it('updates scrollback buffer', () => {
     usePreferencesStore.getState().setTerminalPref('scrollback', 10000)
     expect(usePreferencesStore.getState().terminal.scrollback).toBe(10000)
+  })
+})
+
+describe('clampAiPanelWidth', () => {
+  it('clamps below the minimum up to AI_PANEL_MIN_PX', () => {
+    expect(clampAiPanelWidth(100)).toBe(AI_PANEL_MIN_PX)
+    expect(clampAiPanelWidth(0)).toBe(AI_PANEL_MIN_PX)
+    expect(clampAiPanelWidth(-50)).toBe(AI_PANEL_MIN_PX)
+  })
+
+  it('clamps above the maximum down to AI_PANEL_MAX_PX', () => {
+    expect(clampAiPanelWidth(9999)).toBe(AI_PANEL_MAX_PX)
+  })
+
+  it('passes through (rounded) values within range', () => {
+    expect(clampAiPanelWidth(400)).toBe(400)
+    expect(clampAiPanelWidth(420.7)).toBe(421)
+  })
+
+  it('keeps the bounds themselves stable', () => {
+    expect(clampAiPanelWidth(AI_PANEL_MIN_PX)).toBe(AI_PANEL_MIN_PX)
+    expect(clampAiPanelWidth(AI_PANEL_MAX_PX)).toBe(AI_PANEL_MAX_PX)
   })
 })

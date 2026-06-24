@@ -1,6 +1,7 @@
 import { useEffect, useCallback, useRef, useMemo } from 'react'
 import { AppShell } from '@renderer/components/layout/AppShell'
 import { DetachedTerminal } from '@renderer/components/terminal/DetachedTerminal'
+import { DetachedAIAssistant } from '@renderer/components/terminal/DetachedAIAssistant'
 import { MarkdownViewer } from '@renderer/components/markdown/MarkdownViewer'
 import { useSessionsStore } from '@renderer/stores/sessions.store'
 import { useMarkdownViewerStore } from '@renderer/stores/markdownViewer.store'
@@ -234,11 +235,15 @@ export function App(): JSX.Element {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [handleKeyDown])
 
-  // Check if this window is a detached terminal
-  const detachTabId = useMemo(() => {
+  // Check if this window is a detached terminal or detached AI assistant
+  const { detachTabId, aiDetach } = useMemo(() => {
     const params = new URLSearchParams(window.location.search)
-    return params.get('detach')
+    return { detachTabId: params.get('detach'), aiDetach: params.get('aiDetach') === '1' }
   }, [])
+
+  if (aiDetach) {
+    return <DetachedAIAssistant />
+  }
 
   if (detachTabId) {
     return <DetachedTerminal tabId={detachTabId} />

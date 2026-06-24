@@ -400,6 +400,13 @@ export interface BifrostApi {
     detachTab: (tabId: string, title: string, connectionId?: string, sessionId?: string) => Promise<void>
     reattachTab: (tabId: string) => Promise<void>
     onTabReattached: (callback: (tabId: string) => void) => () => void
+    detachAi: (connectionId?: string | null) => Promise<void>
+    reattachAi: () => Promise<void>
+    onAiReattached: (callback: () => void) => () => void
+    notifyAiContext: (ctx: { connectionId?: string | null; terminalId?: string | null }) => void
+    onAiActiveContextChanged: (
+      callback: (ctx: { connectionId?: string | null; terminalId?: string | null }) => void
+    ) => () => void
   }
 }
 
@@ -764,6 +771,25 @@ const api: BifrostApi = {
       const handler = (_e: IpcRendererEvent, tabId: string): void => callback(tabId)
       ipcRenderer.on('window:tabReattached', handler)
       return () => ipcRenderer.removeListener('window:tabReattached', handler)
+    },
+    detachAi: (connectionId?: string | null) => ipcRenderer.invoke('window:detachAi', connectionId),
+    reattachAi: () => ipcRenderer.invoke('window:reattachAi'),
+    onAiReattached: (callback: () => void) => {
+      const handler = (): void => callback()
+      ipcRenderer.on('window:aiReattached', handler)
+      return () => ipcRenderer.removeListener('window:aiReattached', handler)
+    },
+    notifyAiContext: (ctx: { connectionId?: string | null; terminalId?: string | null }) =>
+      ipcRenderer.send('window:notifyAiContext', ctx),
+    onAiActiveContextChanged: (
+      callback: (ctx: { connectionId?: string | null; terminalId?: string | null }) => void
+    ) => {
+      const handler = (
+        _e: IpcRendererEvent,
+        ctx: { connectionId?: string | null; terminalId?: string | null }
+      ): void => callback(ctx)
+      ipcRenderer.on('window:aiActiveContextChanged', handler)
+      return () => ipcRenderer.removeListener('window:aiActiveContextChanged', handler)
     }
   }
 }

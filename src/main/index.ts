@@ -285,6 +285,61 @@ app.whenReady().then(() => {
     }
   })
 
+  // === AI Assistant detach/reattach (enhance-ai-assistant-panel) ===
+  // The detached window loads with ?aiDetach=1 and renders only the assistant.
+  let aiDetachedWindow: BrowserWindow | null = null
+
+  ipcMain.handle('window:detachAi', (_event, connectionId?: string) => {
+    if (aiDetachedWindow && !aiDetachedWindow.isDestroyed()) {
+      aiDetachedWindow.focus()
+      return
+    }
+    aiDetachedWindow = new BrowserWindow({
+      width: 420,
+      height: 640,
+      title: 'Bifrost — AI Assistant',
+      backgroundColor: '#131316',
+      autoHideMenuBar: true,
+      webPreferences: {
+        preload: join(__dirname, '../preload/index.mjs'),
+        sandbox: false,
+        contextIsolation: true,
+        nodeIntegration: false
+      }
+    })
+
+    const query: Record<string, string> = { aiDetach: '1' }
+    if (connectionId) query.connId = connectionId
+
+    if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+      const params = new URLSearchParams(query).toString()
+      aiDetachedWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}?${params}`)
+    } else {
+      aiDetachedWindow.loadFile(join(__dirname, '../renderer/index.html'), { query })
+    }
+
+    aiDetachedWindow.on('closed', () => {
+      aiDetachedWindow = null
+      if (!mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('window:aiReattached')
+      }
+    })
+  })
+
+  ipcMain.handle('window:reattachAi', () => {
+    if (aiDetachedWindow && !aiDetachedWindow.isDestroyed()) {
+      aiDetachedWindow.close() // triggers 'closed' → sends aiReattached
+    }
+  })
+
+  // Main window forwards active-context changes to the detached assistant so it
+  // follows the active tab live.
+  ipcMain.on('window:notifyAiContext', (_event, ctx: { connectionId?: string | null; terminalId?: string | null }) => {
+    if (aiDetachedWindow && !aiDetachedWindow.isDestroyed()) {
+      aiDetachedWindow.webContents.send('window:aiActiveContextChanged', ctx)
+    }
+  })
+
   // Confirm dialog for pre/post exec commands (#55)
   ipcMain.handle('window:confirmDialog', async (_event, message: string) => {
     const { dialog } = await import('electron')

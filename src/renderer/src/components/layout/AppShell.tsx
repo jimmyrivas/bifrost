@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect } from 'react'
+import { useCallback, useState, useEffect, useRef } from 'react'
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import { Search } from 'lucide-react'
 import { cn } from '@renderer/lib/utils'
@@ -25,7 +25,7 @@ import { NotesPanel } from '@renderer/components/settings/NotesPanel'
 import { KeyBindings } from '@renderer/components/settings/KeyBindings'
 import { ConnectionForm } from '@renderer/components/connections/ConnectionForm'
 import { useSessionsStore } from '@renderer/stores/sessions.store'
-import { usePreferencesStore } from '@renderer/stores/preferences.store'
+import { usePreferencesStore, clampAiPanelWidth } from '@renderer/stores/preferences.store'
 
 export type ViewSection =
   | 'connections'
@@ -56,6 +56,11 @@ export function AppShell(): JSX.Element {
   const [editingConnectionId, setEditingConnectionId] = useState<string | null>(null)
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false)
+  const [aiDetached, setAiDetached] = useState(false)
+  // Live width during a drag; null when not dragging (falls back to the saved pref).
+  const [aiDragWidth, setAiDragWidth] = useState<number | null>(null)
+  const aiPanelWidthPx = usePreferencesStore((s) => s.terminal.aiPanelWidthPx)
+  const setTerminalPref = usePreferencesStore((s) => s.setTerminalPref)
   const sftpOpenTabIds = useSessionsStore((s) => s.sftpOpenTabIds)
   const broadcastMode = useSessionsStore((s) => s.broadcastMode)
   const cycleBroadcastMode = useSessionsStore((s) => s.cycleBroadcastMode)
@@ -78,6 +83,58 @@ export function AppShell(): JSX.Element {
     document.addEventListener('toggle:ai-assistant', handler)
     return () => document.removeEventListener('toggle:ai-assistant', handler)
   }, [])
+
+  // AI assistant: restore the docked panel when its detached window closes.
+  useEffect(() => {
+    const off = window.bifrost?.window?.onAiReattached?.(() => setAiDetached(false))
+    return () => off?.()
+  }, [])
+
+  // While detached, keep the assistant window following the active tab's context.
+  const activeConnectionId = activeTab?.connectionId ?? null
+  const activeTerminalId = activeTab?.rootPane?.terminalId ?? null
+  useEffect(() => {
+    if (!aiDetached) return
+    window.bifrost?.window?.notifyAiContext?.({
+      connectionId: activeConnectionId,
+      terminalId: activeTerminalId
+    })
+  }, [aiDetached, activeConnectionId, activeTerminalId])
+
+  const handleDetachAi = useCallback(() => {
+    window.bifrost?.window
+      ?.detachAi(activeConnectionId)
+      .then(() => setAiDetached(true))
+      .catch((err) => console.error('Detach AI failed:', err))
+  }, [activeConnectionId])
+
+  // Drag-to-resize the docked AI panel; commit the pixel width to preferences on release.
+  const aiDragRef = useRef<{ startX: number; startWidth: number } | null>(null)
+  const handleAiResizeStart = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault()
+      aiDragRef.current = { startX: e.clientX, startWidth: aiPanelWidthPx }
+      const onMove = (ev: MouseEvent): void => {
+        const drag = aiDragRef.current
+        if (!drag) return
+        // Panel is on the right edge: dragging left widens it.
+        setAiDragWidth(clampAiPanelWidth(drag.startWidth + (drag.startX - ev.clientX)))
+      }
+      const onUp = (ev: MouseEvent): void => {
+        const drag = aiDragRef.current
+        if (drag) {
+          setTerminalPref('aiPanelWidthPx', clampAiPanelWidth(drag.startWidth + (drag.startX - ev.clientX)))
+        }
+        aiDragRef.current = null
+        setAiDragWidth(null)
+        window.removeEventListener('mousemove', onMove)
+        window.removeEventListener('mouseup', onUp)
+      }
+      window.addEventListener('mousemove', onMove)
+      window.addEventListener('mouseup', onUp)
+    },
+    [aiPanelWidthPx, setTerminalPref]
+  )
 
   const handleInsertCommand = useCallback((command: string) => {
     // Write to the active terminal pane
@@ -423,16 +480,32 @@ export function AppShell(): JSX.Element {
               )}
             </div>
 
-            {/* AI Assistant side panel (#97) */}
-            {aiAssistantOpen && (
-              <div className="w-72 shrink-0 border-l border-[#1b1b1e]">
-                <AIAssistant
-                  open={aiAssistantOpen}
-                  onClose={() => setAiAssistantOpen(false)}
-                  onInsertCommand={handleInsertCommand}
-                  connectionContext={activeTab?.connectionId}
+            {/* AI Assistant side panel (#97) — hidden while detached to its own window */}
+            {aiAssistantOpen && !aiDetached && (
+              <>
+                <div
+                  onMouseDown={handleAiResizeStart}
+                  className={cn(
+                    'w-[3px] shrink-0 cursor-col-resize transition-colors',
+                    'bg-[#1b1b1e] hover:bg-[#2a2a2d]',
+                    aiDragWidth !== null && 'bg-[#2a2a2d]'
+                  )}
+                  role="separator"
+                  aria-label="Resize AI assistant panel"
                 />
-              </div>
+                <div
+                  className="shrink-0 border-l border-[#1b1b1e]"
+                  style={{ width: aiDragWidth ?? aiPanelWidthPx }}
+                >
+                  <AIAssistant
+                    open={aiAssistantOpen}
+                    onClose={() => setAiAssistantOpen(false)}
+                    onInsertCommand={handleInsertCommand}
+                    connectionContext={activeTab?.connectionId}
+                    onDetach={handleDetachAi}
+                  />
+                </div>
+              </>
             )}
           </div>
         </Panel>

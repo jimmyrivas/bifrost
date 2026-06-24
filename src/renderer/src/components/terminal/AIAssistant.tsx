@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { Bot, Send, X, ArrowRight, Loader2, RefreshCw } from 'lucide-react'
+import { Bot, Send, X, ArrowRight, Loader2, RefreshCw, PanelRightClose, ArrowLeftToLine } from 'lucide-react'
 import { cn } from '@renderer/lib/utils'
 import { getFallbackSuggestions } from '@renderer/lib/command-suggestions'
 
@@ -8,7 +8,14 @@ interface AIAssistantProps {
   onClose: () => void
   onInsertCommand: (command: string) => void
   connectionContext?: string | null
+  /** When provided, show a detach button in the header (docked mode). */
+  onDetach?: () => void
+  /** When true, this instance is rendered in its own detached window. */
+  detached?: boolean
 }
+
+/** Max height of the auto-growing prompt editor, in pixels (~6 rows). */
+const PROMPT_MAX_HEIGHT_PX = 144
 
 interface Message {
   role: 'user' | 'assistant'
@@ -266,7 +273,9 @@ export function AIAssistant({
   open,
   onClose,
   onInsertCommand,
-  connectionContext
+  connectionContext,
+  onDetach,
+  detached = false
 }: AIAssistantProps): JSX.Element | null {
   const [query, setQuery] = useState('')
   const [messages, setMessages] = useState<Message[]>([])
@@ -274,13 +283,25 @@ export function AIAssistant({
   const [streaming, setStreaming] = useState('')
   const [aiAvailable, setAiAvailable] = useState<boolean | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     if (!open) return
     inputRef.current?.focus()
     window.bifrost?.ai?.checkAvailable().then(setAiAvailable).catch(() => setAiAvailable(false))
   }, [open])
+
+  // Auto-grow the prompt editor to fit its content, up to a max, then scroll.
+  const autoSizePrompt = useCallback(() => {
+    const el = inputRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, PROMPT_MAX_HEIGHT_PX)}px`
+  }, [])
+
+  useEffect(() => {
+    autoSizePrompt()
+  }, [query, autoSizePrompt])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -388,12 +409,23 @@ export function AIAssistant({
               <RefreshCw size={12} />
             </button>
           )}
+          {onDetach && !detached && (
+            <button
+              onClick={onDetach}
+              className="p-1 rounded-[var(--radius)] text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] hover:bg-[var(--surface-container-highest)]/50"
+              aria-label="Detach AI assistant to its own window"
+              title="Detach to window"
+            >
+              <PanelRightClose size={14} />
+            </button>
+          )}
           <button
             onClick={onClose}
             className="p-1 rounded-[var(--radius)] text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] hover:bg-[var(--surface-container-highest)]/50"
-            aria-label="Close AI assistant"
+            aria-label={detached ? 'Re-attach AI assistant to main window' : 'Close AI assistant'}
+            title={detached ? 'Re-attach to main window' : 'Close'}
           >
-            <X size={14} />
+            {detached ? <ArrowLeftToLine size={14} /> : <X size={14} />}
           </button>
         </div>
       </div>
@@ -426,25 +458,34 @@ export function AIAssistant({
 
       {/* Input */}
       <div className="px-3 py-2 surface-2">
-        <div className="flex items-center gap-2">
-          <input
+        <div className="flex items-end gap-2">
+          <textarea
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit() }}
-            placeholder="What command do I need to..."
+            onKeyDown={(e) => {
+              // Enter submits; Shift+Enter inserts a newline.
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                handleSubmit()
+              }
+            }}
+            rows={1}
+            placeholder="What command do I need to... (Shift+Enter for newline)"
             className={cn(
-              'flex-1 bg-[var(--surface-container-highest)] rounded-[var(--radius)] px-3 py-2',
-              'text-xs text-[var(--on-surface)] placeholder-[var(--on-surface-variant)]/50',
-              'outline-none ghost-border focus:border-[#6bd5ff]/30'
+              'flex-1 resize-none bg-[var(--surface-container-highest)] rounded-[var(--radius)] px-3 py-2',
+              'text-xs text-[var(--on-surface)] placeholder-[var(--on-surface-variant)]/50 leading-relaxed',
+              'outline-none ghost-border focus:border-[#6bd5ff]/30',
+              'overflow-y-auto'
             )}
+            style={{ maxHeight: PROMPT_MAX_HEIGHT_PX }}
             disabled={loading}
             aria-label="Ask AI assistant"
           />
           <button
             onClick={handleSubmit}
             disabled={loading || !query.trim()}
-            className="p-2 rounded-[var(--radius)] text-[#6bd5ff] hover:bg-[var(--surface-container-highest)]/50 disabled:opacity-40"
+            className="p-2 mb-px rounded-[var(--radius)] text-[#6bd5ff] hover:bg-[var(--surface-container-highest)]/50 disabled:opacity-40"
             aria-label="Send question"
           >
             {loading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
