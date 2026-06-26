@@ -1,11 +1,17 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { Radio, AlertTriangle, Clock, Bot, X as XIcon, Loader2, ImageUp } from 'lucide-react'
+import { Radio, AlertTriangle, Clock, Bot, X as XIcon, Loader2, ImageUp, ChevronUp } from 'lucide-react'
 import { useTerminal } from '@renderer/hooks/useTerminal'
 import { useSessionsStore, type TerminalStyle } from '@renderer/stores/sessions.store'
 import { TerminalContextMenu } from './TerminalContextMenu'
 import { PasteWarning } from './PasteWarning'
 import { MultiplexerPicker } from './MultiplexerPicker'
 import { cn } from '@renderer/lib/utils'
+import { rawSessionId, hasMeaningfulContent } from '@renderer/lib/session-summary'
+
+// Idle session-summary timing (module-scope constants → stable across renders).
+const IDLE_THRESHOLD = 5 * 60 * 1000 // idle before offering a summary (5 min)
+const IDLE_CHECK_MS = 20 * 1000      // how often we poll for idleness
+const COLLAPSE_MS = 6 * 1000         // expanded pill auto-collapses after this
 import '@xterm/xterm/css/xterm.css'
 
 interface XTerminalProps {
@@ -98,33 +104,25 @@ export function XTerminal({ paneId, tabId, connectionId, terminalStyle, shell, s
     }
   }, [paneId])
 
-  // Session resume: idle detection
-  const IDLE_THRESHOLD = 5 * 60 * 1000 // 5 minutes
+  // ── Idle session summary ──────────────────────────────────────────────────
+  // Surfaces only when an idle session has meaningful output; shows briefly then
+  // collapses to a corner icon. The AI summary is generated on demand (on expand).
   const lastActivityRef = useRef(Date.now())
-  const [idleBanner, setIdleBanner] = useState<{ duration: string } | null>(null)
+  const lastBufferLenRef = useRef(0)
+  const dismissedRef = useRef(false)
+  const collapseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const errorCountRef = useRef(0)
+  const [idle, setIdle] = useState<{ duration: string } | null>(null)
+  const [expanded, setExpanded] = useState(false)
   const [aiSummary, setAiSummary] = useState<string | null>(null)
   const [summaryLoading, setSummaryLoading] = useState(false)
 
-  // Track activity: any data from terminal = active
-  useEffect(() => {
-    const paneEl = document.querySelector(`[data-pane-id="${paneId}"]`)
-    if (!paneEl) return
-    const observer = new MutationObserver(() => { lastActivityRef.current = Date.now() })
-    observer.observe(paneEl, { childList: true, subtree: true, characterData: true })
-    return () => observer.disconnect()
-  }, [paneId])
+  // Mirror the live error count for the polling closure.
+  useEffect(() => { errorCountRef.current = detectedErrors.length }, [detectedErrors])
 
-  // Track user interaction (keypress, click)
+  // User interaction counts as activity (resets the idle timer).
   useEffect(() => {
-    const markActive = (): void => {
-      const idleTime = Date.now() - lastActivityRef.current
-      if (idleTime > IDLE_THRESHOLD) {
-        const mins = Math.floor(idleTime / 60000)
-        const display = mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`
-        setIdleBanner({ duration: display })
-      }
-      lastActivityRef.current = Date.now()
-    }
+    const markActive = (): void => { lastActivityRef.current = Date.now() }
     const container = document.querySelector(`[data-pane-id="${paneId}"]`)
     container?.addEventListener('mousedown', markActive)
     container?.addEventListener('keydown', markActive)
@@ -134,15 +132,57 @@ export function XTerminal({ paneId, tabId, connectionId, terminalStyle, shell, s
     }
   }, [paneId])
 
-  const dismissIdleBanner = useCallback(() => {
-    setIdleBanner(null)
+  const formatIdle = (ms: number): string => {
+    const mins = Math.floor(ms / 60000)
+    return mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`
+  }
+
+  // Poll the output buffer: growth = activity. This is reliable, unlike a DOM
+  // MutationObserver, because xterm paints output to a WebGL canvas, not the DOM.
+  // After IDLE_THRESHOLD with no new output, surface the affordance — but only when
+  // there is something worth summarizing.
+  useEffect(() => {
+    const tick = async (): Promise<void> => {
+      const raw = rawSessionId(terminalIdRef.current)
+      if (!raw) return
+      let buffer = ''
+      try { buffer = await window.bifrost.terminal.getBuffer(raw) } catch { return }
+
+      if (buffer.length > lastBufferLenRef.current) {
+        // New output → active; reset idle and allow a fresh affordance next idle period.
+        lastBufferLenRef.current = buffer.length
+        lastActivityRef.current = Date.now()
+        dismissedRef.current = false
+        return
+      }
+      if (idle || dismissedRef.current) return
+      if (Date.now() - lastActivityRef.current < IDLE_THRESHOLD) return
+      if (!hasMeaningfulContent(buffer, errorCountRef.current)) return
+
+      setIdle({ duration: formatIdle(Date.now() - lastActivityRef.current) })
+      setExpanded(true)
+      if (collapseTimerRef.current) clearTimeout(collapseTimerRef.current)
+      collapseTimerRef.current = setTimeout(() => setExpanded(false), COLLAPSE_MS)
+    }
+    const interval = setInterval(tick, IDLE_CHECK_MS)
+    return () => {
+      clearInterval(interval)
+      if (collapseTimerRef.current) clearTimeout(collapseTimerRef.current)
+    }
+  }, [idle])
+
+  const dismissIdle = useCallback(() => {
+    if (collapseTimerRef.current) clearTimeout(collapseTimerRef.current)
+    dismissedRef.current = true
+    setIdle(null)
+    setExpanded(false)
     setAiSummary(null)
   }, [])
 
   const requestAiSummary = useCallback(async () => {
     setSummaryLoading(true)
     try {
-      const termId = terminalIdRef.current
+      const termId = rawSessionId(terminalIdRef.current)
       if (!termId) { setSummaryLoading(false); return }
       const buffer = await window.bifrost.terminal.getBuffer(termId)
       if (!buffer) { setAiSummary('No terminal output available.'); setSummaryLoading(false); return }
@@ -165,6 +205,13 @@ export function XTerminal({ paneId, tabId, connectionId, terminalStyle, shell, s
     }
     setSummaryLoading(false)
   }, [])
+
+  // Expand the affordance and lazily generate the summary on first open.
+  const expandIdle = useCallback(() => {
+    if (collapseTimerRef.current) clearTimeout(collapseTimerRef.current)
+    setExpanded(true)
+    if (!aiSummary && !summaryLoading) requestAiSummary()
+  }, [aiSummary, summaryLoading, requestAiSummary])
 
   // Save summary as note
   const saveSummaryAsNote = useCallback(async () => {
@@ -189,18 +236,31 @@ export function XTerminal({ paneId, tabId, connectionId, terminalStyle, shell, s
         tabTitle: tab?.title ?? ''
       })
     } catch { /* ignore */ }
-    dismissIdleBanner()
-  }, [aiSummary, tabId, connectionId, dismissIdleBanner])
+    dismissIdle()
+  }, [aiSummary, tabId, connectionId, dismissIdle])
 
   const content = (
     <div className="relative w-full h-full">
-      {/* Idle resume banner */}
-      {idleBanner && (
-        <div className="absolute top-0 left-0 right-0 z-20 bg-[#1b1b1e] border-b border-[rgba(199,196,215,0.08)]">
-          <div className="flex items-center gap-3 px-3 py-2">
-            <Clock size={14} className="text-[#ffa36b] shrink-0" />
+      {/* Idle session summary — collapsed corner icon, or an expanded panel. */}
+      {idle && !expanded && (
+        <button
+          onClick={expandIdle}
+          title={`Idle ${idle.duration} — session summary`}
+          aria-label={`Idle for ${idle.duration}. Open session summary.`}
+          className="absolute top-1.5 right-1.5 z-20 flex items-center justify-center w-6 h-6 rounded-full bg-[#1b1b1e]/90 border border-[rgba(199,196,215,0.12)] text-[#6bd5ff] hover:bg-[#2a2a2d] transition-colors shadow-sm"
+        >
+          <Bot size={13} />
+          {(aiSummary || detectedErrors.length > 0) && (
+            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#ffa36b] border border-[#131316]" />
+          )}
+        </button>
+      )}
+      {idle && expanded && (
+        <div className="absolute top-1.5 right-1.5 z-20 w-72 max-w-[calc(100%-0.75rem)] rounded-[var(--radius)] bg-[#1b1b1e] border border-[rgba(199,196,215,0.12)] shadow-lg">
+          <div className="flex items-center gap-2 px-3 py-2">
+            <Clock size={13} className="text-[#ffa36b] shrink-0" />
             <span className="text-[11px] text-[#c7c4d7]">
-              Idle for <strong className="text-[#ffa36b]">{idleBanner.duration}</strong>
+              Idle for <strong className="text-[#ffa36b]">{idle.duration}</strong>
             </span>
             {!aiSummary && !summaryLoading && (
               <button
@@ -216,15 +276,25 @@ export function XTerminal({ paneId, tabId, connectionId, terminalStyle, shell, s
               </span>
             )}
             <button
-              onClick={dismissIdleBanner}
+              onClick={() => setExpanded(false)}
+              title="Collapse"
+              aria-label="Collapse session summary"
               className="ml-auto p-0.5 text-[#c7c4d7]/40 hover:text-[#c7c4d7] transition-colors"
+            >
+              <ChevronUp size={13} />
+            </button>
+            <button
+              onClick={dismissIdle}
+              title="Dismiss"
+              aria-label="Dismiss session summary"
+              className="p-0.5 text-[#c7c4d7]/40 hover:text-[#c7c4d7] transition-colors"
             >
               <XIcon size={12} />
             </button>
           </div>
           {aiSummary && (
             <div className="px-3 pb-2">
-              <pre className="text-[10px] text-[#c7c4d7]/80 whitespace-pre-wrap leading-relaxed max-h-32 overflow-y-auto">
+              <pre className="text-[10px] text-[#c7c4d7]/80 whitespace-pre-wrap leading-relaxed max-h-40 overflow-y-auto">
                 {aiSummary}
               </pre>
               <div className="flex gap-2 mt-1.5">
@@ -235,7 +305,7 @@ export function XTerminal({ paneId, tabId, connectionId, terminalStyle, shell, s
                   Save as Note
                 </button>
                 <button
-                  onClick={dismissIdleBanner}
+                  onClick={dismissIdle}
                   className="text-[9px] text-[#c7c4d7]/40 hover:text-[#c7c4d7] font-semibold uppercase tracking-wider"
                 >
                   Dismiss

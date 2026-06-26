@@ -21,7 +21,7 @@ export function registerAiIpc(mainWindow: BrowserWindow): void {
   ipcMain.handle('ai:generate', async (_event, prompt: string, context?: string) => {
     let fullResponse = ''
     await generateSuggestion(prompt, context, (chunk) => {
-      fullResponse = fullResponse
+      fullResponse += chunk.text
       mainWindow.webContents.send('ai:chunk', chunk.text, chunk.done)
     })
     return fullResponse

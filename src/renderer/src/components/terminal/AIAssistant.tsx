@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Bot, Send, X, ArrowRight, Loader2, RefreshCw, PanelRightClose, ArrowLeftToLine } from 'lucide-react'
 import { cn } from '@renderer/lib/utils'
 import { getFallbackSuggestions } from '@renderer/lib/command-suggestions'
+import { rawSessionId } from '@renderer/lib/session-summary'
 
 interface AIAssistantProps {
   open: boolean
@@ -245,7 +246,7 @@ async function buildRichContext(connectionId?: string | null): Promise<string> {
     const tabs = useSessionsStore.getState().tabs
     const activeTabId = useSessionsStore.getState().activeTabId
     const tab = tabs.find((t) => t.id === activeTabId)
-    const termId = tab?.rootPane?.terminalId
+    const termId = rawSessionId(tab?.rootPane?.terminalId)
     if (termId) {
       const buffer = await window.bifrost.terminal.getBuffer(termId)
       if (buffer) {
