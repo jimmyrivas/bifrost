@@ -1,10 +1,13 @@
-import { useEffect, useCallback, useRef, useMemo } from 'react'
+import { useEffect, useCallback, useRef, useMemo, useState } from 'react'
 import { AppShell } from '@renderer/components/layout/AppShell'
 import { DetachedTerminal } from '@renderer/components/terminal/DetachedTerminal'
 import { DetachedAIAssistant } from '@renderer/components/terminal/DetachedAIAssistant'
 import { MarkdownViewer } from '@renderer/components/markdown/MarkdownViewer'
+import { RestoreSessionPrompt } from '@renderer/components/layout/RestoreSessionPrompt'
 import { useSessionsStore } from '@renderer/stores/sessions.store'
 import { useMarkdownViewerStore } from '@renderer/stores/markdownViewer.store'
+import { usePreferencesStore } from '@renderer/stores/preferences.store'
+import { readManifest, writeManifest, deriveManifest } from '@renderer/lib/session-manifest'
 
 interface MarkdownOpenDetail {
   sessionId: string
@@ -23,18 +26,79 @@ export function App(): JSX.Element {
   const cycleBroadcastMode = useSessionsStore((s) => s.cycleBroadcastMode)
   const toggleMaximizePane = useSessionsStore((s) => s.toggleMaximizePane)
 
+  // This window's role: detached terminal / detached AI assistant / main window.
+  // Detached windows share the same origin (localStorage), so session-restore must
+  // run only in the main window — otherwise a detached window would clobber the manifest.
+  const { detachTabId, aiDetach } = useMemo(() => {
+    const params = new URLSearchParams(window.location.search)
+    return { detachTabId: params.get('detach'), aiDetach: params.get('aiDetach') === '1' }
+  }, [])
+  const isMainWindow = !detachTabId && !aiDetach
+
   // Multi-chord hotkey state (#33)
   const pendingChordRef = useRef<string | null>(null)
   const chordTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Create initial tab on mount
+  // Session restore: read the previous session's manifest once, before any tab is
+  // created, so the restore prompt can offer it and persistence can't overwrite it first.
+  const [restoreManifest] = useState(() => (isMainWindow ? readManifest() : { tabs: [], activeIndex: 0 }))
+  const [restoreDecided, setRestoreDecided] = useState(false)
+  const showRestorePrompt = isMainWindow && !restoreDecided && restoreManifest.tabs.length > 0
+
+  // Create initial tab on mount (or defer to the restore prompt when there's a manifest)
   useEffect(() => {
-    const { tabs } = useSessionsStore.getState()
-    if (tabs.length === 0) {
-      createTab()
+    if (!isMainWindow) {
+      if (useSessionsStore.getState().tabs.length === 0) createTab()
+      return
     }
+    if (restoreManifest.tabs.length === 0) {
+      if (useSessionsStore.getState().tabs.length === 0) createTab()
+      setRestoreDecided(true)
+    }
+    // else: wait for the user's choice in the restore prompt
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Persist the open-tabs manifest (main window only, after the restore decision).
+  useEffect(() => {
+    if (!isMainWindow || !restoreDecided) return
+    const persist = (): void => {
+      const { tabs, activeTabId } = useSessionsStore.getState()
+      const localMuxEnabled = usePreferencesStore.getState().localMultiplexer.preferred !== 'none'
+      writeManifest(deriveManifest(tabs, activeTabId, localMuxEnabled))
+    }
+    persist()
+    // Vanilla store subscription (not a React selector) — no re-render loop.
+    return useSessionsStore.subscribe(persist)
+  }, [isMainWindow, restoreDecided])
+
+  const handleRestore = useCallback(async () => {
+    for (let i = 0; i < restoreManifest.tabs.length; i++) {
+      const mt = restoreManifest.tabs[i]
+      if (mt.connectionId) {
+        // Skip silently if the connection was deleted since last session.
+        try {
+          const conn = await window.bifrost.connections.get(mt.connectionId)
+          if (!conn) continue
+        } catch {
+          continue
+        }
+      }
+      const id = createTab(mt.title, mt.connectionId ?? undefined, mt.terminalStyle, mt.shell, mt.shellArgs)
+      if (mt.lockTitle) useSessionsStore.getState().toggleLockTitle(id)
+    }
+    // Activate the previously-active tab when it survived restore.
+    const restored = useSessionsStore.getState().tabs
+    const active = restored[restoreManifest.activeIndex]
+    if (active) setActiveTab(active.id)
+    if (restored.length === 0) createTab()
+    setRestoreDecided(true)
+  }, [restoreManifest, createTab, setActiveTab])
+
+  const handleStartFresh = useCallback(() => {
+    if (useSessionsStore.getState().tabs.length === 0) createTab()
+    setRestoreDecided(true)
+  }, [createTab])
 
   // Open the internal Markdown viewer when a terminal Ctrl+Clicks a .md path.
   useEffect(() => {
@@ -235,12 +299,6 @@ export function App(): JSX.Element {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [handleKeyDown])
 
-  // Check if this window is a detached terminal or detached AI assistant
-  const { detachTabId, aiDetach } = useMemo(() => {
-    const params = new URLSearchParams(window.location.search)
-    return { detachTabId: params.get('detach'), aiDetach: params.get('aiDetach') === '1' }
-  }, [])
-
   if (aiDetach) {
     return <DetachedAIAssistant />
   }
@@ -253,6 +311,13 @@ export function App(): JSX.Element {
     <>
       <AppShell />
       <MarkdownViewer />
+      {showRestorePrompt && (
+        <RestoreSessionPrompt
+          count={restoreManifest.tabs.length}
+          onRestore={handleRestore}
+          onStartFresh={handleStartFresh}
+        />
+      )}
     </>
   )
 }
