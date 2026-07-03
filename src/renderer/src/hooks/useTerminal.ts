@@ -375,9 +375,12 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
 
   // Listen for zoom custom events dispatched from global keybindings
   useEffect(() => {
-    const handleZoomIn = (): void => zoomIn()
-    const handleZoomOut = (): void => zoomOut()
-    const handleZoomReset = (): void => resetZoom()
+    // Zoom only the active terminal. All tabs stay mounted (terminal persistence),
+    // so every hook instance receives these document-level events; without this
+    // guard, inactive tabs would zoom too. Mirrors the paste handlers below.
+    const handleZoomIn = (): void => { if (isActiveTerminal()) zoomIn() }
+    const handleZoomOut = (): void => { if (isActiveTerminal()) zoomOut() }
+    const handleZoomReset = (): void => { if (isActiveTerminal()) resetZoom() }
 
     // Returns true if the clipboard held an image and it was handled (uploaded
     // to the remote host, or attempted). When true, the caller must NOT fall
