@@ -26,6 +26,6 @@
 
 - [x] 4.1 `pnpm typecheck` clean; `pnpm lint` clean on changed files (no new issues)
 - [x] 4.2 Unit tests for `isRestorable`, `toManifestTab`, `deriveManifest` (8 cases: connection kept, non-mux local dropped, mux local kept, ephemeral fields stripped, activeIndex against filtered list); full suite 243 passing
-- [ ] 4.3 Manual: open several SSH tabs + one multiplexed local + one plain local, quit, relaunch → prompt offers the right count (plain local excluded); Restore reopens and connects each, mux tabs reattach with scrollback; Start fresh opens a single empty tab
-- [ ] 4.4 Manual: delete a connection between sessions → its tab is skipped silently and the rest restore
-- [ ] 4.5 Manual (production build): confirm no Zustand object-selector regressions — navigates without React #185
+- [x] 4.3 Manual: open several SSH tabs + one multiplexed local + one plain local, quit, relaunch → prompt offers the right count (plain local excluded); Restore reopens and connects each, mux tabs reattach with scrollback; Start fresh opens a single empty tab
+- [x] 4.4 Manual: delete a connection between sessions → its tab is skipped silently and the rest restore
+- [x] 4.5 Manual (production build): confirm no Zustand object-selector regressions — navigates without React #185

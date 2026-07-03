@@ -6,9 +6,7 @@ Render interactive terminals (xterm.js) for both local PTY and remote SSH sessio
 provide the tab/pane workspace around them: broadcast, layout, zoom, paste safety,
 detach/reattach, theming, and context actions. Core logic in
 `src/renderer/src/hooks/useTerminal.ts` and `components/terminal/`.
-
 ## Requirements
-
 ### Requirement: Dual-Mode Terminals
 
 The system SHALL drive xterm.js terminals in either local PTY mode or remote SSH mode
@@ -83,12 +81,18 @@ dangerous command patterns, requiring confirmation.
 
 The system SHALL support zoom in/out/reset, font ligatures, copy-on-select, clickable
 links, dynamic tab titles from OSC sequences, intelligent Ctrl-C handling, and selectable
-color schemes (50+).
+color schemes (50+). Zoom SHALL apply only to the active terminal; inactive tabs SHALL NOT
+change font size.
 
 #### Scenario: Zoom
 
 - **WHEN** a user presses Ctrl+= / Ctrl+- / Ctrl+0
-- **THEN** the terminal font size increases / decreases / resets
+- **THEN** the active terminal's font size increases / decreases / resets
+
+#### Scenario: Zoom does not affect inactive tabs
+
+- **WHEN** a user zooms while other tabs are open in the background
+- **THEN** only the active terminal changes font size and the inactive tabs are unaffected
 
 #### Scenario: Dynamic title
 
@@ -125,3 +129,4 @@ output, with a dismissible error badge.
 
 - **WHEN** an error pattern is detected in output
 - **THEN** an error badge appears that the user can dismiss and that auto-hides
+

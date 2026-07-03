@@ -8,5 +8,5 @@
 ## 2. Verification
 
 - [x] 2.1 `pnpm typecheck` clean; `pnpm lint` introduces no new issues (the 8 remaining warnings in this file — console statements, `AI_PATTERNS` deps — pre-date this change); 235 unit tests pass
-- [ ] 2.2 Manual: open 2+ tabs, zoom in/out/reset on the active tab → only the active terminal changes; switch tabs and confirm the previously-zoomed tab kept its own size and the others are untouched
-- [ ] 2.3 Manual: confirm paste/broadcast still behave correctly (shared event handlers untouched)
+- [x] 2.2 Manual: open 2+ tabs, zoom in/out/reset on the active tab → only the active terminal changes; switch tabs and confirm the previously-zoomed tab kept its own size and the others are untouched
+- [x] 2.3 Manual: confirm paste/broadcast still behave correctly (shared event handlers untouched)
