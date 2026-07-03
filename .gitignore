@@ -13,3 +13,13 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# Build cache
+*.tsbuildinfo
+
+# Tooling / local artifacts
+.rtk/
+.playwright-mcp/
+
+# Reference clone of Ásbrú Connection Manager
+asbru-cm/
