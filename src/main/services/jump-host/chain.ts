@@ -1,6 +1,6 @@
 import { Client, type ConnectConfig } from 'ssh2'
 import type { Socket } from 'net'
-import { readFileSync } from 'fs'
+import { readFileSync, existsSync } from 'fs'
 import type { ResolvedHop } from './types'
 
 /**
@@ -99,9 +99,19 @@ export function buildHopConnectConfig(
       }
       if (hop.passphrase) cc.passphrase = hop.passphrase
       break
-    case 'agent':
-      if (process.env.SSH_AUTH_SOCK) cc.agent = process.env.SSH_AUTH_SOCK
+    case 'agent': {
+      const sock = process.env.SSH_AUTH_SOCK
+      if (sock && existsSync(sock)) {
+        cc.agent = sock
+      } else {
+        throw new Error(
+          `Jump host "${hop.host}" requiere SSH agent, pero SSH_AUTH_SOCK ` +
+            `${sock ? `apunta a un socket inexistente (${sock})` : 'no está definido'}. ` +
+            `Inicia ssh-agent y añade tu clave (ssh-add), o cambia el auth del jump host a key/password.`
+        )
+      }
       break
+    }
   }
 
   return cc

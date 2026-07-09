@@ -475,7 +475,14 @@ export class SshManager extends EventEmitter {
       // for every method except explicit 'manual'. This matches the behavior
       // of the system `ssh` command and lets agent-loaded keys work even when
       // the user picked a specific privateKeyPath that the server doesn't accept.
-      if (config.authType !== 'manual' && process.env.SSH_AUTH_SOCK) {
+      // Only offer it when the socket actually exists: a stale SSH_AUTH_SOCK
+      // pointing at a dead socket makes ssh2 abort with "Failed to connect to
+      // agent" even when another valid auth method is present.
+      if (
+        config.authType !== 'manual' &&
+        process.env.SSH_AUTH_SOCK &&
+        existsSync(process.env.SSH_AUTH_SOCK)
+      ) {
         connectConfig.agent = process.env.SSH_AUTH_SOCK
       }
 

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
 import {
   parseJumpServerConfig,
   isValidHop,
@@ -7,11 +7,13 @@ import {
   detectCycle,
   parseProxyJumpString
 } from '../../src/main/services/jump-host/resolver'
+import { buildHopConnectConfig } from '../../src/main/services/jump-host/chain'
 import type {
   ConnectionLookup,
   ConnectionLookupResult,
   DecryptFn,
-  JumpChain
+  JumpChain,
+  ResolvedHop
 } from '../../src/main/services/jump-host/types'
 
 function makeLookup(connections: Record<string, Partial<ConnectionLookupResult>>): ConnectionLookup {
@@ -343,5 +345,32 @@ describe('parseProxyJumpString', () => {
     expect(parseProxyJumpString('no-at-sign')).toBeNull()
     expect(parseProxyJumpString('@hostonly')).toBeNull()
     expect(parseProxyJumpString('user@')).toBeNull()
+  })
+})
+
+describe('buildHopConnectConfig — agent auth', () => {
+  const agentHop: ResolvedHop = { host: 'bastion', port: 22, username: 'u', authType: 'agent' }
+  const orig = process.env.SSH_AUTH_SOCK
+
+  afterEach(() => {
+    if (orig === undefined) delete process.env.SSH_AUTH_SOCK
+    else process.env.SSH_AUTH_SOCK = orig
+  })
+
+  it('sets cc.agent when SSH_AUTH_SOCK points at an existing socket', () => {
+    // existsSync only checks presence, so any real path satisfies the guard.
+    process.env.SSH_AUTH_SOCK = __filename
+    const cc = buildHopConnectConfig(agentHop, undefined)
+    expect(cc.agent).toBe(__filename)
+  })
+
+  it('throws when SSH_AUTH_SOCK points at a dead socket', () => {
+    process.env.SSH_AUTH_SOCK = '/run/user/nonexistent/ssh-agent.socket'
+    expect(() => buildHopConnectConfig(agentHop, undefined)).toThrow(/socket inexistente/)
+  })
+
+  it('throws when SSH_AUTH_SOCK is undefined', () => {
+    delete process.env.SSH_AUTH_SOCK
+    expect(() => buildHopConnectConfig(agentHop, undefined)).toThrow(/no está definido/)
   })
 })
