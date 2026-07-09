@@ -1,8 +1,21 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { Bot, Send, X, ArrowRight, Loader2, RefreshCw, PanelRightClose, ArrowLeftToLine } from 'lucide-react'
+import {
+  Bot, Send, X, ArrowRight, Loader2, RefreshCw, PanelRightClose, ArrowLeftToLine,
+  Copy, ClipboardCopy, Sheet
+} from 'lucide-react'
 import { cn } from '@renderer/lib/utils'
 import { getFallbackSuggestions } from '@renderer/lib/command-suggestions'
 import { rawSessionId } from '@renderer/lib/session-summary'
+import { markdownToCsv, textToCsv } from '@renderer/lib/markdown-clip'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuShortcut,
+  ContextMenuTrigger
+} from '@renderer/components/ui/context-menu'
 
 interface AIAssistantProps {
   open: boolean
@@ -147,6 +160,70 @@ function renderInline(
   }
 
   return parts.length > 0 ? parts : [text]
+}
+
+/**
+ * Wraps an assistant message with a right-click menu to copy it as plain text,
+ * Markdown, or CSV. The message `content` is already Markdown source, so
+ * copying acts on it directly; a live text selection inside the bubble takes
+ * precedence when present.
+ */
+function CopyableMessage({
+  content,
+  children
+}: {
+  content: string
+  children: React.ReactNode
+}): JSX.Element {
+  const ref = useRef<HTMLDivElement>(null)
+  const selectionRef = useRef<string | null>(null)
+
+  const captureSelection = (): void => {
+    selectionRef.current = null
+    const el = ref.current
+    const sel = window.getSelection()
+    if (!el || !sel || sel.isCollapsed || sel.rangeCount === 0) return
+    if (!el.contains(sel.getRangeAt(0).commonAncestorContainer)) return
+    selectionRef.current = sel.toString()
+  }
+
+  const write = (text: string): void => {
+    if (text.trim()) navigator.clipboard.writeText(text).catch(() => { /* denied */ })
+  }
+
+  const copyPlain = (): void => write(selectionRef.current ?? ref.current?.innerText ?? content)
+  const copyMarkdown = (): void => write(selectionRef.current ?? content)
+  const copyCsv = (): void => {
+    const src = selectionRef.current ?? content
+    write(markdownToCsv(src) ?? textToCsv(selectionRef.current ?? ref.current?.innerText ?? ''))
+  }
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div ref={ref} onContextMenuCapture={captureSelection}>
+          {children}
+        </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent className="min-w-[13rem]">
+        <ContextMenuLabel>Copy response</ContextMenuLabel>
+        <ContextMenuSeparator />
+        <ContextMenuItem onSelect={copyPlain}>
+          <Copy className="mr-2 h-3.5 w-3.5" />
+          Copy
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={copyMarkdown}>
+          <ClipboardCopy className="mr-2 h-3.5 w-3.5" />
+          Copy as Markdown
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={copyCsv}>
+          <Sheet className="mr-2 h-3.5 w-3.5" />
+          Copy as CSV
+          <ContextMenuShortcut>tables</ContextMenuShortcut>
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  )
 }
 
 function MarkdownContent({
@@ -450,9 +527,11 @@ export function AIAssistant({
           />
         ))}
         {streaming && (
-          <div className="rounded-[var(--radius)] bg-[var(--surface-container-high)] p-3">
-            <MarkdownContent content={streaming} onInsertCommand={onInsertCommand} />
-          </div>
+          <CopyableMessage content={streaming}>
+            <div className="rounded-[var(--radius)] bg-[var(--surface-container-high)] p-3">
+              <MarkdownContent content={streaming} onInsertCommand={onInsertCommand} />
+            </div>
+          </CopyableMessage>
         )}
         <div ref={messagesEndRef} />
       </div>
@@ -515,8 +594,10 @@ function MessageBubble({
   }
 
   return (
-    <div className="rounded-[var(--radius)] bg-[var(--surface-container-high)] p-3">
-      <MarkdownContent content={message.content} onInsertCommand={onInsertCommand} />
-    </div>
+    <CopyableMessage content={message.content}>
+      <div className="rounded-[var(--radius)] bg-[var(--surface-container-high)] p-3">
+        <MarkdownContent content={message.content} onInsertCommand={onInsertCommand} />
+      </div>
+    </CopyableMessage>
   )
 }

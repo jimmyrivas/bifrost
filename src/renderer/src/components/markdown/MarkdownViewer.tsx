@@ -1,15 +1,25 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { Loader2, AlertTriangle, Copy, Check, FileText } from 'lucide-react'
+import { Loader2, AlertTriangle, Copy, Check, FileText, ClipboardCopy, Sheet } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle
 } from '@renderer/components/ui/dialog'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuShortcut,
+  ContextMenuTrigger
+} from '@renderer/components/ui/context-menu'
 import { ScrollArea } from '@renderer/components/ui/scroll-area'
 import { useMarkdownViewerStore } from '@renderer/stores/markdownViewer.store'
+import { domToMarkdown, tablesToCsv, textToCsv } from '@renderer/lib/markdown-clip'
 
 function basename(p: string): string {
   const parts = p.split('/').filter(Boolean)
@@ -34,12 +44,56 @@ export function MarkdownViewer(): JSX.Element {
   const close = useMarkdownViewerStore((s) => s.close)
 
   const [copied, setCopied] = useState(false)
+  const [flash, setFlash] = useState<string | null>(null)
+
+  // Rendered container + the selection captured when the context menu opens.
+  const bodyRef = useRef<HTMLDivElement>(null)
+  const selectionRef = useRef<{ fragment: DocumentFragment; text: string } | null>(null)
+
+  const write = (text: string, label: string): void => {
+    if (!text.trim()) return
+    navigator.clipboard.writeText(text).then(() => {
+      setFlash(label)
+      setTimeout(() => setFlash(null), 1400)
+    }).catch(() => { /* clipboard denied */ })
+  }
 
   const onCopy = (): void => {
     navigator.clipboard.writeText(content).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     }).catch(() => { /* clipboard denied */ })
+  }
+
+  // Capture the live selection before Radix opens the menu (capture phase).
+  const captureSelection = (): void => {
+    selectionRef.current = null
+    const body = bodyRef.current
+    const sel = window.getSelection()
+    if (!body || !sel || sel.isCollapsed || sel.rangeCount === 0) return
+    const range = sel.getRangeAt(0)
+    if (!body.contains(range.commonAncestorContainer)) return
+    selectionRef.current = { fragment: range.cloneContents(), text: sel.toString() }
+  }
+
+  const hasSelection = (): boolean => selectionRef.current !== null
+
+  const copyPlain = (): void => {
+    const sel = selectionRef.current
+    write(sel ? sel.text : (bodyRef.current?.innerText ?? content), 'Copied')
+  }
+
+  const copyMarkdown = (): void => {
+    const sel = selectionRef.current
+    // No selection → the source is already Markdown, so copy it verbatim.
+    write(sel ? domToMarkdown(sel.fragment) : content, 'Copied as Markdown')
+  }
+
+  const copyCsv = (): void => {
+    const sel = selectionRef.current
+    const scope = sel ? sel.fragment : bodyRef.current
+    const csv = (scope && tablesToCsv(scope)) || textToCsv(sel?.text ?? bodyRef.current?.innerText ?? '')
+    write(csv, 'Copied as CSV')
   }
 
   return (
@@ -70,6 +124,12 @@ export function MarkdownViewer(): JSX.Element {
           )}
         </DialogHeader>
 
+        {flash && (
+          <div className="pointer-events-none absolute left-1/2 top-[52px] z-20 -translate-x-1/2 rounded-[var(--radius)] bg-[var(--surface-container-highest)] px-3 py-1 text-[11px] text-[var(--on-surface)] shadow-md">
+            {flash}
+          </div>
+        )}
+
         {truncated && status === 'ready' && (
           <div className="absolute left-0 right-0 top-[52px] z-10 bg-[var(--warning)]/15 px-5 py-1 text-[10px] text-[var(--on-surface-variant)]">
             File exceeds the viewer size limit — showing the beginning only. Adjust the limit in Preferences.
@@ -98,11 +158,38 @@ export function MarkdownViewer(): JSX.Element {
             )}
 
             {status === 'ready' && (
-              <div className="markdown-body">
-                <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml>
-                  {content}
-                </ReactMarkdown>
-              </div>
+              <ContextMenu>
+                <ContextMenuTrigger asChild>
+                  <div
+                    ref={bodyRef}
+                    className="markdown-body"
+                    onContextMenuCapture={captureSelection}
+                  >
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml>
+                      {content}
+                    </ReactMarkdown>
+                  </div>
+                </ContextMenuTrigger>
+                <ContextMenuContent className="min-w-[13rem]">
+                  <ContextMenuLabel>
+                    {hasSelection() ? 'Copy selection' : 'Copy document'}
+                  </ContextMenuLabel>
+                  <ContextMenuSeparator />
+                  <ContextMenuItem onSelect={copyPlain}>
+                    <Copy className="mr-2 h-3.5 w-3.5" />
+                    Copy
+                  </ContextMenuItem>
+                  <ContextMenuItem onSelect={copyMarkdown}>
+                    <ClipboardCopy className="mr-2 h-3.5 w-3.5" />
+                    Copy as Markdown
+                  </ContextMenuItem>
+                  <ContextMenuItem onSelect={copyCsv}>
+                    <Sheet className="mr-2 h-3.5 w-3.5" />
+                    Copy as CSV
+                    <ContextMenuShortcut>tables</ContextMenuShortcut>
+                  </ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
             )}
           </div>
         </ScrollArea>
