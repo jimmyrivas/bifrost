@@ -1,5 +1,7 @@
 import {
   shellQuote,
+  dquote,
+  extraArgsFragment,
   PROBE_PATH_PREFIX,
   type AttachOptions,
   type Multiplexer,
@@ -38,10 +40,18 @@ export const zellij: Multiplexer = {
     // Without it zellij's mouse-tracking redraws clobber xterm.js selection
     // even with Shift held. Tail position is required by zellij's CLI parser.
     const mouseOverride = opts.disableMouseCapture ? ' options --mouse-mode false' : ''
+    // Global flags go before the `attach` subcommand. --config and extra args
+    // apply on both create and attach; --layout applies only when creating a
+    // session (zellij ignores/rejects it when re-attaching an existing one).
+    const cfg = opts.configFile?.trim() ? ` --config ${dquote(opts.configFile.trim())}` : ''
+    const layout =
+      create && opts.layout?.trim() ? ` --layout ${dquote(opts.layout.trim())}` : ''
+    const extra = extraArgsFragment(opts.extraArgs)
+    const globalArgs = `${cfg}${layout}${extra}`
     if (create) {
-      return `${bin} attach --create${force} ${shellQuote(target)}${mouseOverride}`
+      return `${bin}${globalArgs} attach --create${force} ${shellQuote(target)}${mouseOverride}`
     }
-    return `${bin} attach${force} ${shellQuote(target)}${mouseOverride}`
+    return `${bin}${globalArgs} attach${force} ${shellQuote(target)}${mouseOverride}`
   },
 
   async killSession(exec: RemoteExecutor, target: string): Promise<void> {

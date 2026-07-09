@@ -370,3 +370,129 @@ describe('tmux.probe', () => {
     expect(result.sessions[0].alive).toBe(true)
   })
 })
+
+describe('custom args — tmux/rmux config file & extra args', () => {
+  it('places -f config file before new-session on create', () => {
+    const cmd = tmux.buildAttachCmd('work', { configFile: '~/.tmux.work.conf' })
+    expect(cmd).toBe(`tmux -f "~/.tmux.work.conf" new-session -A -s 'work'`)
+    // -f must appear before the subcommand
+    expect(cmd.indexOf('-f')).toBeLessThan(cmd.indexOf('new-session'))
+  })
+  it('places -f config file before attach-session on attach', () => {
+    const cmd = tmux.buildAttachCmd('work', {
+      createIfMissing: false,
+      configFile: '~/.tmux.conf'
+    })
+    expect(cmd).toBe(`tmux -f "~/.tmux.conf" attach-session -t 'work'`)
+  })
+  it('preserves $HOME expansion in the config path (double-quoted, not single)', () => {
+    const cmd = tmux.buildAttachCmd('work', { configFile: '$HOME/.tmux.conf' })
+    expect(cmd).toContain(`-f "$HOME/.tmux.conf"`)
+    expect(cmd).not.toContain(`\\$HOME`)
+  })
+  it('inserts extra args verbatim before the subcommand', () => {
+    const cmd = tmux.buildAttachCmd('work', { extraArgs: '-u' })
+    expect(cmd).toBe(`tmux -u new-session -A -s 'work'`)
+    expect(cmd.indexOf('-u')).toBeLessThan(cmd.indexOf('new-session'))
+  })
+  it('keeps multi-token extra args as separate tokens', () => {
+    const cmd = tmux.buildAttachCmd('work', { extraArgs: '-2 -u' })
+    expect(cmd).toContain(`tmux -2 -u new-session`)
+  })
+  it('combines config file and extra args in order', () => {
+    const cmd = tmux.buildAttachCmd('work', {
+      configFile: '~/.tmux.conf',
+      extraArgs: '-u'
+    })
+    expect(cmd).toBe(`tmux -f "~/.tmux.conf" -u new-session -A -s 'work'`)
+  })
+  it('ignores the zellij-only layout field', () => {
+    const cmd = tmux.buildAttachCmd('work', { layout: 'dev' })
+    expect(cmd).toBe(`tmux new-session -A -s 'work'`)
+  })
+  it('rmux mirrors tmux placement', () => {
+    const cmd = rmux.buildAttachCmd('work', {
+      configFile: '~/.tmux.conf',
+      extraArgs: '-u'
+    })
+    expect(cmd).toBe(`rmux -f "~/.tmux.conf" -u new-session -A -s 'work'`)
+  })
+  it('adds nothing when all custom fields are empty', () => {
+    expect(tmux.buildAttachCmd('work', { configFile: '', layout: '', extraArgs: '' })).toBe(
+      `tmux new-session -A -s 'work'`
+    )
+    expect(tmux.buildAttachCmd('work', { extraArgs: '   ' })).toBe(
+      `tmux new-session -A -s 'work'`
+    )
+  })
+})
+
+describe('custom args — zellij config, layout & extra args', () => {
+  it('places --config before the attach subcommand on both create and attach', () => {
+    expect(zellij.buildAttachCmd('work', { configFile: '~/z.kdl' })).toBe(
+      `zellij --config "~/z.kdl" attach --create 'work'`
+    )
+    expect(
+      zellij.buildAttachCmd('work', { createIfMissing: false, configFile: '~/z.kdl' })
+    ).toBe(`zellij --config "~/z.kdl" attach 'work'`)
+  })
+  it('adds --layout only when creating a session', () => {
+    const created = zellij.buildAttachCmd('work', { layout: 'dev' })
+    expect(created).toBe(`zellij --layout "dev" attach --create 'work'`)
+    expect(created.indexOf('--layout')).toBeLessThan(created.indexOf('attach'))
+  })
+  it('omits --layout when attaching to an existing session', () => {
+    const attached = zellij.buildAttachCmd('work', {
+      createIfMissing: false,
+      layout: 'dev'
+    })
+    expect(attached).toBe(`zellij attach 'work'`)
+    expect(attached).not.toContain('--layout')
+  })
+  it('accepts a .kdl layout path preserving ~ expansion', () => {
+    const cmd = zellij.buildAttachCmd('work', { layout: '~/layouts/dev.kdl' })
+    expect(cmd).toContain(`--layout "~/layouts/dev.kdl"`)
+  })
+  it('orders --config, --layout, then extra args before attach', () => {
+    const cmd = zellij.buildAttachCmd('work', {
+      configFile: '~/z.kdl',
+      layout: 'dev',
+      extraArgs: '--debug'
+    })
+    expect(cmd).toBe(`zellij --config "~/z.kdl" --layout "dev" --debug attach --create 'work'`)
+  })
+  it('adds nothing when all custom fields are empty', () => {
+    expect(
+      zellij.buildAttachCmd('work', { configFile: '', layout: '', extraArgs: '' })
+    ).toBe(`zellij attach --create 'work'`)
+  })
+})
+
+describe('custom args — dtach extra args only', () => {
+  it('inserts extra args after -E -z and before the shell on create', () => {
+    const cmd = dtach.buildAttachCmd('/home/u/.dtach/work.sock', { extraArgs: '-r winch' })
+    expect(cmd).toContain('-E -z -r winch "$SHELL"')
+    expect(cmd.indexOf('-r winch')).toBeGreaterThan(cmd.indexOf('-E -z'))
+    expect(cmd.indexOf('-r winch')).toBeLessThan(cmd.indexOf('"$SHELL"'))
+  })
+  it('inserts extra args after -E -z on the attach-only path', () => {
+    const cmd = dtach.buildAttachCmd('/tmp/x.sock', {
+      createIfMissing: false,
+      extraArgs: '-r winch'
+    })
+    expect(cmd).toBe(`dtach -a "/tmp/x.sock" -E -z -r winch`)
+  })
+  it('ignores configFile and layout (dtach supports neither)', () => {
+    const cmd = dtach.buildAttachCmd('/tmp/x.sock', {
+      createIfMissing: false,
+      configFile: '~/.tmux.conf',
+      layout: 'dev'
+    })
+    expect(cmd).toBe(`dtach -a "/tmp/x.sock" -E -z`)
+  })
+  it('adds nothing when extra args are empty', () => {
+    expect(
+      dtach.buildAttachCmd('/tmp/x.sock', { createIfMissing: false, extraArgs: '' })
+    ).toBe(`dtach -a "/tmp/x.sock" -E -z`)
+  })
+})

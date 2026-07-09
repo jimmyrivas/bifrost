@@ -1,5 +1,7 @@
 import {
   shellQuote,
+  dquote,
+  extraArgsFragment,
   PROBE_PATH_PREFIX,
   type AttachOptions,
   type Multiplexer,
@@ -8,17 +10,6 @@ import {
   type ProbeResult,
   type RemoteExecutor
 } from './types'
-
-/**
- * Quote a path for inclusion inside a double-quoted shell context.
- * Preserves `$HOME` and similar so the remote shell can expand them — only
- * escapes characters that would break a double-quoted string.
- */
-function dquote(s: string): string {
-  // Escape \ and " (and ` to avoid command substitution surprises).
-  // We deliberately do NOT escape $ so $HOME / $USER / $XDG_RUNTIME_DIR work.
-  return `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/`/g, '\\`')}"`
-}
 
 const DEFAULT_SOCKET_DIR = '~/.dtach'
 
@@ -76,12 +67,15 @@ done`
     // -z: blocking-IO mode (better with line-buffered shells)
     const quoted = dquote(target)
     const bin = opts.binaryPath ? shellQuote(opts.binaryPath) : 'dtach'
+    // dtach has no config file or layout — only free-form extra flags apply,
+    // placed after -E -z and before the shell.
+    const extra = extraArgsFragment(opts.extraArgs)
     if (create) {
       // mkdir -p the parent dir defensively — in case probe was skipped
       // or the directory was removed between probe and attach.
-      return `mkdir -p "$(dirname ${quoted})" 2>/dev/null; ${bin} -A ${quoted} -E -z ${shell}`
+      return `mkdir -p "$(dirname ${quoted})" 2>/dev/null; ${bin} -A ${quoted} -E -z${extra} ${shell}`
     }
-    return `${bin} -a ${quoted} -E -z`
+    return `${bin} -a ${quoted} -E -z${extra}`
   },
 
   async killSession(exec: RemoteExecutor, target: string): Promise<void> {

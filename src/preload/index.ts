@@ -379,6 +379,9 @@ export interface BifrostApi {
         forceRunCommands?: boolean
         binaryPath?: string
         disableMouseCapture?: boolean
+        configFile?: string
+        layout?: string
+        extraArgs?: string
       }
     ) => Promise<string>
     killSession: (

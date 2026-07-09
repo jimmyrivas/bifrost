@@ -83,6 +83,56 @@ const defaultLocalMultiplexer: MultiplexerConfig = {
   sessionPrefix: 'bifrost-local'
 }
 
+/**
+ * Persisted-state migration for the preferences store. Exported for testing.
+ * Each `version < N` branch backfills fields introduced at persist version N so
+ * older payloads load with the current shape.
+ */
+export function migratePreferences(
+  persisted: unknown,
+  version: number
+): PreferencesState {
+  const state = (persisted ?? {}) as Partial<PreferencesState>
+  if (version < 2 && !state.localMultiplexer) {
+    state.localMultiplexer = { ...defaultLocalMultiplexer }
+  }
+  // v3: disableMouseCapture added to MultiplexerConfig. Pre-existing
+  // localMultiplexer objects lack the field; backfill with the safe
+  // default (true) so zellij users get working selection on first run.
+  if (version < 3 && state.localMultiplexer) {
+    state.localMultiplexer = {
+      ...defaultLocalMultiplexer,
+      ...state.localMultiplexer,
+      disableMouseCapture: state.localMultiplexer.disableMouseCapture ?? true
+    }
+  }
+  // v4: image-paste preferences added. Backfill onto persisted terminal.
+  if (version < 4) {
+    state.terminal = { ...defaultTerminal, ...(state.terminal ?? {}) }
+  }
+  // v5: markdown-link viewer preferences added. Backfill defaults.
+  if (version < 5) {
+    state.terminal = { ...defaultTerminal, ...(state.terminal ?? {}) }
+  }
+  // v6: AI panel width preference added. Backfill the default.
+  if (version < 6) {
+    state.terminal = { ...defaultTerminal, ...(state.terminal ?? {}) }
+  }
+  // v7: custom multiplexer args (configFile/layout/extraArgs) added.
+  // Backfill onto localMultiplexer with empty defaults so pre-existing
+  // configs load unchanged.
+  if (version < 7 && state.localMultiplexer) {
+    state.localMultiplexer = {
+      ...defaultLocalMultiplexer,
+      ...state.localMultiplexer,
+      configFile: state.localMultiplexer.configFile ?? '',
+      layout: state.localMultiplexer.layout ?? '',
+      extraArgs: state.localMultiplexer.extraArgs ?? ''
+    }
+  }
+  return state as PreferencesState
+}
+
 export const usePreferencesStore = create<PreferencesState>()(
   persist(
     (set) => ({
@@ -105,37 +155,8 @@ export const usePreferencesStore = create<PreferencesState>()(
     }),
     {
       name: 'bifrost-preferences',
-      version: 6,
-      migrate: (persisted, version) => {
-        const state = (persisted ?? {}) as Partial<PreferencesState>
-        if (version < 2 && !state.localMultiplexer) {
-          state.localMultiplexer = { ...defaultLocalMultiplexer }
-        }
-        // v3: disableMouseCapture added to MultiplexerConfig. Pre-existing
-        // localMultiplexer objects lack the field; backfill with the safe
-        // default (true) so zellij users get working selection on first run.
-        if (version < 3 && state.localMultiplexer) {
-          state.localMultiplexer = {
-            ...defaultLocalMultiplexer,
-            ...state.localMultiplexer,
-            disableMouseCapture:
-              state.localMultiplexer.disableMouseCapture ?? true
-          }
-        }
-        // v4: image-paste preferences added. Backfill onto persisted terminal.
-        if (version < 4) {
-          state.terminal = { ...defaultTerminal, ...(state.terminal ?? {}) }
-        }
-        // v5: markdown-link viewer preferences added. Backfill defaults.
-        if (version < 5) {
-          state.terminal = { ...defaultTerminal, ...(state.terminal ?? {}) }
-        }
-        // v6: AI panel width preference added. Backfill the default.
-        if (version < 6) {
-          state.terminal = { ...defaultTerminal, ...(state.terminal ?? {}) }
-        }
-        return state as PreferencesState
-      }
+      version: 7,
+      migrate: migratePreferences
     }
   )
 )

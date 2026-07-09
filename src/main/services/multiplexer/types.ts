@@ -51,6 +51,20 @@ export interface AttachOptions {
    *  the only reliable fix for selection that disappears under zellij's
    *  mouse-tracking redraws and keeps OSC 52 copy paths predictable. */
   disableMouseCapture?: boolean
+  /** User-supplied config file. tmux/rmux emit `-f <file>`, zellij emits
+   *  `--config <file>`, both in the global-flag position on create and attach.
+   *  dtach has no config file and ignores this. Quoted with {@link dquote} so a
+   *  leading `~`/`$HOME` still expands on the remote. */
+  configFile?: string
+  /** zellij-only layout — a registered name or a `.kdl` path — emitted as
+   *  `--layout <value>` and applied only when creating a session (zellij ignores
+   *  it on re-attach). Other kinds ignore it. Quoted with {@link dquote}. */
+  layout?: string
+  /** Free-form extra arguments inserted verbatim in the global-flag position on
+   *  both create and attach (for dtach: after `-E -z`, before the shell).
+   *  Supported by all kinds. NOT shell-quoted — it must survive as multiple
+   *  tokens (e.g. `-r winch`); it is the user's own shell on their own host. */
+  extraArgs?: string
 }
 
 /**
@@ -71,4 +85,25 @@ export interface Multiplexer {
 
 export function shellQuote(s: string): string {
   return `'${s.replace(/'/g, `'\\''`)}'`
+}
+
+/**
+ * Quote a value for inclusion inside a double-quoted shell context.
+ * Preserves `$HOME`/`~`/`$XDG_*` expansion (does NOT escape `$`) — only escapes
+ * `\`, `"`, and `` ` `` so the quoted string can't break out or trigger command
+ * substitution. Used for path-like user values (socket dir, config file, layout)
+ * where tilde/variable expansion must still happen on the remote shell.
+ */
+export function dquote(s: string): string {
+  return `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/`/g, '\\`')}"`
+}
+
+/**
+ * Trim a user-supplied free-form argument string. Returns a leading-space-padded
+ * fragment ready to splice into a command (verbatim, no quoting), or '' when the
+ * input is empty/whitespace so callers can concatenate unconditionally.
+ */
+export function extraArgsFragment(raw?: string): string {
+  const trimmed = (raw ?? '').trim()
+  return trimmed ? ` ${trimmed}` : ''
 }

@@ -128,7 +128,10 @@ export function MultiplexerManager({
     const cmd = await window.bifrost.multiplexer.buildAttachCmd(active, target, {
       createIfMissing: false,
       binaryPath: activeProbe?.path,
-      disableMouseCapture: config.disableMouseCapture
+      disableMouseCapture: config.disableMouseCapture,
+      configFile: config.configFile,
+      layout: config.layout,
+      extraArgs: config.extraArgs
     })
     onSendCommand(cmd)
   }
@@ -147,7 +150,10 @@ export function MultiplexerManager({
     const cmd = await window.bifrost.multiplexer.buildAttachCmd(active, target, {
       createIfMissing: true,
       binaryPath: activeProbe?.path,
-      disableMouseCapture: config.disableMouseCapture
+      disableMouseCapture: config.disableMouseCapture,
+      configFile: config.configFile,
+      layout: config.layout,
+      extraArgs: config.extraArgs
     })
     onSendCommand(cmd)
     setNewName('')

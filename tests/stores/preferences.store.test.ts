@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import {
   usePreferencesStore,
+  migratePreferences,
   clampAiPanelWidth,
   AI_PANEL_MIN_PX,
   AI_PANEL_MAX_PX
@@ -52,6 +53,52 @@ describe('Preferences Store', () => {
   it('updates scrollback buffer', () => {
     usePreferencesStore.getState().setTerminalPref('scrollback', 10000)
     expect(usePreferencesStore.getState().terminal.scrollback).toBe(10000)
+  })
+})
+
+describe('migratePreferences — v6 → v7 custom multiplexer args', () => {
+  it('backfills configFile/layout/extraArgs onto a pre-v7 localMultiplexer', () => {
+    const legacy = {
+      localMultiplexer: {
+        preferred: 'zellij',
+        fallback: 'tmux',
+        socketDir: '~/.dtach',
+        sessionPrefix: 'bifrost-{conn}',
+        autoAttachSingle: true,
+        alwaysAsk: false,
+        disableMouseCapture: true
+      }
+    }
+    const migrated = migratePreferences(legacy, 6)
+    expect(migrated.localMultiplexer.configFile).toBe('')
+    expect(migrated.localMultiplexer.layout).toBe('')
+    expect(migrated.localMultiplexer.extraArgs).toBe('')
+    // Prior settings must be preserved
+    expect(migrated.localMultiplexer.preferred).toBe('zellij')
+    expect(migrated.localMultiplexer.sessionPrefix).toBe('bifrost-{conn}')
+    expect(migrated.localMultiplexer.disableMouseCapture).toBe(true)
+  })
+
+  it('does not overwrite already-set custom args', () => {
+    const migrated = migratePreferences(
+      {
+        localMultiplexer: {
+          preferred: 'tmux',
+          fallback: 'none',
+          socketDir: '~/.dtach',
+          sessionPrefix: 'x',
+          autoAttachSingle: false,
+          alwaysAsk: false,
+          disableMouseCapture: true,
+          configFile: '~/.tmux.conf',
+          layout: '',
+          extraArgs: '-u'
+        }
+      },
+      6
+    )
+    expect(migrated.localMultiplexer.configFile).toBe('~/.tmux.conf')
+    expect(migrated.localMultiplexer.extraArgs).toBe('-u')
   })
 })
 

@@ -310,7 +310,10 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
             {
               createIfMissing: false,
               binaryPath: probe.primary.path,
-              disableMouseCapture: cfg.disableMouseCapture
+              disableMouseCapture: cfg.disableMouseCapture,
+              configFile: cfg.configFile,
+              layout: cfg.layout,
+              extraArgs: cfg.extraArgs
             }
           )
         }
@@ -343,7 +346,10 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
           createIfMissing: false,
           forceRunCommands: pick.forceRunCommands,
           binaryPath,
-          disableMouseCapture: cfg.disableMouseCapture
+          disableMouseCapture: cfg.disableMouseCapture,
+          configFile: cfg.configFile,
+          layout: cfg.layout,
+          extraArgs: cfg.extraArgs
         })
       }
 
@@ -359,7 +365,10 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
       return window.bifrost.multiplexer.buildAttachCmd(pick.kind, target, {
         createIfMissing: true,
         binaryPath,
-        disableMouseCapture: cfg.disableMouseCapture
+        disableMouseCapture: cfg.disableMouseCapture,
+        configFile: cfg.configFile,
+        layout: cfg.layout,
+        extraArgs: cfg.extraArgs
       })
     },
     []

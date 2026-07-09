@@ -1,5 +1,7 @@
 import {
   shellQuote,
+  dquote,
+  extraArgsFragment,
   PROBE_PATH_PREFIX,
   type AttachOptions,
   type Multiplexer,
@@ -42,10 +44,14 @@ export const rmux: Multiplexer = {
     const mouseOff = opts.disableMouseCapture
       ? `${bin} set-option -t ${shellQuote(target)} -q mouse off >/dev/null 2>&1; `
       : ''
+    // tmux-compatible CLI: -f <config> and extra args go before the subcommand;
+    // no layout flag, so `layout` is ignored. Applied on create & attach.
+    const cfg = opts.configFile?.trim() ? ` -f ${dquote(opts.configFile.trim())}` : ''
+    const globalArgs = `${cfg}${extraArgsFragment(opts.extraArgs)}`
     if (create) {
-      return `${mouseOff}${bin} new-session -A -s ${shellQuote(target)}${shell}`
+      return `${mouseOff}${bin}${globalArgs} new-session -A -s ${shellQuote(target)}${shell}`
     }
-    return `${mouseOff}${bin} attach-session -t ${shellQuote(target)}`
+    return `${mouseOff}${bin}${globalArgs} attach-session -t ${shellQuote(target)}`
   },
 
   async killSession(exec: RemoteExecutor, target: string): Promise<void> {

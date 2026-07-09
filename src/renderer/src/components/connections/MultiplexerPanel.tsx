@@ -17,6 +17,12 @@ export interface MultiplexerConfig {
    *  capture so xterm.js can do native click-and-drag selection. Defaults
    *  to true because zellij's mouse mode otherwise breaks selection. */
   disableMouseCapture: boolean
+  /** Custom config file. tmux/rmux → `-f`, zellij → `--config`. dtach ignores it. */
+  configFile: string
+  /** zellij layout name or `.kdl` path, applied only when creating a session. */
+  layout: string
+  /** Free-form extra flags inserted verbatim in the global-flag position. */
+  extraArgs: string
 }
 
 export const defaultMultiplexer: MultiplexerConfig = {
@@ -26,7 +32,10 @@ export const defaultMultiplexer: MultiplexerConfig = {
   sessionPrefix: 'bifrost-{conn}',
   autoAttachSingle: true,
   alwaysAsk: false,
-  disableMouseCapture: true
+  disableMouseCapture: true,
+  configFile: '',
+  layout: '',
+  extraArgs: ''
 }
 
 interface MultiplexerPanelProps {
@@ -68,6 +77,13 @@ export function MultiplexerPanel({
 
   const enabled = value.preferred !== 'none'
   const showDtachOptions = value.preferred === 'dtach' || value.preferred === 'auto'
+  // Config file: tmux/rmux (`-f`) and zellij (`--config`). dtach has no config.
+  const showConfigFile =
+    value.preferred === 'tmux' ||
+    value.preferred === 'rmux' ||
+    value.preferred === 'zellij'
+  // Layout is a zellij-only concept.
+  const showLayout = value.preferred === 'zellij'
   // Fallback applies whenever we have a non-tmux primary that could be missing.
   const showFallback =
     value.preferred === 'dtach' ||
@@ -147,6 +163,62 @@ export function MultiplexerPanel({
               </p>
             </div>
           )}
+
+          {showConfigFile && (
+            <div>
+              <label className="text-xs text-[var(--on-surface-variant)] mb-1 block">
+                Config file
+              </label>
+              <Input
+                value={value.configFile}
+                onChange={(e) => update('configFile', e.target.value)}
+                placeholder={value.preferred === 'zellij' ? '~/.config/zellij/config.kdl' : '~/.tmux.conf'}
+                className="h-8 text-xs"
+              />
+              <p className="text-[10px] text-[var(--on-surface-variant)] mt-1">
+                {value.preferred === 'zellij' ? (
+                  <>Passed as <code>--config</code>. </>
+                ) : (
+                  <>Passed as <code>-f</code>. </>
+                )}
+                Resolved on the remote host; <code>$HOME</code>/<code>~</code> expand there.
+              </p>
+            </div>
+          )}
+
+          {showLayout && (
+            <div>
+              <label className="text-xs text-[var(--on-surface-variant)] mb-1 block">
+                Layout
+              </label>
+              <Input
+                value={value.layout}
+                onChange={(e) => update('layout', e.target.value)}
+                placeholder="compact  (or ~/layouts/dev.kdl)"
+                className="h-8 text-xs"
+              />
+              <p className="text-[10px] text-[var(--on-surface-variant)] mt-1">
+                A registered layout name or a <code>.kdl</code> path. Applied only when
+                creating a new session (<code>--layout</code>).
+              </p>
+            </div>
+          )}
+
+          <div>
+            <label className="text-xs text-[var(--on-surface-variant)] mb-1 block">
+              Extra arguments
+            </label>
+            <Input
+              value={value.extraArgs}
+              onChange={(e) => update('extraArgs', e.target.value)}
+              placeholder={value.preferred === 'dtach' ? '-r winch' : '-u'}
+              className="h-8 text-xs"
+            />
+            <p className="text-[10px] text-[var(--on-surface-variant)] mt-1">
+              Inserted verbatim before the multiplexer subcommand. Power-user escape
+              hatch — no quoting is applied.
+            </p>
+          </div>
 
           <div>
             <label className="text-xs text-[var(--on-surface-variant)] mb-1 block">
