@@ -1,7 +1,25 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 import { mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
+
+// The hop fixtures use agent auth and the stale-socket guard checks that
+// SSH_AUTH_SOCK points at an existing file. Give the whole suite its own
+// fake socket so tests don't depend on the host's agent (absent in CI).
+let agentEnvDir: string
+let prevAgentSock: string | undefined
+beforeAll(() => {
+  agentEnvDir = mkdtempSync(join(tmpdir(), 'bifrost-agent-env-'))
+  const sock = join(agentEnvDir, 'agent.sock')
+  writeFileSync(sock, '')
+  prevAgentSock = process.env.SSH_AUTH_SOCK
+  process.env.SSH_AUTH_SOCK = sock
+})
+afterAll(() => {
+  if (prevAgentSock === undefined) delete process.env.SSH_AUTH_SOCK
+  else process.env.SSH_AUTH_SOCK = prevAgentSock
+  rmSync(agentEnvDir, { recursive: true, force: true })
+})
 import {
   buildHopConnectConfig,
   establishJumpChain,
