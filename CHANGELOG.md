@@ -5,6 +5,22 @@ All notable changes to Bifrost will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-07-10
+
+First public release — the repository is now available on GitHub under
+GPL-3.0-or-later.
+
+### Added
+- **Copy as CSV / Markdown**: right-click a table (or any selection) in the terminal, the Markdown viewer, or an AI Assistant response to copy it as clean CSV (RFC 4180) or GitHub-flavored Markdown. The Markdown viewer header "Copy" button is now a dropdown with the three formats. Terminal parsing understands ASCII-pipe and box-drawing tables (psql included) and refuses to mangle piped shell commands.
+- **Stored password visibility**: Edit Connection now prefills the saved password/passphrase from the vault (masked, with reveal toggle) and clearing the field removes the stored credential safely.
+- **CI**: GitHub Actions and GitLab CI pipelines (lint, typecheck, unit tests).
+- **Docs**: README, LICENSE (GPL-3.0-or-later), AGENTS.md.
+
+### Fixed
+- Ten review findings in the copy-formats feature (false-table detection, partial table selections, code-block fidelity, toast races, stale menu labels).
+- Session logger no longer crashes the main process if the log directory disappears mid-write.
+- Full unit suite green (316 tests) and zero ESLint errors in `src/`.
+
 ## [0.2.0] - 2026-03-24
 
 ### Added
