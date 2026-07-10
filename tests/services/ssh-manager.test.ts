@@ -33,10 +33,12 @@ vi.mock('electron', () => ({
   }
 }))
 
-// Mock fs
-vi.mock('fs', () => ({
-  readFileSync: vi.fn(() => Buffer.from('fake-key'))
-}))
+// Mock fs (default export included: CJS namespace imports resolve through it)
+vi.mock('fs', () => {
+  const readFileSync = vi.fn(() => Buffer.from('fake-key'))
+  const existsSync = vi.fn(() => true)
+  return { readFileSync, existsSync, default: { readFileSync, existsSync } }
+})
 
 import { SshManager } from '../../src/main/services/ssh-manager'
 

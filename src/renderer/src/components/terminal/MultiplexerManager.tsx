@@ -181,6 +181,12 @@ export function MultiplexerManager({
     }
   }
 
+  // Hooks must run unconditionally — keep this above the early return.
+  const suggestedName = useMemo(() => {
+    const names = activeProbe?.sessions.map((s) => s.name) ?? []
+    return uniqueSessionName(newName.trim() || 'bifrost', names)
+  }, [activeProbe, newName])
+
   if (!transport) {
     return (
       <div className="text-xs text-[var(--on-surface-variant)] text-center py-4">
@@ -191,11 +197,6 @@ export function MultiplexerManager({
 
   const liveSessions = activeProbe?.sessions.filter((s) => s.alive) ?? []
   const staleSessions = activeProbe?.sessions.filter((s) => !s.alive) ?? []
-
-  const suggestedName = useMemo(() => {
-    const names = activeProbe?.sessions.map((s) => s.name) ?? []
-    return uniqueSessionName(newName.trim() || 'bifrost', names)
-  }, [activeProbe, newName])
 
   return (
     <div className="flex flex-col gap-2">

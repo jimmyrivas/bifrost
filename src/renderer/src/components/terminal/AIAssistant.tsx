@@ -426,7 +426,7 @@ export function AIAssistant({
           const commands = extractCommands(accumulated)
           setMessages((prev) => [...prev, { role: 'assistant', content: accumulated, commands }])
         } else {
-          useFallback(trimmed)
+          showFallbackSuggestions(trimmed)
         }
         setStreaming('')
         setLoading(false)
@@ -434,12 +434,12 @@ export function AIAssistant({
         removeChunkListener?.()
       }
     } else {
-      useFallback(trimmed)
+      showFallbackSuggestions(trimmed)
       setLoading(false)
     }
   }, [query, loading, aiAvailable, connectionContext])
 
-  const useFallback = (prompt: string): void => {
+  const showFallbackSuggestions = (prompt: string): void => {
     const suggestions = getFallbackSuggestions(prompt)
     if (suggestions.length > 0) {
       const content = suggestions

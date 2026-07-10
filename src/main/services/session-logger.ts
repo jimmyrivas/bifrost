@@ -43,6 +43,12 @@ export class SessionLogger {
 
     const filePath = join(logDir, filename)
     const stream = createWriteStream(filePath, { flags: 'a' })
+    // The stream opens lazily; without a handler a failed open (log dir
+    // removed, disk full) becomes an uncaught exception in the main process.
+    stream.on('error', (err) => {
+      console.error(`Session log write failed (${filePath}):`, err.message)
+      this.streams.delete(sessionId)
+    })
 
     // Write header
     stream.write(`\n=== Session started: ${now.toISOString()} ===\n`)

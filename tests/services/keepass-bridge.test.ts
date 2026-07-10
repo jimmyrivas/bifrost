@@ -1,14 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { KeePassBridge } from '../../src/main/services/keepass-bridge'
 
-// Mock child_process
-vi.mock('child_process', () => ({
-  execSync: vi.fn((cmd: string) => {
-    if (cmd.includes('which keepassxc-cli')) return '/usr/bin/keepassxc-cli'
-    if (cmd.includes('show')) return 'my-secret-password\n'
-    if (cmd.includes('ls')) return 'entry1\nentry2\nentry3\n'
+// Mock child_process to match the service's API (execFileSync with an args
+// array). The default export is included because vitest resolves CJS
+// namespace imports through it.
+vi.mock('child_process', () => {
+  const execFileSync = vi.fn((_file: string, args: string[]) => {
+    if (args.includes('show')) return 'my-secret-password\n'
+    if (args.includes('ls')) return 'entry1\nentry2\nentry3\n'
     throw new Error('Command not found')
   })
+  return { execFileSync, default: { execFileSync } }
+})
+
+// isAvailable() delegates to platform.commandExists
+vi.mock('../../src/main/services/platform', () => ({
+  commandExists: vi.fn(() => true)
 }))
 
 describe('KeePassBridge', () => {

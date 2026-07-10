@@ -1,4 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
+import { mkdtempSync, rmSync, writeFileSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
 import {
   buildHopConnectConfig,
   establishJumpChain,
@@ -160,11 +163,29 @@ describe('buildHopConnectConfig', () => {
   })
 
   it('uses agent socket env when authType=agent and SSH_AUTH_SOCK is set', () => {
+    // The stale-socket guard checks existsSync, so point at a real temp file.
+    const dir = mkdtempSync(join(tmpdir(), 'bifrost-agent-'))
+    const sockPath = join(dir, 'agent.sock')
+    writeFileSync(sockPath, '')
     const prev = process.env.SSH_AUTH_SOCK
-    process.env.SSH_AUTH_SOCK = '/tmp/agent.sock'
+    process.env.SSH_AUTH_SOCK = sockPath
     try {
       const cc = buildHopConnectConfig({ ...hopA, authType: 'agent' }, undefined)
-      expect(cc.agent).toBe('/tmp/agent.sock')
+      expect(cc.agent).toBe(sockPath)
+    } finally {
+      if (prev === undefined) delete process.env.SSH_AUTH_SOCK
+      else process.env.SSH_AUTH_SOCK = prev
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects agent auth when SSH_AUTH_SOCK points to a missing socket', () => {
+    const prev = process.env.SSH_AUTH_SOCK
+    process.env.SSH_AUTH_SOCK = '/nonexistent/agent.sock'
+    try {
+      expect(() =>
+        buildHopConnectConfig({ ...hopA, authType: 'agent' }, undefined)
+      ).toThrow(/socket inexistente/)
     } finally {
       if (prev === undefined) delete process.env.SSH_AUTH_SOCK
       else process.env.SSH_AUTH_SOCK = prev

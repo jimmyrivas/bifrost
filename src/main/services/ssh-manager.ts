@@ -414,18 +414,19 @@ export class SshManager extends EventEmitter {
 
       // #17: Algorithm selection
       if (config.algorithms) {
+        type Algos = NonNullable<ConnectConfig['algorithms']>
         const algos: ConnectConfig['algorithms'] = {}
         if (config.algorithms.ciphers) {
-          algos.cipher = config.algorithms.ciphers as any
+          algos.cipher = config.algorithms.ciphers as Algos['cipher']
         }
         if (config.algorithms.kex) {
-          algos.kex = config.algorithms.kex as any
+          algos.kex = config.algorithms.kex as Algos['kex']
         }
         if (config.algorithms.hmac) {
-          algos.hmac = config.algorithms.hmac as any
+          algos.hmac = config.algorithms.hmac as Algos['hmac']
         }
         if (config.algorithms.hostkey) {
-          algos.serverHostKey = config.algorithms.hostkey as any
+          algos.serverHostKey = config.algorithms.hostkey as Algos['serverHostKey']
         }
         connectConfig.algorithms = algos
       }
