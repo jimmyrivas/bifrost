@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Bifrost is a modern connection manager for Linux (Windows compat in progress), the spiritual successor to Ásbrú Connection Manager. It targets sysadmins, DevOps, and DevSecOps managing dozens to hundreds of remote servers. Current release: **v0.2.0**. Feature coverage tracked in `docs/STATUS.md` (~107 planned features).
 
-**License**: GPL-3.0 | **Repo**: https://gitlab.com/jimmy.rivas/bifrost
+**License**: GPL-3.0-or-later | **Repo**: https://gitlab.com/jimmy.rivas/bifrost
 
 ## Tech Stack
 

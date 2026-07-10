@@ -1,0 +1,28 @@
+# Mirrors .github/workflows/ci.yml — keep the two in sync.
+image: node:22
+
+stages:
+  - test
+
+variables:
+  # Unit tests mock electron; skip the ~100MB binary download.
+  ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+  COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+
+checks:
+  stage: test
+  before_script:
+    # corepack provisions the pnpm version pinned in package.json.
+    - corepack enable
+    - pnpm config set store-dir .pnpm-store
+    - pnpm install --frozen-lockfile
+  script:
+    - pnpm exec eslint src --ext .ts,.tsx
+    - pnpm typecheck
+    - pnpm test
+  cache:
+    key:
+      files:
+        - pnpm-lock.yaml
+    paths:
+      - .pnpm-store
