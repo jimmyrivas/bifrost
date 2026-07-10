@@ -103,6 +103,16 @@ describe('markdownToCsv', () => {
     const two = '| a |\n| --- |\n| 1 |\n\n| b |\n| --- |\n| 2 |'
     expect(markdownToCsv(two)).toBe('a\r\n1\r\n\r\nb\r\n2')
   })
+
+  it('ignores pipe tables inside fenced code blocks', () => {
+    const fenced = '```\n| a | b |\n| --- | --- |\n| 1 | 2 |\n```'
+    expect(markdownToCsv(fenced)).toBeNull()
+  })
+
+  it('still extracts a real table after a fence closes', () => {
+    const md = '```\n| x |\n| --- |\n| 0 |\n```\n\n| a |\n| --- |\n| 1 |'
+    expect(markdownToCsv(md)).toBe('a\r\n1')
+  })
 })
 
 describe('domToMarkdown', () => {
@@ -159,13 +169,41 @@ describe('parseDelimitedTable', () => {
     ])
   })
 
-  it('ignores non-delimited lines like titles', () => {
+  it('rejects selections mixing prose with delimited lines', () => {
     const t = 'Estado global\n| a | b |\n| 1 | 2 |'
-    expect(parseDelimitedTable(t)).toEqual([['a', 'b'], ['1', '2']])
+    expect(parseDelimitedTable(t)).toBeNull()
   })
 
   it('returns null for text with no delimited grid', () => {
     expect(parseDelimitedTable('just some prose\nover two lines')).toBeNull()
+  })
+
+  it('rejects piped shell commands (no edge delimiter, no border)', () => {
+    const t = 'ps aux | grep ssh\ncat /var/log/syslog | tail -n 5'
+    expect(parseDelimitedTable(t)).toBeNull()
+  })
+
+  it('rejects rows with inconsistent column counts', () => {
+    const t = '| a | b |\n| 1 | 2 | 3 |'
+    expect(parseDelimitedTable(t)).toBeNull()
+  })
+
+  it('keeps data rows whose cells are single-dash placeholders', () => {
+    const t = '| a | b |\n| --- | --- |\n| - | - |\n| 1 | 2 |'
+    expect(parseDelimitedTable(t)).toEqual([
+      ['a', 'b'],
+      ['-', '-'],
+      ['1', '2']
+    ])
+  })
+
+  it('accepts psql-style tables via their border row', () => {
+    const t = ' id | name \n----+------\n  1 | alice\n  2 | bob'
+    expect(parseDelimitedTable(t)).toEqual([
+      ['id', 'name'],
+      ['1', 'alice'],
+      ['2', 'bob']
+    ])
   })
 })
 
@@ -193,5 +231,59 @@ describe('terminalToMarkdown', () => {
 
   it('returns the text unchanged when there is no table', () => {
     expect(terminalToMarkdown('  plain line  ')).toBe('plain line')
+  })
+
+  it('passes piped shell commands through instead of faking a table', () => {
+    const t = 'ps aux | grep ssh\ncat /var/log/syslog | tail -n 5'
+    expect(terminalToMarkdown(t)).toBe(t)
+    expect(terminalToCsv(t)).toBe('ps aux | grep ssh\r\ncat /var/log/syslog | tail -n 5')
+  })
+})
+
+describe('partial table selections (orphaned tr/td fragments)', () => {
+  it('domToMarkdown renders orphaned rows as pipe rows, not glued text', () => {
+    // Range.cloneContents of a two-row selection yields <tr>s with no <table>
+    // ancestor. Build the fragment with DOM nodes (innerHTML strips bare <tr>).
+    const frag = document.createDocumentFragment()
+    for (const [name, age] of [
+      ['alice', '22'],
+      ['bob', '31']
+    ]) {
+      const tr = document.createElement('tr')
+      for (const v of [name, age]) {
+        const td = document.createElement('td')
+        td.textContent = v
+        tr.appendChild(td)
+      }
+      frag.appendChild(tr)
+    }
+    expect(domToMarkdown(frag)).toBe('| alice | 22 |\n| bob | 31 |\n')
+    expect(tablesToCsv(frag)).toBe('alice,22\r\nbob,31')
+  })
+
+  it('tablesToCsv treats orphaned lone cells as one row', () => {
+    const frag = document.createDocumentFragment()
+    for (const v of ['alice', '22']) {
+      const td = document.createElement('td')
+      td.textContent = v
+      frag.appendChild(td)
+    }
+    expect(tablesToCsv(frag)).toBe('alice,22')
+  })
+})
+
+describe('code blocks in domToMarkdown', () => {
+  it('fences a detached multi-line <code> instead of inline backticks', () => {
+    const code = document.createElement('code')
+    code.textContent = 'line one\nline two'
+    const frag = document.createDocumentFragment()
+    frag.appendChild(code)
+    expect(domToMarkdown(frag)).toBe('```\nline one\nline two\n```\n')
+  })
+
+  it('keeps single-line detached <code> inline', () => {
+    expect(domToMarkdown(html('<p>run <code>ls -la</code> now</p>'))).toBe(
+      'run `ls -la` now\n'
+    )
   })
 })

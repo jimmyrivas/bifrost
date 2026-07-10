@@ -38,11 +38,27 @@ function rowsToCsv(rows: string[][]): string {
 /**
  * CSV for every `<table>` in scope (blank line between multiple tables), or
  * null when there is none so the caller can fall back to plain text.
+ *
+ * A partial table selection clones as orphaned `<tr>`/`<td>` nodes without an
+ * enclosing `<table>` (Range.cloneContents drops unselected ancestors), so
+ * when no table is found we fall back to any orphaned rows or cells in scope.
  */
 export function tablesToCsv(scope: Scope): string | null {
   const tables = Array.from(scope.querySelectorAll('table')) as HTMLTableElement[]
-  if (tables.length === 0) return null
-  return tables.map((t) => rowsToCsv(extractRows(t))).join('\r\n\r\n')
+  if (tables.length > 0) {
+    return tables.map((t) => rowsToCsv(extractRows(t))).join('\r\n\r\n')
+  }
+  const rows = Array.from(scope.querySelectorAll('tr')).map((tr) =>
+    Array.from(tr.querySelectorAll('th,td')).map((cell) =>
+      collapseWs(cell.textContent ?? '').trim()
+    )
+  )
+  if (rows.length > 0) return rowsToCsv(rows)
+  const cells = Array.from(scope.querySelectorAll('th,td')).map((cell) =>
+    collapseWs(cell.textContent ?? '').trim()
+  )
+  if (cells.length > 0) return rowsToCsv([cells])
+  return null
 }
 
 /** Treat aligned/tab-separated text as a grid: split lines on tabs or 2+ spaces. */
@@ -127,9 +143,16 @@ function serializeNode(node: Node): string {
     case 'del':
     case 's':
       return `~~${inline()}~~`
-    case 'code':
-      // Inline code only; fenced code is handled by <pre>.
-      return el.closest('pre') ? serializeChildren(el) : `\`${el.textContent ?? ''}\``
+    case 'code': {
+      // Inside a <pre> the parent emits the fence. A detached clone from a
+      // selection Range loses the <pre> ancestor, so a multi-line <code> must
+      // still become a fenced block — single backticks can't hold newlines.
+      if (el.closest('pre')) return serializeChildren(el)
+      const codeText = el.textContent ?? ''
+      return codeText.includes('\n')
+        ? `\n\`\`\`\n${codeText.replace(/\n+$/, '')}\n\`\`\`\n\n`
+        : `\`${codeText}\``
+    }
     case 'pre':
       return `\n\`\`\`\n${(el.textContent ?? '').replace(/\n+$/, '')}\n\`\`\`\n\n`
     case 'a': {
@@ -153,6 +176,23 @@ function serializeNode(node: Node): string {
         .join('\n')}\n\n`
     case 'table':
       return tableToMarkdown(el as HTMLTableElement)
+    // Orphaned table parts: a partial table selection clones as <tr>/<td>
+    // without the <table> ancestor, so they must not fall through to the
+    // default branch (which would glue all cell text together).
+    case 'thead':
+    case 'tbody':
+    case 'tfoot':
+      return serializeChildren(el)
+    case 'tr': {
+      const cells = Array.from(el.children)
+        .filter((c) => /^t[dh]$/i.test(c.tagName))
+        .map((c) => cellMd(c.textContent ?? ''))
+      return cells.length > 0 ? `| ${cells.join(' | ')} |\n` : ''
+    }
+    case 'td':
+    case 'th':
+      // Lone cell(s) from a within-row selection: keep them separated.
+      return `${cellMd(el.textContent ?? '')} `
     default:
       return serializeChildren(el)
   }
@@ -195,7 +235,18 @@ export function markdownToCsv(md: string): string | null {
   const lines = md.split('\n')
   const tables: string[][][] = []
   let i = 0
+  let inFence = false
   while (i < lines.length) {
+    // Pipe rows inside fenced code blocks are examples, not tables.
+    if (/^\s*(```|~~~)/.test(lines[i])) {
+      inFence = !inFence
+      i++
+      continue
+    }
+    if (inFence) {
+      i++
+      continue
+    }
     if (isTableRow(lines[i]) && isSeparatorRow(lines[i + 1])) {
       const rows: string[][] = [splitTableRow(lines[i])]
       let j = i + 2
@@ -222,9 +273,17 @@ export function markdownToCsv(md: string): string | null {
 /** Any cell delimiter a terminal table might use. */
 const TERM_DELIM = /[|│┃║]/
 
-/** A rule/border/separator row: only frame characters, dashes, colons, pipes. */
+/**
+ * A rule/border/separator row: frame characters only, and carrying an actual
+ * border signal — box-drawing chars, `+`/`=`/`_` frames, 2+-dash runs, or GFM
+ * alignment colons. A data row of single-dash placeholders (`| - | - |`, the
+ * common CLI convention for N/A) is NOT a border and must be kept.
+ */
 function isBorderLine(line: string): boolean {
-  return line.trim() !== '' && /^[\s─-╿|+=:_-]*$/.test(line)
+  const t = line.trim()
+  if (t === '') return false
+  if (!/^[\s─-╿|+=:_-]*$/.test(t)) return false
+  return /[─-╿+=_]/.test(t) || /--/.test(t) || /:-|-:/.test(t)
 }
 
 /** Split one row on delimiters, trimming cells and dropping edge-border blanks. */
@@ -237,19 +296,36 @@ function splitDelimited(line: string): string[] {
 
 /**
  * Reconstruct a delimited terminal table as rows of cells, or null when the
- * text isn't a delimited grid (fewer than two delimited rows). Border and GFM
- * separator rows are dropped; non-delimited lines (titles, prose) are ignored.
+ * text isn't really a table. Border and GFM separator rows are dropped.
+ *
+ * Guards against false positives (piped shell commands also contain `|`):
+ * every content line must be delimited, rows must share one column count of
+ * two or more, and the grid must either be edge-delimited (every row starts
+ * with a delimiter, as GFM and box-drawing tables are) or carry an explicit
+ * border row (as psql-style output does). `ps aux | grep ssh` fails all of
+ * these and passes through unchanged.
  */
 export function parseDelimitedTable(text: string): string[][] | null {
   const rows: string[][] = []
+  let sawBorder = false
+  let allEdge = true
   for (const raw of text.split(/\r?\n/)) {
-    const line = raw.replace(/[ \t]+$/, '')
-    if (line.trim() === '') continue
-    if (isBorderLine(line)) continue
-    if (!TERM_DELIM.test(line)) continue
+    const line = raw.trim()
+    if (line === '') continue
+    if (isBorderLine(line)) {
+      sawBorder = true
+      continue
+    }
+    // Prose or commands mixed into the selection: not a table.
+    if (!TERM_DELIM.test(line)) return null
+    if (!TERM_DELIM.test(line[0])) allEdge = false
     rows.push(splitDelimited(line))
   }
-  return rows.length >= 2 ? rows : null
+  if (rows.length < 2) return null
+  if (!allEdge && !sawBorder) return null
+  const cols = rows[0].length
+  if (cols < 2 || rows.some((r) => r.length !== cols)) return null
+  return rows
 }
 
 /** Render rows as a GFM table, padding every row to the widest column count. */
@@ -258,9 +334,10 @@ function rowsToMarkdown(rows: string[][]): string {
   const pad = (r: string[]): string[] =>
     Array.from({ length: cols }, (_, i) => cellMd(r[i] ?? ''))
   const [header, ...body] = rows
+  const separator = Array.from({ length: cols }, () => '---')
   return [
     `| ${pad(header).join(' | ')} |`,
-    `| ${header.map(() => '---').join(' | ')}${' | ---'.repeat(cols - header.length)} |`,
+    `| ${separator.join(' | ')} |`,
     ...body.map((r) => `| ${pad(r).join(' | ')} |`)
   ].join('\n')
 }

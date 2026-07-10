@@ -60,16 +60,24 @@ export function MarkdownViewer(): JSX.Element {
   const close = useMarkdownViewerStore((s) => s.close)
 
   const [flash, setFlash] = useState<string | null>(null)
+  // Menu label state: must be React state (not just the ref) so the label
+  // re-renders when the menu opens; the ref alone left it one render stale.
+  const [menuHasSelection, setMenuHasSelection] = useState(false)
 
   // Rendered container + the selection captured when the context menu opens.
   const bodyRef = useRef<HTMLDivElement>(null)
-  const selectionRef = useRef<{ fragment: DocumentFragment; text: string } | null>(null)
+  const selectionRef = useRef<{
+    fragment: DocumentFragment
+    text: string
+    inPre: boolean
+  } | null>(null)
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const write = (text: string, label: string): void => {
-    if (!text.trim()) return
     navigator.clipboard.writeText(text).then(() => {
       setFlash(label)
-      setTimeout(() => setFlash(null), 1400)
+      if (flashTimer.current) clearTimeout(flashTimer.current)
+      flashTimer.current = setTimeout(() => setFlash(null), 1400)
     }).catch(() => { /* clipboard denied */ })
   }
 
@@ -78,13 +86,23 @@ export function MarkdownViewer(): JSX.Element {
     selectionRef.current = null
     const body = bodyRef.current
     const sel = window.getSelection()
-    if (!body || !sel || sel.isCollapsed || sel.rangeCount === 0) return
-    const range = sel.getRangeAt(0)
-    if (!body.contains(range.commonAncestorContainer)) return
-    selectionRef.current = { fragment: range.cloneContents(), text: sel.toString() }
+    if (body && sel && !sel.isCollapsed && sel.rangeCount > 0) {
+      const range = sel.getRangeAt(0)
+      if (body.contains(range.commonAncestorContainer)) {
+        const anchor = range.commonAncestorContainer
+        const anchorEl =
+          anchor.nodeType === Node.ELEMENT_NODE
+            ? (anchor as HTMLElement)
+            : anchor.parentElement
+        selectionRef.current = {
+          fragment: range.cloneContents(),
+          text: sel.toString(),
+          inPre: Boolean(anchorEl?.closest('pre'))
+        }
+      }
+    }
+    setMenuHasSelection(selectionRef.current !== null)
   }
-
-  const hasSelection = (): boolean => selectionRef.current !== null
 
   const copyPlain = (): void => {
     const sel = selectionRef.current
@@ -94,7 +112,17 @@ export function MarkdownViewer(): JSX.Element {
   const copyMarkdown = (): void => {
     const sel = selectionRef.current
     // No selection → the source is already Markdown, so copy it verbatim.
-    write(sel ? domToMarkdown(sel.fragment) : content, 'Copied as Markdown')
+    if (!sel) {
+      write(content, 'Copied as Markdown')
+      return
+    }
+    // A selection inside a code block clones as bare text nodes (no <pre>
+    // ancestor survives cloneContents), so fence the raw text directly —
+    // domToMarkdown would collapse its newlines.
+    const md = sel.inPre
+      ? `\`\`\`\n${sel.text.replace(/\n+$/, '')}\n\`\`\``
+      : domToMarkdown(sel.fragment)
+    write(md, 'Copied as Markdown')
   }
 
   const copyCsv = (): void => {
@@ -209,7 +237,7 @@ export function MarkdownViewer(): JSX.Element {
                 </ContextMenuTrigger>
                 <ContextMenuContent className="min-w-[13rem]">
                   <ContextMenuLabel>
-                    {hasSelection() ? 'Copy selection' : 'Copy document'}
+                    {menuHasSelection ? 'Copy selection' : 'Copy document'}
                   </ContextMenuLabel>
                   <ContextMenuSeparator />
                   <ContextMenuItem onSelect={copyPlain}>

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import {
   ClipboardCopy,
   ClipboardPaste,
@@ -83,9 +83,12 @@ export function TerminalContextMenu({
   }, [paneId])
 
   const [copyFlash, setCopyFlash] = useState<string | null>(null)
+  const copyFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const flashCopy = useCallback((label: string) => {
     setCopyFlash(label)
-    setTimeout(() => setCopyFlash(null), 1500)
+    // Cancel the previous timer so a rapid second copy keeps its toast.
+    if (copyFlashTimer.current) clearTimeout(copyFlashTimer.current)
+    copyFlashTimer.current = setTimeout(() => setCopyFlash(null), 1500)
   }, [])
 
   const handleCopy = useCallback(async () => {

@@ -7,7 +7,14 @@ two additional actions on the current terminal selection: Copy as Markdown and
 Copy as CSV. Because a terminal yields only plain text, these actions SHALL
 reconstruct a table from a selection whose rows are delimited by ASCII pipes
 (`|`) or box-drawing verticals (`│ ┃ ║`), discarding border and GFM separator
-rows.
+rows while keeping data rows whose cells are single-dash placeholders.
+
+Because shell command lines also contain pipes, a selection SHALL only be
+treated as a table when every content line is delimited, all rows share one
+column count of two or more, and the grid is either edge-delimited (every row
+starts with a delimiter) or accompanied by an explicit border row. Selections
+that fail these checks (e.g. piped shell commands) SHALL pass through the
+fallback paths unchanged.
 
 Copy as CSV SHALL emit the reconstructed rows with fields quoted per RFC 4180,
 and SHALL fall back to treating whitespace- or tab-aligned text as rows and
@@ -38,3 +45,9 @@ copied, because the context menu closes when an action is selected.
 
 - **WHEN** the user chooses Copy as Markdown or Copy as CSV with no active terminal selection
 - **THEN** a transient message indicates that text must be selected first
+
+#### Scenario: Piped shell commands are not mistaken for tables
+
+- **WHEN** the selection consists of shell command lines containing pipes (e.g. `ps aux | grep ssh`)
+- **THEN** Copy as Markdown returns the selected text unchanged
+- **AND** Copy as CSV falls back to the aligned-text treatment instead of splitting on the pipes

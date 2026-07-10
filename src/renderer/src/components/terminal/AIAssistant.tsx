@@ -6,7 +6,7 @@ import {
 import { cn } from '@renderer/lib/utils'
 import { getFallbackSuggestions } from '@renderer/lib/command-suggestions'
 import { rawSessionId } from '@renderer/lib/session-summary'
-import { markdownToCsv, textToCsv } from '@renderer/lib/markdown-clip'
+import { markdownToCsv, terminalToCsv } from '@renderer/lib/markdown-clip'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -164,9 +164,11 @@ function renderInline(
 
 /**
  * Wraps an assistant message with a right-click menu to copy it as plain text,
- * Markdown, or CSV. The message `content` is already Markdown source, so
- * copying acts on it directly; a live text selection inside the bubble takes
- * precedence when present.
+ * Markdown, or CSV. The message `content` is already Markdown source. Plain
+ * Copy and Copy as CSV honor a live selection; Copy as Markdown always copies
+ * the message source, because the rendered selection has the Markdown syntax
+ * (bold markers, backticks, headings) already stripped and would be
+ * indistinguishable from plain text.
  */
 function CopyableMessage({
   content,
@@ -192,10 +194,14 @@ function CopyableMessage({
   }
 
   const copyPlain = (): void => write(selectionRef.current ?? ref.current?.innerText ?? content)
-  const copyMarkdown = (): void => write(selectionRef.current ?? content)
+  // Always the source: a rendered selection has the Markdown markup stripped.
+  const copyMarkdown = (): void => write(content)
   const copyCsv = (): void => {
     const src = selectionRef.current ?? content
-    write(markdownToCsv(src) ?? textToCsv(selectionRef.current ?? ref.current?.innerText ?? ''))
+    // markdownToCsv needs a header + separator pair; a selection of bare table
+    // rows (`| a | b |` lines) is handled by terminalToCsv, which also covers
+    // the whitespace-aligned fallback.
+    write(markdownToCsv(src) ?? terminalToCsv(selectionRef.current ?? ref.current?.innerText ?? ''))
   }
 
   return (
@@ -214,7 +220,7 @@ function CopyableMessage({
         </ContextMenuItem>
         <ContextMenuItem onSelect={copyMarkdown}>
           <ClipboardCopy className="mr-2 h-3.5 w-3.5" />
-          Copy as Markdown
+          Copy message as Markdown
         </ContextMenuItem>
         <ContextMenuItem onSelect={copyCsv}>
           <Sheet className="mr-2 h-3.5 w-3.5" />

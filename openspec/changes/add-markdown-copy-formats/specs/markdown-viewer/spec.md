@@ -36,6 +36,16 @@ because the context menu closes when an action is selected.
 - **WHEN** the user selects part of the rendered content and chooses Copy as Markdown
 - **THEN** the clipboard receives the selection converted to GitHub-flavored Markdown
 
+#### Scenario: Copy a partial table selection
+
+- **WHEN** the user selects only some rows of a rendered table and chooses Copy as Markdown or Copy as CSV
+- **THEN** the selected rows are emitted as pipe-delimited Markdown rows or CSV rows with cells kept separate
+
+#### Scenario: Copy a selection inside a code block as Markdown
+
+- **WHEN** the user selects lines inside a rendered code block and chooses Copy as Markdown
+- **THEN** the clipboard receives the selected lines inside a code fence with line breaks preserved
+
 #### Scenario: Copy the whole document as Markdown returns the source
 
 - **WHEN** the user chooses Copy as Markdown with no active selection
