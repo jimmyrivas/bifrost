@@ -23,3 +23,7 @@ Thumbs.db
 
 # Reference clone of Ásbrú Connection Manager
 asbru-cm/
+
+# Personal agent config — never publish
+CLAUDE.local.md
+.claude/settings.local.json
