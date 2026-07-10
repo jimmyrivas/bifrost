@@ -30,4 +30,4 @@
 - [x] 4.2 Add `domToMarkdown` tests: table round-trip to GFM, headings/emphasis/links, ordered and unordered lists, pipe escaping in cells.
 - [x] 4.3 Add `markdownToCsv` tests: extract a table from source, null for pipe-only prose, null when no table, escaped pipes, multiple tables.
 - [x] 4.4 Run `pnpm typecheck`, ESLint on the changed files, and `pnpm vitest run tests/lib/markdown-clip.test.ts`; fix any failures.
-- [ ] 4.5 Manual GUI verification: viewer table → Copy as CSV pastes clean; viewer header dropdown → Copy as CSV/Markdown; viewer selection → Copy as Markdown; AI response → Copy as CSV/Markdown; detached AI window offers the same menu; **terminal selection of a rendered table → Copy as CSV/Markdown** from the terminal right-click menu.
+- [x] 4.5 Manual GUI verification: viewer table → Copy as CSV pastes clean; viewer header dropdown → Copy as CSV/Markdown; viewer selection → Copy as Markdown; AI response → Copy as CSV/Markdown; detached AI window offers the same menu; **terminal selection of a rendered table → Copy as CSV/Markdown** from the terminal right-click menu.

@@ -12,4 +12,4 @@
 
 ## 3. Verification
 
-- [ ] 3.1 Manual GUI verification: edit a connection with a saved password → masked dots visible, eye reveals; clear the field and save → password removed; re-add and save → connect works.
+- [x] 3.1 Manual GUI verification: edit a connection with a saved password → masked dots visible, eye reveals; clear the field and save → password removed; re-add and save → connect works.
