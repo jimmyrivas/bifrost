@@ -19,108 +19,120 @@
 </p>
 
 Bifrost es un gestor de conexiones de escritorio para sysadmins, DevOps y equipos
-DevSecOps que administran decenas o cientos de servidores remotos. Combina las
-herramientas SSH profundas de Ásbrú/PAC con una experiencia de terminal moderna —
-y su comportamiento está especificado capacidad por capacidad en
-[`openspec/specs/`](openspec/specs/), la fuente de verdad de la lista de features
-de abajo.
+DevSecOps que administran decenas o cientos de servidores remotos — SSH primero,
+con una experiencia de terminal moderna.
 
-> **Estado:** v0.3.0 (alpha). Linux primero; el soporte Windows/macOS está en la
-> [hoja de ruta](#hoja-de-ruta--todo).
+> **Estado: alpha (v0.3.0), solo Linux.** Este README es honesto por diseño: la
+> sección **Features** solo lista lo que funciona de punta a punta en la UI hoy,
+> verificado contra el código. Lo que está construido en el backend pero aún no
+> es alcanzable desde la UI vive en [su propia sección](#construido-en-el-backend-ui-pendiente),
+> y los huecos conocidos están en [limitaciones](#limitaciones-conocidas-alpha).
+> Si encuentras aquí una afirmación que no sea cierta, es un bug — abre un issue.
 
 ## Features
 
-Todo lo listado aquí está implementado y cubierto por una spec de capacidad.
-
 ### Conexiones y organización
-- CRUD de conexiones con grupos jerárquicos, favoritos, historial, búsqueda difusa, etiquetas y validación
-- Plantillas de conexión reutilizables ("Guardar como plantilla", "Guardar sesión como perfil")
-- Importar/exportar — Ásbrú Connection Manager, parser de `~/.ssh/config`, inventarios Ansible, estado de Terraform
-- Wake-on-LAN
-- Estadísticas por conexión (número de conexiones, última conexión) y puntos de salud en vivo (ping)
+- CRUD de conexiones con grupos jerárquicos, favoritos, recientes, búsqueda en vivo (también por etiquetas) y badges de tags
+- Plantillas: guarda cualquier conexión como plantilla y aplícala al crear
+- Notas por conexión (etiquetadas: nota/evidencia/comando/error), con panel de notas buscable
+- Estadísticas por conexión (conexiones totales, última conexión, tiempo de sesión — derivadas del log de auditoría) y puntos de salud en vivo (ping periódico)
+- Wake-on-LAN desde el menú contextual de la conexión
+- Workspaces: filtros de conexiones con nombre para acotar la barra lateral a lo que estás trabajando
 
 ### Terminal
-- xterm.js con render WebGL; terminales de doble modo: PTY local y SSH
-- Paneles divididos (horizontal/vertical), maximizar, atajos de redimensión, explotar paneles a pestañas, combinar pestañas
-- Separa cualquier pestaña a su propia ventana y reincorpórala — la sesión sobrevive el movimiento
-- Broadcast de entrada a paneles o a todas las pestañas, con aviso visual mientras está activo
-- Seguridad al pegar: aviso de pegado multilínea, detección de comandos peligrosos, Ctrl-C inteligente
-- Zoom (limitado a la pestaña activa), ligaduras tipográficas, copiar al seleccionar, enlaces clicables, títulos dinámicos (OSC 0/2)
-- Más de 50 esquemas de color, colores y tintes de fondo por conexión (producción = rojo, staging = verde…)
-- Terminal desplegable estilo Quake y pantalla completa con F11
-- **Copiar como CSV / Markdown**: clic derecho sobre cualquier tabla o selección — tablas de pipes ASCII, GFM y bordes de caja (psql incluido) se reconstruyen como CSV limpio (RFC 4180) o Markdown GFM
-- Visor Markdown interno: las rutas `.md` en la salida SSH son clicables (rutas relativas resueltas con seguimiento de cwd) y se renderizan dentro de la app
+- xterm.js con render WebGL; shells locales (con selector: bash/zsh/fish/pwsh) y SSH en el mismo sistema de pestañas
+- Paneles divididos (menú contextual; horizontal/vertical), maximizar panel, explotar paneles a pestañas, combinar pestañas
+- Broadcast de escritura a todos los paneles o todas las pestañas (con aviso visible), más una barra de broadcast multilínea con autoguardado del borrador
+- Seguridad al pegar: confirmación de pegado multilínea con escaneo de comandos peligrosos; Ctrl-C copia si hay selección, interrumpe si no
+- Zoom por pestaña, ligaduras, copiar al seleccionar, portapapeles OSC 52 (copiar desde tmux/vim funciona), enlaces web clicables
+- Las rutas `.md` en la salida SSH son clicables y abren un visor Markdown interno — las rutas relativas se resuelven contra el directorio de trabajo rastreado
+- **Copiar como CSV / Markdown**: clic derecho en cualquier selección — tablas de pipes ASCII, GFM y bordes de caja (`psql`, MySQL, etc.) se reconstruyen como CSV RFC 4180 o Markdown limpio; funciona en el terminal, el visor Markdown y las respuestas de la IA
+- Pega una imagen del portapapeles directo al servidor (Ctrl+Shift+I): se sube por SFTP (jump chains incluidas), la ruta se escribe en el terminal y se limpia al salir
+- ~50 esquemas de color integrados, esquema y tinte de fondo por conexión (producción = rojo, staging = verde), títulos dinámicos (OSC 0/2) con bloqueo de título
+- Separa una pestaña a su propia ventana (la sesión viva se mueve con ella)
+- Captura del terminal a PNG, pantalla completa F11, notificación de escritorio al terminar procesos largos
+- Badges de detección de errores en comandos fallidos, "Explain Command" con IA sobre cualquier selección, resumen IA de sesión inactiva guardable como nota
 
 ### Sesiones que sobreviven
-- Persistencia de sesiones locales vía multiplexores: dtach, tmux, zellij, rmux — con config/layout/argumentos extra personalizables por multiplexor
-- Restauración de sesión: reabre la app y recibe un aviso para restaurar tus pestañas anteriores, reconectadas
-- Reconexión automática con backoff exponencial; reutilización/multiplexación de conexiones SSH
+- Persistencia de sesiones locales con integración real de multiplexores: **dtach, tmux, zellij, rmux** — sondeo, selector de attach y argumentos personalizados por conexión (config, layout de zellij, flags extra)
+- Restauración de sesión: al relanzar, Bifrost ofrece reabrir tus pestañas anteriores y reconectarlas
+- Reconexión automática SSH con backoff exponencial (3s → 60s)
 
 ### SSH y redes
-- Autenticación: contraseña, archivo de clave, certificado, agente SSH, llaves hardware FIDO2, MFA/TOTP con autoinyección
-- Verificación de host keys (TOFU, huellas SHA-256) con panel de gestión de known hosts
-- Selección de algoritmos (cifrados/KEX/HMAC/host keys), reenvío X11, proxy HTTP, reenvío de agente
-- **Jump hosts**: cadenas ProxyJump multi-salto para SSH, Mosh y túneles
-- **Túneles**: reenvío de puertos local, remoto y dinámico (SOCKS) con autoarranque y ciclo de vida en la bandeja
-- Protocolos alternativos: Mosh, RDP (opciones de portapapeles/discos/impresora/audio/resolución) y comandos personalizados arbitrarios
+- Autenticación: contraseña, archivo de clave (con passphrase), agente SSH; los prompts de MFA keyboard-interactive se te reenvían
+- Contraseñas guardadas cifradas con el keychain del SO (`safeStorage`); el formulario las muestra enmascaradas con botón de revelar, y vaciar el campo las elimina
+- TOTP/2FA: guarda un secreto Base32 por conexión y Bifrost teclea el código automáticamente cuando aparece un prompt de verificación en la sesión
+- Verificación de host keys (TOFU, huellas SHA-256) con panel de known hosts en Ajustes
+- **Cadenas de jump hosts** (ProxyJump multi-salto) con editor visual — usadas por SSH, Mosh y túneles; las contraseñas inline de los saltos se cifran en reposo
+- **Túneles**: reenvío de puertos local y remoto con UI completa de gestión, credenciales por túnel y autoarranque al iniciar
+- **Mosh** como método de conexión de primera clase (via PTY, con jump chains)
 
-### Clústeres y automatización
-- Clústeres: agrupa conexiones, abre todos los miembros a la vez, broadcast al clúster; auto-clústeres por regex
-- Motor Expect (activable por conexión, depurador, reglas de salto) para automatizar prompts
-- Motor de scripts JavaScript aislado (sandbox) con editor, modos de ejecución y contexto de terminal
-- Macros, paletas de comandos remotos por conexión, hooks pre/post-conexión con prompts `ASK`
-- Expansión de variables en todas partes: `<IP>`, `<USER>`, `<ENV:…>`, `<GV:…>`, `<ASK:…>`, `<CMD:…>` con resolución de ámbito global/conexión
-- Runbooks (parsea y ejecuta comandos con estado por paso), workflows parametrizados (`{{arg}}`), navegador de snippets, configuraciones de lanzamiento
+### SFTP y archivos
+- Panel SFTP por pestaña SSH: navegar, subir (multi-archivo), descargar, borrar, mkdir
+- Subida de imágenes del portapapeles (ver Terminal arriba)
 
-### Secretos y seguridad
-- Vault de credenciales cifrado (keychain del SO vía `safeStorage`), recifrado del vault, cifrado de configuración AES-256-GCM, almacenamiento cifrado de archivos de clave
-- Contraseñas guardadas visibles (enmascaradas, con botón de revelar) y eliminables desde el editor de conexión
-- Gestores de contraseñas externos: 1Password, Bitwarden, HashiCorp Vault, AWS Secrets Manager, Azure Key Vault, KeePassXC
-- Soporte de autoridad certificadora SSH y generación/detección de llaves FIDO2
-- Redacción de secretos en la salida, log de auditoría (JSON Lines de solo anexado), grabación de sesiones (asciicast v2), logs de sesión, capturas del terminal
+### Automatización
+- **Comandos remotos**: paletas de comandos por conexión o globales con grupos, confirmación, atajos, expansión de `<VAR>` y prompts `{{param}}` — ejecutables desde el menú contextual del terminal
+- **Runbooks**: pega un runbook Markdown, elige la pestaña destino, ejecuta los bloques paso a paso con estado por paso, modo dry-run y avisos de comandos peligrosos
+- **Scripts**: JavaScript aislado (worker sandbox) con `send`/`log`/`sleep`, editable en la app, ejecutado contra el terminal vivo desde el menú contextual
+- Navegador de snippets con categorías, búsqueda, copiar o ejecutar en el terminal, prompts `{{param}}`
+- Expansión de variables (`<IP>`, `<USER>`, `<ENV:name>`, `<GV:name>`, fechas) en títulos de pestaña y comandos remotos
 
-### Descubrimiento de infraestructura
-- Nube: AWS EC2, GCP, Azure VMs, AWS SSM
-- Contenedores y orquestación: Docker, Podman, `kubectl exec`
-- Un clic convierte los objetivos descubiertos en conexiones de Bifrost
+### Observabilidad y seguridad
+- Log de auditoría de solo anexado (JSON Lines) de conexiones y eventos de credenciales — también alimenta las estadísticas por conexión
+- Filtro de redacción de secretos en la salida del terminal (interruptor de sesión en Ajustes)
+- Almacenamiento cifrado de credenciales en todo el producto: conexiones, túneles y saltos
+- Detección de inactividad con resúmenes IA; notificaciones de escritorio al terminar comandos largos
 
 ### IA y MCP
-- Panel de Asistente IA (multiproveedor: Ollama, OpenRouter, OpenAI, DeepSeek): explicación de comandos, detección de errores con sugerencias, resúmenes de sesión inactiva, ventana separable, copiar respuestas como texto/Markdown/CSV
-- **Servidor MCP** para agentes IA (p. ej. Claude): 42 herramientas, 9 recursos y 8 plantillas de prompt sobre stdio o HTTP+Bearer; lee la BD de Bifrost en solo lectura vía sql.js y filtra comandos destructivos — ver [`docs/MCP_ARCHITECTURE.md`](docs/MCP_ARCHITECTURE.md)
+- Panel de Asistente IA (Ctrl+Shift+A), acoplado o en su propia ventana, con respuestas en streaming de **Ollama, OpenRouter, OpenAI o DeepSeek** (proveedor/modelo/clave configurables en Ajustes)
+- Explicación de comandos, conciencia de errores, resúmenes de inactividad y copiar-como-CSV/Markdown en las respuestas
+- **Servidor MCP** para agentes IA (p. ej. Claude): **42 herramientas, 9 recursos, 8 plantillas de prompt**, stdio o HTTP con auth Bearer, filtro de comandos destructivos, acceso a BD de solo lectura — ver [`docs/MCP_ARCHITECTURE.md`](docs/MCP_ARCHITECTURE.md)
 
 ### Shell de la aplicación
-- Workspaces, paleta de comandos (Ctrl+K), atajos multi-acorde, bandeja del sistema con menús dinámicos, persistencia del estado de ventana, sincronización de configuración vía git
-- Sistema de diseño "Spectral Command" — [`docs/reference/DESIGN.md`](docs/reference/DESIGN.md)
+- Paleta de comandos (Ctrl+K) sobre conexiones y comandos; conjunto fijo de atajos globales incluyendo acordes (Ctrl+K, luego S/P/W)
+- Sistema de plugins: instala/activa/desactiva plugins npm desde Ajustes, contra un API de hooks documentado ([`docs/PLUGIN_API.md`](docs/PLUGIN_API.md))
+- Sincronización de configuración vía git: exporta/importa/sincroniza tu configuración a un repositorio que tú indicas
+- Persistencia del estado de ventana, bandeja del sistema, sistema de diseño "Spectral Command" ([`docs/reference/DESIGN.md`](docs/reference/DESIGN.md))
+- UI en inglés; traducción al español iniciada (~30 cadenas — se agradece ayuda)
 
-## Hoja de ruta / TODO
+## Construido en el backend, UI pendiente
 
-Lo que Bifrost **no** tiene todavía, y quiere tener. Las contribuciones son
-bienvenidas — los cambios grandes pasan por el flujo [OpenSpec](openspec/).
+Esto existe como implementación real y probada en el proceso main, con IPC listo,
+pero **ninguna UI llega ahí todavía** — seleccionarlo no hace nada (o cae a SSH).
+Es lo primero de la hoja de ruta, y cada punto es una contribución bien acotada:
 
-**Soporte de plataformas**
-- [ ] Soporte Windows (utilidades de plataforma, detección de shells incl. PowerShell/WSL, RDP nativo vía mstsc, empaquetado) — plan en [`docs/WINDOWS_COMPAT_PLAN.md`](docs/WINDOWS_COMPAT_PLAN.md)
-- [ ] Empaquetado macOS (dmg)
-- [ ] Matriz de CI multi-SO (hoy solo Linux)
+- **Lanzadores de protocolos**: RDP (xfreerdp/mstsc con flags de portapapeles/discos/audio), VNC, Telnet, FTP (lftp), TN3270, WebDAV, sesiones AWS SSM
+- **Importación**: parser de `~/.ssh/config`, inventarios Ansible, estado de Terraform, exportar/importar JSON
+- **Descubrimiento en la nube**: AWS EC2, GCP, Azure VMs, Docker, Podman, Kubernetes — escáneres por CLI listos, sin panel
+- **Gestores de contraseñas externos**: 1Password, Bitwarden, HashiCorp Vault, AWS Secrets Manager, Azure Key Vault, puente KeePassXC
+- **SSH CA**: firma de certificados vía HashiCorp Vault o CA local
+- **Motor Expect** (automatización patrón → respuesta con reglas de salto) y **macros**
+- **Clústeres**: backend persistente (crear/miembros/broadcast) — el panel actual es un borrador visual aún no conectado
+- **Editor de variables globales** (el resolutor `<GV:>` funciona; falta la UI para definirlas)
+- **Plomería de opciones SSH avanzadas**: reenvío X11, proxy HTTP, reenvío de agente, selección de cifrados/KEX/MACs — el formulario las guarda, falta que el connect las consuma
+- **Logs de sesión a archivo** (escritor `.log` con patrones) y **recifrado del vault**
+- Cifrado de la base de datos en reposo (AES-256-GCM; falta la mitad de descifrado al arranque + UI)
 
-**Sistema de plugins**
-- [ ] Arquitectura completa de plugins (cargar/aislar plugins de terceros — el API de hooks en [`docs/PLUGIN_API.md`](docs/PLUGIN_API.md) ya existe)
-- [ ] UI de gestión de plugins (explorar/instalar/activar)
+## Limitaciones conocidas (alpha)
 
-**Protocolos**
-- [ ] FTP
-- [ ] WebDAV
-- [ ] TN3270 (mainframe)
-- [ ] Visores VNC adicionales (TigerVNC/RealVNC)
+- **Detach** de pestañas funciona; **reattach** todavía no (la sesión de la ventana separada sobrevive, pero la ventana principal no la recupera)
+- **La grabación de sesiones** produce archivos asciicast sin contenido aún (solo cabecera) — no confíes en ella
+- **Hooks** pre/post-conexión: el editor los guarda, pero aún no se ejecutan al conectar
+- **Buscar en terminal**, los ítems Clear/Reset del menú y el redimensionado de paneles por teclado no están conectados aún
+- **Túneles dinámicos (SOCKS)** se declaran pero no reenvían (local/remoto funcionan)
+- **Zmodem** sz/rz se detecta y te redirige a SFTP — no hay transferencia en el terminal
+- La pestaña **FIDO2** existe pero ssh2 aún no usa llaves sk directamente (solo funciona a través de ssh-agent)
+- El **editor de atajos** todavía no reemplaza los atajos integrados; los menús de conexiones de la bandeja están vacíos
+- La redacción de secretos está **desactivada por defecto** y se reinicia por sesión
 
-**Terminal y UX**
-- [ ] Transferencias ZMODEM reales en el terminal (hoy: la detección de sz/rz deriva a SFTP)
-- [ ] Resaltado de sintaxis en la barra de broadcast (PCC)
-- [ ] Herencia de perfiles (las plantillas existen; las cadenas de herencia no)
+## Hoja de ruta
 
-**Estabilidad y calidad**
-- [ ] Erradicar el crash de re-render restante en build de producción (cascada de selectores de objeto de Zustand — parcialmente corregido)
-- [ ] Suite E2E (Playwright) integrada en CI
-- [ ] Documentación de usuario generada desde las specs de capacidades, en inglés y español
+Además de conectar las secciones de arriba: soporte Windows ([plan](docs/WINDOWS_COMPAT_PLAN.md)),
+empaquetado macOS, CI multi-SO, importación desde Ásbrú, transferencias ZMODEM
+reales, rename/chmod/panel dual en SFTP, tests E2E en CI, documentación de
+usuario derivada de las specs en inglés y español, y completar la traducción al
+español de la UI.
 
 ## Instalación
 
@@ -174,21 +186,23 @@ Aplicación Electron de tres procesos más un servidor MCP independiente:
 - **Renderer** (`src/renderer/`) — React 18 + TypeScript, Zustand, Tailwind v4, xterm.js
 - **Servidor MCP** (`src/mcp/`) — proceso Node separado, acceso a BD de solo lectura vía sql.js
 
-Cada capacidad está especificada en [`openspec/specs/`](openspec/specs/) — 20
-capacidades con requisitos verificables y escenarios BDD. Empieza ahí para
-entender el comportamiento esperado antes de sumergirte en el código.
+El comportamiento previsto está especificado en [`openspec/specs/`](openspec/specs/).
+Ten en cuenta que algunas specs describen capacidades cuya UI sigue pendiente
+(ver la sección de arriba) — las specs son la meta; este README es el estado actual.
 
 ## Contribuir
 
-Los issues y pull requests son bienvenidos. Antes de enviar:
+Los issues y pull requests son bienvenidos — la sección
+["backend construido, UI pendiente"](#construido-en-el-backend-ui-pendiente) es
+un gran punto de partida: la mitad difícil ya está hecha y probada. Antes de
+enviar:
 
 ```bash
 pnpm lint && pnpm typecheck && pnpm test
 ```
 
 Los cambios significativos pasan por el flujo [OpenSpec](openspec/) — mira
-`openspec/changes/archive/` para ejemplos reales de propuesta → tareas → deltas
-de spec.
+`openspec/changes/archive/` para ejemplos reales.
 
 ## Licencia
 

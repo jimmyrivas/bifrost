@@ -19,107 +19,119 @@
 </p>
 
 Bifrost is a desktop connection manager for sysadmins, DevOps, and DevSecOps teams
-managing dozens to hundreds of remote servers. It combines the deep SSH tooling of
-Ásbrú/PAC with a modern terminal experience — and its behavior is specified
-capability-by-capability under [`openspec/specs/`](openspec/specs/), which is the
-source of truth for the feature list below.
+managing dozens to hundreds of remote servers — SSH-first, with a modern terminal
+experience.
 
-> **Status:** v0.3.0 (alpha). Linux first; Windows/macOS support is on the
-> [roadmap](#roadmap--todo).
+> **Status: alpha (v0.3.0), Linux only.** This README is honest by design: the
+> **Features** section lists only what works end-to-end in the UI today, verified
+> against the code. Things that are built in the backend but not yet reachable
+> from the UI live in [their own section](#built-in-the-backend-ui-pending), and
+> known gaps are listed under [limitations](#known-limitations-alpha). If you find
+> a claim here that isn't true, that's a bug — please open an issue.
 
 ## Features
 
-Everything listed here is implemented and covered by a capability spec.
-
 ### Connections & organization
-- Connection CRUD with hierarchical groups, favorites, history, fuzzy search, tags, and validation
-- Reusable connection templates ("Save as Template", "Save session as profile")
-- Import/export — Ásbrú Connection Manager, `~/.ssh/config` parser, Ansible inventories, Terraform state
-- Wake-on-LAN
-- Per-connection stats (connect count, last connected) and live health dots (ping)
+- Connection CRUD with hierarchical groups, favorites, recents, live search (matches tags too), and tag badges
+- Connection templates: save any connection as a template, apply one when creating
+- Per-connection notes (tagged: note/evidence/command/error), searchable notes panel
+- Per-connection statistics (total connects, last connected, session time — derived from the audit log) and live health dots (periodic ping)
+- Wake-on-LAN from the connection's right-click menu
+- Workspaces: named connection filters to scope the sidebar to what you're working on
 
 ### Terminal
-- xterm.js with WebGL rendering; dual-mode local PTY and SSH terminals
-- Split panes (horizontal/vertical), maximize, resize hotkeys, explode panes to tabs, combine tabs
-- Detach any tab to its own window and reattach — the session survives the move
-- Broadcast input to panes or all tabs, with a warning overlay while active
-- Paste safety: multiline paste warning, dangerous-command detection, intelligent Ctrl-C
-- Zoom (scoped to the active tab), font ligatures, copy-on-select, clickable links, dynamic tab titles (OSC 0/2)
-- 50+ color schemes, per-connection colors and background tints (production = red, staging = green…)
-- Quake-style dropdown terminal and F11 fullscreen
-- **Copy as CSV / Markdown**: right-click any table or selection — ASCII-pipe, GFM, and box-drawing tables (psql included) are reconstructed into clean CSV (RFC 4180) or GFM Markdown
-- Internal Markdown viewer: `.md` paths in SSH output are clickable (relative paths resolved via cwd tracking) and render in-app
+- xterm.js with WebGL rendering; local shells (with a shell picker: bash/zsh/fish/pwsh) and SSH in the same tab system
+- Split panes (context menu; horizontal/vertical), maximize pane, explode panes to tabs, combine tabs
+- Broadcast typing to all panes or all tabs (with a visible warning overlay), plus a multi-line broadcast bar with draft auto-save
+- Paste safety: multiline-paste confirmation with dangerous-command scanning; Ctrl-C copies when text is selected, interrupts when not
+- Per-tab zoom, font ligatures, copy-on-select, OSC 52 clipboard (copy from tmux/vim works), clickable web links
+- `.md` paths in SSH output are clickable and open in an internal Markdown viewer — relative paths resolve against the tracked working directory
+- **Copy as CSV / Markdown**: right-click any selection — ASCII-pipe, GFM, and box-drawing tables (`psql`, MySQL, etc.) are reconstructed into RFC 4180 CSV or clean Markdown; works in the terminal, the Markdown viewer, and AI responses
+- Paste an image from the clipboard straight to the server (Ctrl+Shift+I): uploaded via SFTP (jump chains included), path typed into the terminal, cleaned up on exit
+- ~50 built-in color schemes, per-connection scheme and background tint (production = red, staging = green), dynamic tab titles (OSC 0/2) with title lock
+- Detach a tab to its own window (the live session moves with it)
+- Terminal screenshot to PNG, F11 fullscreen, idle-completion desktop notification
+- Error detection badges on failed commands, AI "Explain Command" on any selection, idle-session AI summary you can save as a note
 
 ### Sessions that survive
-- Local session persistence via multiplexers: dtach, tmux, zellij, rmux — with custom config/layout/extra args per multiplexer
-- Session restore: reopen the app and get a prompt to restore your previous tabs, reconnected
-- Auto-reconnect with exponential backoff; SSH connection reuse/multiplexing
+- Local session persistence via real multiplexer integration: **dtach, tmux, zellij, rmux** — probe, attach picker, and per-connection custom args (config file, zellij layout, extra flags)
+- Session restore: on relaunch, Bifrost offers to reopen your previous tabs and reconnect them
+- SSH auto-reconnect with exponential backoff (3s → 60s)
 
 ### SSH & networking
-- Auth: password, key file, certificate, SSH agent, FIDO2 hardware keys, MFA/TOTP auto-inject
-- Host key verification (TOFU, SHA-256 fingerprints) with a known-hosts management panel
-- Algorithm selection (ciphers/KEX/HMAC/host keys), X11 forwarding, HTTP proxy, agent forwarding
-- **Jump hosts**: multi-hop ProxyJump chains for SSH, Mosh, and tunnels
-- **Tunnels**: local, remote, and dynamic (SOCKS) port forwarding with auto-start and tray lifecycle
-- Alternative protocols: Mosh, RDP (clipboard/drive/printer/audio/resolution options), and arbitrary custom commands
+- Auth: password, key file (with passphrase), SSH agent; keyboard-interactive MFA prompts are forwarded to you
+- Stored passwords encrypted with the OS keychain (`safeStorage`); the edit form shows them masked with reveal, and clearing the field deletes them
+- TOTP/2FA: store a Base32 secret per connection and Bifrost auto-types the code when a verification prompt appears in the session
+- Host-key verification (TOFU, SHA-256 fingerprints) with a known-hosts management panel in Settings
+- **Jump-host chains** (multi-hop ProxyJump) with a visual chain editor — used by SSH, Mosh, and tunnels; inline hop passwords are encrypted at rest
+- **Tunnels**: local and remote port forwarding with a full manager UI, per-tunnel credentials, and auto-start on launch
+- **Mosh** as a first-class connection method (spawned via PTY, jump chains supported)
 
-### Clusters & automation
-- Clusters: group connections, open every member at once, broadcast to the cluster; auto-clusters by regex
-- Expect engine (per-connection toggle, debugger, jump rules) for prompt automation
-- Sandboxed JavaScript script engine with editor, execution modes, and terminal context
-- Macros, per-connection remote command palettes, pre/post-connection hooks with `ASK` prompts
-- Variable expansion everywhere: `<IP>`, `<USER>`, `<ENV:…>`, `<GV:…>`, `<ASK:…>`, `<CMD:…>` with global/connection scope resolution
-- Runbooks (parse & execute fenced commands with per-step status), parameterized workflows (`{{arg}}`), snippet browser, launch configurations
+### SFTP & files
+- SFTP panel per SSH tab: browse, upload (multi-file), download, delete, mkdir
+- Clipboard-image upload (see Terminal above)
 
-### Secrets & security
-- Encrypted credential vault (OS keychain via `safeStorage`), vault re-encryption, AES-256-GCM config encryption, encrypted key-file storage
-- Stored passwords visible (masked, with reveal) and removable from the connection editor
-- External password managers: 1Password, Bitwarden, HashiCorp Vault, AWS Secrets Manager, Azure Key Vault, KeePassXC
-- SSH certificate authority support and FIDO2 key generation/detection
-- Secret redaction in output, audit log (append-only JSON Lines), session recording (asciicast v2), session logs, terminal screenshots
+### Automation
+- **Remote commands**: per-connection or global command palettes with groups, confirmation flags, keybindings, `<VAR>` expansion and `{{param}}` prompts — run from the terminal's right-click menu
+- **Runbooks**: paste a Markdown runbook, pick the target tab, execute fenced blocks step-by-step with per-step status, dry-run mode, and dangerous-command warnings
+- **Scripts**: sandboxed JavaScript (isolated worker) with `send`/`log`/`sleep`, editable in-app, run against the live terminal from the context menu
+- Snippet browser with categories, search, copy or run-in-terminal, `{{param}}` prompts
+- Variable expansion (`<IP>`, `<USER>`, `<ENV:name>`, `<GV:name>`, dates) in tab titles and remote commands
 
-### Infrastructure discovery
-- Cloud: AWS EC2, GCP, Azure VMs, AWS SSM
-- Containers & orchestration: Docker, Podman, `kubectl exec`
-- One click turns discovered targets into Bifrost connections
+### Observability & security
+- Append-only audit log (JSON Lines) of connections and credential events — it also powers the per-connection statistics
+- Secret redaction filter for terminal output (session toggle in Settings)
+- Encrypted credential storage throughout: connections, tunnels, and jump hops
+- Session idle detection with AI summaries; desktop notifications when long-running commands finish
 
 ### AI & MCP
-- AI Assistant panel (multi-provider: Ollama, OpenRouter, OpenAI, DeepSeek): command explanation, error detection with suggestions, idle-session summaries, detachable window, copy responses as text/Markdown/CSV
-- **MCP server** for AI agents (e.g. Claude): 42 tools, 9 resources, and 8 prompt templates over stdio or HTTP+Bearer; reads the Bifrost DB read-only via sql.js and filters destructive commands — see [`docs/MCP_ARCHITECTURE.md`](docs/MCP_ARCHITECTURE.md)
+- AI Assistant panel (Ctrl+Shift+A), dockable or in its own window, with streaming responses from **Ollama, OpenRouter, OpenAI, or DeepSeek** (provider/model/key configurable in Settings)
+- Explain-command, error awareness, idle summaries, and copy-as-CSV/Markdown on responses
+- **MCP server** for AI agents (e.g. Claude): **42 tools, 9 resources, 8 prompt templates**, stdio or HTTP with Bearer auth, destructive-command filtering, read-only DB access — see [`docs/MCP_ARCHITECTURE.md`](docs/MCP_ARCHITECTURE.md)
 
 ### App shell
-- Workspaces, command palette (Ctrl+K), multi-chord hotkeys, system tray with dynamic menus, window-state persistence, git-based config sync
-- "Spectral Command" design system — [`docs/reference/DESIGN.md`](docs/reference/DESIGN.md)
+- Command palette (Ctrl+K) over connections and commands; a fixed set of global shortcuts including chords (Ctrl+K, then S/P/W)
+- Plugin system: install/enable/disable npm-packaged plugins from Settings, against a documented hooks API ([`docs/PLUGIN_API.md`](docs/PLUGIN_API.md))
+- Config sync via git: export/import/sync your configuration to a repository you point it at
+- Window-state persistence, system tray, "Spectral Command" design system ([`docs/reference/DESIGN.md`](docs/reference/DESIGN.md))
+- UI in English; Spanish translation started (~30 strings so far — help welcome)
 
-## Roadmap / TODO
+## Built in the backend, UI pending
 
-What Bifrost does **not** have yet, and wants to. Contributions welcome — big
-items should go through the [OpenSpec](openspec/) workflow.
+These exist as real, tested main-process implementations with IPC in place, but
+**no UI reaches them yet** — selecting them does nothing (or falls back to SSH).
+They are the top of the roadmap, and each is a well-scoped contribution:
 
-**Platform support**
-- [ ] Windows support (platform utilities, shell detection incl. PowerShell/WSL, native RDP via mstsc, packaging) — plan in [`docs/WINDOWS_COMPAT_PLAN.md`](docs/WINDOWS_COMPAT_PLAN.md)
-- [ ] macOS packaging (dmg)
-- [ ] Multi-OS CI matrix (currently Linux only)
+- **Protocol launchers**: RDP (xfreerdp/mstsc with clipboard/drive/audio flags), VNC, Telnet, FTP (lftp), TN3270, WebDAV, AWS SSM sessions
+- **Import**: `~/.ssh/config` parser, Ansible inventories, Terraform state, JSON export/import
+- **Cloud discovery**: AWS EC2, GCP, Azure VMs, Docker, Podman, Kubernetes — CLI-based scanners ready, no panel
+- **External password managers**: 1Password, Bitwarden, HashiCorp Vault, AWS Secrets Manager, Azure Key Vault, KeePassXC bridge
+- **SSH CA**: certificate signing via HashiCorp Vault or a local CA
+- **Expect engine** (pattern → response automation with jump rules) and **macros**
+- **Clusters**: persistent cluster backend (create/members/broadcast) — the current panel is a visual draft not yet wired to it
+- **Global variables editor** (the `<GV:>` resolver works; there's no UI to define them)
+- **Advanced SSH options plumb-through**: X11 forwarding, HTTP proxy, agent forwarding, cipher/KEX/MAC selection — the form saves them, the connect path must consume them
+- **Session file logging** (pattern-based `.log` writer) and **vault re-encryption**
+- Database encryption at rest (AES-256-GCM, needs the decrypt-on-startup half + UI)
 
-**Plugin system**
-- [ ] Full plugin architecture (load/isolate third-party plugins — the hooks API in [`docs/PLUGIN_API.md`](docs/PLUGIN_API.md) already exists)
-- [ ] Plugin manager UI (browse/install/enable)
+## Known limitations (alpha)
 
-**Protocols**
-- [ ] FTP
-- [ ] WebDAV
-- [ ] TN3270 (mainframe)
-- [ ] Additional VNC viewers (TigerVNC/RealVNC)
+- Tab **detach** works; **reattach** doesn't yet (the detached window's session survives, but the main window doesn't reclaim it)
+- **Session recording** produces asciicast files without payload yet (header only) — don't rely on it
+- Pre/post-connection **hooks**: the editor saves them, but they are not executed on connect yet
+- **Find in terminal**, Clear/Reset terminal menu items, and keyboard pane-resize are not wired yet
+- **Dynamic (SOCKS) tunnels** are declared but not forwarded (local/remote work)
+- **Zmodem** sz/rz is detected and redirects you to SFTP — no in-terminal transfer
+- **FIDO2** tab exists but ssh2 cannot yet use sk-keys directly (works only through ssh-agent)
+- Custom **keybindings editor** doesn't yet override the built-in shortcuts; tray connection menus are empty
+- Secret redaction is **off by default** and resets per session
 
-**Terminal & UX**
-- [ ] Real in-terminal ZMODEM transfers (today: sz/rz detection hands off to SFTP)
-- [ ] PCC (broadcast bar) syntax highlighting
-- [ ] Profile inheritance (templates exist; inheritance chains do not)
+## Roadmap
 
-**Stability & quality**
-- [ ] Eradicate the remaining production-build re-render crash (Zustand object-selector cascade — partially fixed)
-- [ ] E2E (Playwright) suite wired into CI
-- [ ] User documentation generated from the capability specs, in English and Spanish
+Beyond wiring the sections above: Windows support ([plan](docs/WINDOWS_COMPAT_PLAN.md)),
+macOS packaging, multi-OS CI, Ásbrú import, real ZMODEM transfers, SFTP
+rename/chmod/dual-pane, E2E tests in CI, spec-derived user docs in English and
+Spanish, and finishing the Spanish UI translation.
 
 ## Installation
 
@@ -172,13 +184,16 @@ Three-process Electron app plus a standalone MCP server:
 - **Renderer** (`src/renderer/`) — React 18 + TypeScript, Zustand, Tailwind v4, xterm.js
 - **MCP server** (`src/mcp/`) — separate Node process, read-only DB access via sql.js
 
-Every capability is specified under [`openspec/specs/`](openspec/specs/) — 20
-capabilities with testable requirements and BDD scenarios. Start there to
-understand expected behavior before diving into code.
+Intended behavior is specified under [`openspec/specs/`](openspec/specs/). Note
+that some specs describe capabilities whose UI is still pending (see the section
+above) — the specs are the target, this README is the current state.
 
 ## Contributing
 
-Issues and pull requests are welcome. Before submitting:
+Issues and pull requests are welcome — the
+["backend built, UI pending" section](#built-in-the-backend-ui-pending) is a
+great place to start: the hard half is already done and tested. Before
+submitting:
 
 ```bash
 pnpm lint && pnpm typecheck && pnpm test
