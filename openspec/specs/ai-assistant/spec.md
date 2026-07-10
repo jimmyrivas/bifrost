@@ -1,7 +1,7 @@
 # ai-assistant Specification
 
 ## Purpose
-TBD - created by archiving change enhance-ai-assistant-panel. Update Purpose after archive.
+Provide an in-app AI assistant panel over the terminal workspace: prompt composition, multi-provider responses, command insertion, and copy actions on responses. Covers both the docked panel and the detached assistant window.
 ## Requirements
 ### Requirement: Multi-Line Prompt Composition
 

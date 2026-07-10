@@ -1,7 +1,7 @@
 # session-restore Specification
 
 ## Purpose
-TBD - created by archiving change restore-session-tabs. Update Purpose after archive.
+Persist the set of open terminal tabs across app launches and offer to restore them on startup, recreating and reconnecting each restorable tab.
 ## Requirements
 ### Requirement: Persist the Open-Tabs Manifest
 
