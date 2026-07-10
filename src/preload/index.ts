@@ -53,7 +53,10 @@ export interface BifrostApi {
     isAvailable: () => Promise<boolean>
     setPassword: (connectionId: string, password: string) => Promise<void>
     setPassphrase: (connectionId: string, passphrase: string) => Promise<void>
+    getPassword: (connectionId: string) => Promise<string | null>
+    getPassphrase: (connectionId: string) => Promise<string | null>
     clearPassword: (connectionId: string) => Promise<void>
+    clearPassphrase: (connectionId: string) => Promise<void>
     hasPassword: (connectionId: string) => Promise<boolean>
     // #26: Vault password change
     changeVaultPassword: () => Promise<{ reEncrypted: number }>
@@ -455,7 +458,10 @@ const api: BifrostApi = {
     isAvailable: () => ipcRenderer.invoke('credentials:isAvailable'),
     setPassword: (id, pass) => ipcRenderer.invoke('credentials:setPassword', id, pass),
     setPassphrase: (id, pass) => ipcRenderer.invoke('credentials:setPassphrase', id, pass),
+    getPassword: (id) => ipcRenderer.invoke('credentials:getPassword', id),
+    getPassphrase: (id) => ipcRenderer.invoke('credentials:getPassphrase', id),
     clearPassword: (id) => ipcRenderer.invoke('credentials:clearPassword', id),
+    clearPassphrase: (id) => ipcRenderer.invoke('credentials:clearPassphrase', id),
     hasPassword: (id) => ipcRenderer.invoke('credentials:hasPassword', id),
     changeVaultPassword: () => ipcRenderer.invoke('credentials:changeVaultPassword'),
     storeKeyFile: (id, keyContent) => ipcRenderer.invoke('credentials:storeKeyFile', id, keyContent),

@@ -172,6 +172,10 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
   const [errors, setErrors] = useState<ValidationErrors>({})
   const [activeTab, setActiveTab] = useState<FormTab>('general')
   const [execCmds, setExecCmds] = useState<ExecCommand[]>([])
+  // What the vault actually held when the form loaded. Guards the
+  // clear-on-empty save path: never clear before the async prefill resolved
+  // (or when decryption failed), or a quick Save would wipe the stored value.
+  const loadedCreds = useRef({ password: '', passphrase: '' })
   const [templates, setTemplates] = useState<Array<{ id: string; name: string; config: string }>>([])
 
   // Load templates
@@ -270,6 +274,20 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
         }))
       }
       setLoading(false)
+      // Prefill stored credentials so the field shows masked dots and the
+      // eye toggle can reveal them (they never left the local vault).
+      window.bifrost?.credentials?.getPassword?.(connectionId).then((pw) => {
+        if (pw) {
+          loadedCreds.current.password = pw
+          setForm((prev) => ({ ...prev, password: pw }))
+        }
+      }).catch(() => {})
+      window.bifrost?.credentials?.getPassphrase?.(connectionId).then((pp) => {
+        if (pp) {
+          loadedCreds.current.passphrase = pp
+          setForm((prev) => ({ ...prev, passphrase: pp }))
+        }
+      }).catch(() => {})
       // Load exec commands
       window.bifrost?.execCommands?.list(connectionId).then((cmds) => {
         if (cmds) setExecCmds(cmds.map((c) => ({ phase: c.phase as 'pre' | 'post', command: c.command, ask: c.ask, isDefault: c.isDefault, sortOrder: c.sortOrder })))
@@ -350,9 +368,15 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
       }
       if (savedId && form.password) {
         await window.bifrost.credentials.setPassword(savedId, form.password)
+      } else if (savedId && connectionId && loadedCreds.current.password) {
+        // The user emptied a field we know held a stored password: remove it
+        // rather than silently keeping the old one.
+        await window.bifrost.credentials.clearPassword(savedId)
       }
       if (savedId && form.passphrase) {
         await window.bifrost.credentials.setPassphrase(savedId, form.passphrase)
+      } else if (savedId && connectionId && loadedCreds.current.passphrase) {
+        await window.bifrost.credentials.clearPassphrase?.(savedId)
       }
       // Save exec commands (hooks)
       if (savedId && execCmds.length > 0) {

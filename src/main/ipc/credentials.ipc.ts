@@ -49,6 +49,46 @@ export function registerCredentialsIpc(): void {
     return conn?.encryptedPassword != null
   })
 
+  // Prefills the edit form so a stored password is visible as masked dots and
+  // can be revealed, like getKeyFile does for stored key material.
+  ipcMain.handle('credentials:getPassword', (_event, connectionId: string): string | null => {
+    const db = getDatabase()
+    const conn = db
+      .select({ encryptedPassword: schema.connections.encryptedPassword })
+      .from(schema.connections)
+      .where(eq(schema.connections.id, connectionId))
+      .get()
+    if (!conn?.encryptedPassword) return null
+    try {
+      return credentialStore.decrypt(conn.encryptedPassword)
+    } catch {
+      return null
+    }
+  })
+
+  ipcMain.handle('credentials:getPassphrase', (_event, connectionId: string): string | null => {
+    const db = getDatabase()
+    const conn = db
+      .select({ encryptedPassphrase: schema.connections.encryptedPassphrase })
+      .from(schema.connections)
+      .where(eq(schema.connections.id, connectionId))
+      .get()
+    if (!conn?.encryptedPassphrase) return null
+    try {
+      return credentialStore.decrypt(conn.encryptedPassphrase)
+    } catch {
+      return null
+    }
+  })
+
+  ipcMain.handle('credentials:clearPassphrase', (_event, connectionId: string) => {
+    const db = getDatabase()
+    db.update(schema.connections)
+      .set({ encryptedPassphrase: null })
+      .where(eq(schema.connections.id, connectionId))
+      .run()
+  })
+
   // === #26: Vault Password Change ===
   // Re-encrypts all stored passwords and passphrases.
   // Since we use electron safeStorage (OS keychain), this re-encrypts
