@@ -30,7 +30,8 @@ import {
   Radio,
   FileText,
   FolderTree,
-  StickyNote
+  StickyNote,
+  Sheet
 } from 'lucide-react'
 import {
   ContextMenu,
@@ -44,6 +45,7 @@ import {
   ContextMenuSubContent
 } from '@renderer/components/ui/context-menu'
 import { useSessionsStore } from '@renderer/stores/sessions.store'
+import { terminalToCsv, terminalToMarkdown } from '@renderer/lib/markdown-clip'
 import type { ScriptContext } from '@renderer/lib/script-runner'
 import { hasParams, promptForParams } from '@renderer/lib/workflow-params'
 import { OSC7_CWD_SETUP } from '@renderer/lib/shell-integration'
@@ -80,12 +82,38 @@ export function TerminalContextMenu({
     return (paneEl as HTMLElement)?.dataset?.terminalSelection?.trim() ?? ''
   }, [paneId])
 
+  const [copyFlash, setCopyFlash] = useState<string | null>(null)
+  const flashCopy = useCallback((label: string) => {
+    setCopyFlash(label)
+    setTimeout(() => setCopyFlash(null), 1500)
+  }, [])
+
   const handleCopy = useCallback(async () => {
     const selection = getTerminalSelection()
     if (selection) {
       await navigator.clipboard.writeText(selection)
     }
-  }, [])
+  }, [getTerminalSelection])
+
+  const handleCopyAsMarkdown = useCallback(async () => {
+    const selection = getTerminalSelection()
+    if (!selection) {
+      flashCopy('Select text first')
+      return
+    }
+    await navigator.clipboard.writeText(terminalToMarkdown(selection))
+    flashCopy('Copied as Markdown')
+  }, [getTerminalSelection, flashCopy])
+
+  const handleCopyAsCsv = useCallback(async () => {
+    const selection = getTerminalSelection()
+    if (!selection) {
+      flashCopy('Select text first')
+      return
+    }
+    await navigator.clipboard.writeText(terminalToCsv(selection))
+    flashCopy('Copied as CSV')
+  }, [getTerminalSelection, flashCopy])
 
   const handlePaste = useCallback(async () => {
     try {
@@ -454,6 +482,14 @@ export function TerminalContextMenu({
           Copy
           <ContextMenuShortcut>Ctrl+Shift+C</ContextMenuShortcut>
         </ContextMenuItem>
+        <ContextMenuItem onClick={handleCopyAsMarkdown} className="gap-2">
+          <FileText size={14} strokeWidth={1.5} />
+          Copy as Markdown
+        </ContextMenuItem>
+        <ContextMenuItem onClick={handleCopyAsCsv} className="gap-2">
+          <Sheet size={14} strokeWidth={1.5} />
+          Copy as CSV
+        </ContextMenuItem>
         <ContextMenuItem onClick={handlePaste} className="gap-2">
           <ClipboardPaste size={14} strokeWidth={1.5} />
           Paste
@@ -788,6 +824,20 @@ export function TerminalContextMenu({
           <div className="flex items-center gap-2">
             <ScrollText size={14} className="text-[#6bd5ff] shrink-0" />
             <p>{scriptStatus}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Copy-format confirmation */}
+      {copyFlash && (
+        <div
+          className="fixed bottom-48 right-4 z-50 p-3 rounded-[var(--radius)] bg-[var(--surface-bright)] text-xs text-[var(--on-surface)] shadow-lg backdrop-blur-[12px]"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex items-center gap-2">
+            <ClipboardCopy size={14} className="text-[#6bd5ff] shrink-0" />
+            <p>{copyFlash}</p>
           </div>
         </div>
       )}

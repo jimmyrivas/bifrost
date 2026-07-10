@@ -17,6 +17,11 @@ line feed is wrapped in double quotes and embedded quotes are doubled). When the
 scope contains no table, copy as CSV SHALL fall back to treating whitespace- or
 tab-aligned text as rows and columns.
 
+In addition to the context menu, the viewer's header SHALL expose a "Copy" dropdown
+offering the same three document-level actions (plain text, Markdown, CSV), so the
+copy formats are discoverable without right-clicking. The header dropdown SHALL
+always operate on the whole document regardless of any text selection.
+
 The viewer SHALL show a transient confirmation indicating which format was copied,
 because the context menu closes when an action is selected.
 
@@ -45,3 +50,8 @@ because the context menu closes when an action is selected.
 
 - **WHEN** any copy action completes
 - **THEN** a transient badge indicates the format that was copied
+
+#### Scenario: Header dropdown offers the copy formats
+
+- **WHEN** the user opens the header "Copy" dropdown
+- **THEN** it offers Copy as text / Copy as Markdown / Copy as CSV over the whole document

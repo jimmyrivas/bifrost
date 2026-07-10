@@ -212,3 +212,73 @@ export function markdownToCsv(md: string): string | null {
   if (tables.length === 0) return null
   return tables.map(rowsToCsv).join('\r\n\r\n')
 }
+
+// ── Terminal-selection parsing ───────────────────────────────────────────
+// A terminal only yields plain text, so a table copied from xterm arrives as
+// lines delimited by ASCII pipes (`|`) or box-drawing verticals (`│ ┃ ║`),
+// often wrapped in border/separator rows. These helpers reconstruct such a
+// grid so a terminal selection can be copied as CSV or clean GFM Markdown.
+
+/** Any cell delimiter a terminal table might use. */
+const TERM_DELIM = /[|│┃║]/
+
+/** A rule/border/separator row: only frame characters, dashes, colons, pipes. */
+function isBorderLine(line: string): boolean {
+  return line.trim() !== '' && /^[\s─-╿|+=:_-]*$/.test(line)
+}
+
+/** Split one row on delimiters, trimming cells and dropping edge-border blanks. */
+function splitDelimited(line: string): string[] {
+  const cells = line.split(TERM_DELIM).map((c) => c.trim())
+  if (cells.length && cells[0] === '') cells.shift()
+  if (cells.length && cells[cells.length - 1] === '') cells.pop()
+  return cells
+}
+
+/**
+ * Reconstruct a delimited terminal table as rows of cells, or null when the
+ * text isn't a delimited grid (fewer than two delimited rows). Border and GFM
+ * separator rows are dropped; non-delimited lines (titles, prose) are ignored.
+ */
+export function parseDelimitedTable(text: string): string[][] | null {
+  const rows: string[][] = []
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.replace(/[ \t]+$/, '')
+    if (line.trim() === '') continue
+    if (isBorderLine(line)) continue
+    if (!TERM_DELIM.test(line)) continue
+    rows.push(splitDelimited(line))
+  }
+  return rows.length >= 2 ? rows : null
+}
+
+/** Render rows as a GFM table, padding every row to the widest column count. */
+function rowsToMarkdown(rows: string[][]): string {
+  const cols = Math.max(...rows.map((r) => r.length))
+  const pad = (r: string[]): string[] =>
+    Array.from({ length: cols }, (_, i) => cellMd(r[i] ?? ''))
+  const [header, ...body] = rows
+  return [
+    `| ${pad(header).join(' | ')} |`,
+    `| ${header.map(() => '---').join(' | ')}${' | ---'.repeat(cols - header.length)} |`,
+    ...body.map((r) => `| ${pad(r).join(' | ')} |`)
+  ].join('\n')
+}
+
+/**
+ * Convert a terminal selection to CSV: reconstruct a delimited table when
+ * present, otherwise treat whitespace/tab-aligned columns as the grid.
+ */
+export function terminalToCsv(text: string): string {
+  const rows = parseDelimitedTable(text)
+  return rows ? rowsToCsv(rows) : textToCsv(text)
+}
+
+/**
+ * Convert a terminal selection to Markdown: reconstruct a delimited table as a
+ * clean GFM table, otherwise return the selected text unchanged.
+ */
+export function terminalToMarkdown(text: string): string {
+  const rows = parseDelimitedTable(text)
+  return rows ? rowsToMarkdown(rows) : text.trim()
+}

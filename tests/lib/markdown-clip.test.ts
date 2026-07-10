@@ -3,7 +3,10 @@ import {
   csvEscape,
   domToMarkdown,
   markdownToCsv,
+  parseDelimitedTable,
   tablesToCsv,
+  terminalToCsv,
+  terminalToMarkdown,
   textToCsv
 } from '../../src/renderer/src/lib/markdown-clip'
 
@@ -127,5 +130,68 @@ describe('domToMarkdown', () => {
   it('escapes pipes inside table cells', () => {
     const md = domToMarkdown(html('<table><tr><th>cmd</th></tr><tr><td>a | b</td></tr></table>'))
     expect(md).toContain('| a \\| b |')
+  })
+})
+
+describe('parseDelimitedTable', () => {
+  it('parses an ASCII pipe table dropping the GFM separator', () => {
+    const t = '| Repo | PR |\n| --- | --- |\n| backend | #541 |\n| web | #631 |'
+    expect(parseDelimitedTable(t)).toEqual([
+      ['Repo', 'PR'],
+      ['backend', '#541'],
+      ['web', '#631']
+    ])
+  })
+
+  it('parses a box-drawing bordered table', () => {
+    const t = [
+      '┌──────────┬──────┐',
+      '│ Repo     │ PR   │',
+      '├──────────┼──────┤',
+      '│ backend  │ #541 │',
+      '│ web      │ #631 │',
+      '└──────────┴──────┘'
+    ].join('\n')
+    expect(parseDelimitedTable(t)).toEqual([
+      ['Repo', 'PR'],
+      ['backend', '#541'],
+      ['web', '#631']
+    ])
+  })
+
+  it('ignores non-delimited lines like titles', () => {
+    const t = 'Estado global\n| a | b |\n| 1 | 2 |'
+    expect(parseDelimitedTable(t)).toEqual([['a', 'b'], ['1', '2']])
+  })
+
+  it('returns null for text with no delimited grid', () => {
+    expect(parseDelimitedTable('just some prose\nover two lines')).toBeNull()
+  })
+})
+
+describe('terminalToCsv', () => {
+  it('converts a pipe table selection to CSV', () => {
+    const t = '| Repo | PR |\n| --- | --- |\n| backend | #541, urgent |'
+    expect(terminalToCsv(t)).toBe('Repo,PR\r\nbackend,"#541, urgent"')
+  })
+
+  it('falls back to aligned text when there is no table', () => {
+    expect(terminalToCsv('name    age\nalice   30')).toBe('name,age\r\nalice,30')
+  })
+})
+
+describe('terminalToMarkdown', () => {
+  it('rebuilds a box-drawing table as clean GFM', () => {
+    const t = [
+      '│ Repo    │ PR   │',
+      '│ backend │ #541 │'
+    ].join('\n')
+    expect(terminalToMarkdown(t)).toBe(
+      '| Repo | PR |\n| --- | --- |\n| backend | #541 |'
+    )
+  })
+
+  it('returns the text unchanged when there is no table', () => {
+    expect(terminalToMarkdown('  plain line  ')).toBe('plain line')
   })
 })

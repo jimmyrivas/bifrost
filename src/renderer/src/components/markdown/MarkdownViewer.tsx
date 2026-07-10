@@ -1,7 +1,15 @@
 import { useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { Loader2, AlertTriangle, Copy, Check, FileText, ClipboardCopy, Sheet } from 'lucide-react'
+import {
+  Loader2,
+  AlertTriangle,
+  Copy,
+  FileText,
+  ClipboardCopy,
+  Sheet,
+  ChevronDown
+} from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -17,6 +25,14 @@ import {
   ContextMenuShortcut,
   ContextMenuTrigger
 } from '@renderer/components/ui/context-menu'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from '@renderer/components/ui/dropdown-menu'
 import { ScrollArea } from '@renderer/components/ui/scroll-area'
 import { useMarkdownViewerStore } from '@renderer/stores/markdownViewer.store'
 import { domToMarkdown, tablesToCsv, textToCsv } from '@renderer/lib/markdown-clip'
@@ -43,7 +59,6 @@ export function MarkdownViewer(): JSX.Element {
   const truncated = useMarkdownViewerStore((s) => s.truncated)
   const close = useMarkdownViewerStore((s) => s.close)
 
-  const [copied, setCopied] = useState(false)
   const [flash, setFlash] = useState<string | null>(null)
 
   // Rendered container + the selection captured when the context menu opens.
@@ -55,13 +70,6 @@ export function MarkdownViewer(): JSX.Element {
     navigator.clipboard.writeText(text).then(() => {
       setFlash(label)
       setTimeout(() => setFlash(null), 1400)
-    }).catch(() => { /* clipboard denied */ })
-  }
-
-  const onCopy = (): void => {
-    navigator.clipboard.writeText(content).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
     }).catch(() => { /* clipboard denied */ })
   }
 
@@ -96,6 +104,15 @@ export function MarkdownViewer(): JSX.Element {
     write(csv, 'Copied as CSV')
   }
 
+  // Header dropdown always operates on the whole document (ignores any
+  // right-click selection, which lives in selectionRef).
+  const copyDocPlain = (): void => write(bodyRef.current?.innerText ?? content, 'Copied')
+  const copyDocMarkdown = (): void => write(content, 'Copied as Markdown')
+  const copyDocCsv = (): void => {
+    const csv = (bodyRef.current && tablesToCsv(bodyRef.current)) || textToCsv(bodyRef.current?.innerText ?? '')
+    write(csv, 'Copied as CSV')
+  }
+
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) close() }}>
       <DialogContent className="max-w-none w-[80vw] h-[80vh] p-0 grid-rows-[auto_1fr] gap-0 overflow-hidden">
@@ -113,14 +130,34 @@ export function MarkdownViewer(): JSX.Element {
             </p>
           </div>
           {status === 'ready' && (
-            <button
-              type="button"
-              onClick={onCopy}
-              className="mr-8 flex items-center gap-1 rounded-[var(--radius)] px-2 py-1 text-[10px] text-[var(--on-surface-variant)] hover:bg-[var(--surface-bright)] hover:text-[var(--on-surface)]"
-            >
-              {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-              {copied ? 'Copied' : 'Copy'}
-            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="mr-8 flex items-center gap-1 rounded-[var(--radius)] px-2 py-1 text-[10px] text-[var(--on-surface-variant)] hover:bg-[var(--surface-bright)] hover:text-[var(--on-surface)]"
+                >
+                  <Copy className="h-3 w-3" />
+                  Copy
+                  <ChevronDown className="h-3 w-3 opacity-70" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-[13rem]">
+                <DropdownMenuLabel>Copy document</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={copyDocPlain}>
+                  <Copy className="mr-2 h-3.5 w-3.5" />
+                  Copy as text
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={copyDocMarkdown}>
+                  <ClipboardCopy className="mr-2 h-3.5 w-3.5" />
+                  Copy as Markdown
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={copyDocCsv}>
+                  <Sheet className="mr-2 h-3.5 w-3.5" />
+                  Copy as CSV
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
         </DialogHeader>
 

@@ -25,8 +25,15 @@ selection or the whole content closes that gap.
   operate on the Markdown source; copy-as-CSV parses GFM tables directly from the
   source text (header row + `---` separator). This applies to both the docked panel
   and the detached window (which reuses `AIAssistant`).
+- **Terminal** (selection is plain text, tables arrive as pipe- or box-drawing-
+  bordered rows): the terminal context menu gains Copy as Markdown / Copy as CSV.
+  A `parseDelimitedTable` helper reconstructs the grid — splitting on `|`, `│`,
+  `┃`, `║`, dropping border and GFM separator rows — then emits CSV or a clean
+  GFM table, falling back to whitespace-aligned columns / the raw text when the
+  selection is not a table.
 - Add a shared, dependency-free converter helper `markdown-clip.ts`
-  (`domToMarkdown`, `tablesToCsv`, `textToCsv`, `markdownToCsv`, `csvEscape`). No
+  (`domToMarkdown`, `tablesToCsv`, `textToCsv`, `markdownToCsv`, `csvEscape`,
+  `parseDelimitedTable`, `terminalToCsv`, `terminalToMarkdown`). No
   HTML-to-Markdown library was available in the project, so the DOM walker and the
   Markdown-source table parser are implemented in-repo. CSV output follows RFC 4180
   quoting; when a scope has no table, CSV falls back to treating whitespace/tab
@@ -40,6 +47,9 @@ selection or the whole content closes that gap.
   Markdown / CSV, over selection or whole document).
 - `ai-assistant`: gains a copy-formats requirement (context menu on assistant
   responses → plain text / Markdown / CSV, over selection or whole message).
+- `terminal-ui`: the terminal context menu gains Copy as Markdown / Copy as CSV
+  over the current selection, reconstructing pipe- or box-drawing-bordered
+  tables from the plain-text selection.
 
 ## Impact
 
