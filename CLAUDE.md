@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Bifrost is a modern connection manager for Linux (Windows compat in progress), the spiritual successor to Ásbrú Connection Manager. It targets sysadmins, DevOps, and DevSecOps managing dozens to hundreds of remote servers. Current release: **v0.2.0**. Feature coverage tracked in `docs/STATUS.md` (~107 planned features).
+Bifrost is a modern connection manager for Linux (Windows compat in progress), the spiritual successor to Ásbrú Connection Manager. It targets sysadmins, DevOps, and DevSecOps managing dozens to hundreds of remote servers. Current release: **v0.3.x**. Source of truth for features: `openspec/specs/` (capability specs) and `docs/guide/` (verified user guide); the README's tiered Features section is audit-verified — never claim a feature works without a UI → IPC → main path.
 
 **License**: GPL-3.0-or-later | **Repo**: https://gitlab.com/jimmy.rivas/bifrost
 
@@ -173,10 +173,9 @@ Full spec in `docs/reference/DESIGN.md`. Hard rules:
 
 ## Reference Docs
 
-- `docs/prompt.md` — Original architectural spec (Ásbrú successor vision)
-- `docs/IMPLEMENTATION_PLAN.md` — 107-feature plan (Tabby + Ásbrú + DevOps analysis)
-- `docs/STATUS.md` — Feature-by-feature implementation status
-- `docs/COMPLETION_PLAN.md` — Remaining work toward 1.0
+- `docs/guide/` — User guide (EN + `es/`), verified against the code — keep EN/ES in sync
+- `openspec/specs/` — Capability specifications; `openspec/changes/` — in-flight changes
+- `docs/archive/` — Historical planning docs (prompt, 107-feature plan, old status tracker) — do NOT treat as current
 - `docs/reference/DESIGN.md` — Spectral Command design system
 - `docs/MCP_SERVER_PLAN.md`, `docs/MCP_ARCHITECTURE.md` — MCP server design + decisions
 - `docs/PLUGIN_API.md`, `docs/PLUGIN_DEV_GUIDE.md` — Plugin system (examples in `examples/`)

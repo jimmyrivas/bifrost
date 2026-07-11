@@ -47,14 +47,15 @@ Drizzle ORM · pnpm 10.x · Vitest + Playwright.
 ## How These Specs Were Captured
 
 These specs baseline the **implemented** behavior as of v0.2.0 (commit `9238c5d`),
-grounded in `docs/STATUS.md` (~107-feature tracker, 91% done) and the source tree.
-Features marked pending in STATUS.md (Explode/Combine tabs, Zmodem, plugin system UI,
-FTP/3270/VNC/WebDAV protocols, PCC auto-save/highlighting) are intentionally **out of
-scope** of these specs until implemented.
+originally grounded in the (now archived) `docs/archive/STATUS.md` tracker and the
+source tree. A 2026-07-10 code audit showed that tracker overstated completion —
+treat the specs as requirements and verify implementation claims against the code
+(a feature counts only with a full UI → IPC → main path). Not-yet-implemented
+features are intentionally **out of scope** of these specs until implemented.
 
 ## Reference Docs
 
-`docs/STATUS.md` (feature status) · `docs/IMPLEMENTATION_PLAN.md` (107-feature plan) ·
-`docs/reference/DESIGN.md` (design system) · `docs/MCP_ARCHITECTURE.md` ·
-`docs/PLUGIN_API.md` · `docs/SECURITY_AUDIT.md` · `docs/WINDOWS_COMPAT_PLAN.md` ·
-`CLAUDE.md` (authoritative gotchas).
+`docs/guide/` (verified user guide, EN/ES) · `docs/reference/DESIGN.md` (design
+system) · `docs/MCP_ARCHITECTURE.md` · `docs/PLUGIN_API.md` ·
+`docs/SECURITY_AUDIT.md` · `docs/WINDOWS_COMPAT_PLAN.md` · `CLAUDE.md`
+(authoritative gotchas) · `docs/archive/` (historical planning docs — not current).

@@ -1,3 +1,5 @@
+> **⚠️ Archived (2026-07-11).** Historical planning document — not an accurate description of the current app. See [docs/guide](../guide/README.md) and [openspec/specs](../../openspec/specs/) for the verified state.
+
 # Bifrost — Plan de Implementación Detallado
 
 ## Análisis de Referencia
