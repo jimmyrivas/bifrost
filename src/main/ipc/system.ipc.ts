@@ -1,6 +1,7 @@
-import { ipcMain, dialog, BrowserWindow } from 'electron'
+import { ipcMain, dialog, shell, BrowserWindow } from 'electron'
 import { createSocket } from 'dgram'
 import { sessionLogger } from '../services/session-logger'
+import { getRecordingsDir } from '../services/session-recorder'
 import { keepassBridge, type KeePassConfig } from '../services/keepass-bridge'
 import { connectionHealthMonitor } from '../services/connection-health'
 
@@ -59,6 +60,21 @@ export function registerSystemIpc(): void {
 
   ipcMain.handle('system:getLogDir', () => {
     return sessionLogger.getLogDir()
+  })
+
+  ipcMain.handle('system:getRecordingsDir', () => {
+    return getRecordingsDir()
+  })
+
+  // Open a folder/file in the OS default handler; returns '' on success or an
+  // error string (shell.openPath resolves to '' when it succeeds).
+  ipcMain.handle('system:openPath', async (_event, targetPath: string) => {
+    return shell.openPath(targetPath)
+  })
+
+  // Reveal a file in the OS file manager (highlights it inside its folder).
+  ipcMain.handle('system:revealPath', (_event, targetPath: string) => {
+    shell.showItemInFolder(targetPath)
   })
 
   // File dialogs for SFTP

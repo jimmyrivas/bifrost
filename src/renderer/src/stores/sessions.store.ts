@@ -6,6 +6,10 @@ export interface TerminalPane {
   id: string
   terminalId: string | null
   title: string
+  // One-shot: a still-live backend session id (e.g. `ssh:<id>` or a local PTY id)
+  // that this pane should ADOPT on mount instead of opening a fresh connection.
+  // Set only when recreating a tab on reattach; consumed once by useTerminal.
+  adoptSessionId?: string
   split?: {
     direction: SplitDirection
     panes: [TerminalPane, TerminalPane]
@@ -44,7 +48,7 @@ interface SessionsState {
   maxReconnectAttempts: number
   maximizedPaneId: string | null
 
-  createTab: (title?: string, connectionId?: string, terminalStyle?: TerminalStyle, shell?: string, shellArgs?: string[]) => string
+  createTab: (title?: string, connectionId?: string, terminalStyle?: TerminalStyle, shell?: string, shellArgs?: string[], adoptSessionId?: string) => string
   closeTab: (tabId: string) => void
   setActiveTab: (tabId: string) => void
   renameTab: (tabId: string, title: string) => void
@@ -82,8 +86,8 @@ function newTabId(): string {
   return `tab-${++tabIdCounter}`
 }
 
-function createPane(title: string): TerminalPane {
-  return { id: newPaneId(), terminalId: null, title }
+function createPane(title: string, adoptSessionId?: string): TerminalPane {
+  return { id: newPaneId(), terminalId: null, title, adoptSessionId }
 }
 
 function findAndSplitPane(
@@ -184,13 +188,13 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
   _detachingTabs: new Set<string>(),
   sftpOpenTabIds: [] as string[],
 
-  createTab: (title?: string, connectionId?: string, terminalStyle?: TerminalStyle, shell?: string, shellArgs?: string[]) => {
+  createTab: (title?: string, connectionId?: string, terminalStyle?: TerminalStyle, shell?: string, shellArgs?: string[], adoptSessionId?: string) => {
     const tabId = newTabId()
     const label = title ?? `Terminal ${tabIdCounter}`
     const tab: Tab = {
       id: tabId,
       title: label,
-      rootPane: createPane(label),
+      rootPane: createPane(label, adoptSessionId),
       isActive: true,
       connectionId: connectionId ?? null,
       lockTitle: false,

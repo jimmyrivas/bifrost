@@ -80,6 +80,7 @@ export function TerminalPane({ pane, tabId, connectionId, terminalStyle, shell, 
       terminalStyle={terminalStyle}
       shell={shell}
       shellArgs={shellArgs}
+      adoptSessionId={pane.adoptSessionId}
       onTerminalCreated={(terminalId) => setTerminalId(tabId, pane.id, terminalId)}
     />
   )

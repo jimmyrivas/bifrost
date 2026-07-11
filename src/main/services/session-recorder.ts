@@ -46,7 +46,7 @@ interface ActiveRecording {
 
 const activeRecordings = new Map<string, ActiveRecording>()
 
-function getRecordingsDir(): string {
+export function getRecordingsDir(): string {
   const dir = join(app.getPath('userData'), 'recordings')
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true })

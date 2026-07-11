@@ -15,6 +15,7 @@ import {
   detectShells,
   type ShellInfo
 } from '../services/platform'
+import { sessionLogger } from '../services/session-logger'
 
 interface PtySession {
   process: pty.IPty
@@ -50,12 +51,17 @@ export function registerTerminalIpc(mainWindow: BrowserWindow): void {
     ptyProcess.onData((data: string) => {
       bufferOutput(id, data)
       sendToOwner(id, 'terminal:data', id, data)
+      // Feed an active session log (no-op when logging isn't started for this
+      // terminal) — SSH output is fed the same way in ssh.ipc.ts.
+      sessionLogger.write(id, data)
     })
 
     ptyProcess.onExit(({ exitCode }) => {
       sessions.delete(id)
       sendToOwner(id, 'terminal:exit', id, exitCode)
       removeOwner(id)
+      // Close out an active session log (no-op when none is active).
+      sessionLogger.stopLogging(id)
     })
 
     // Owner = the window that created it

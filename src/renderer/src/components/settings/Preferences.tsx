@@ -12,7 +12,6 @@ import { PluginManager } from './PluginManager'
 import { KeyBindings } from './KeyBindings'
 import { KnownHostsPanel } from './KnownHostsPanel'
 import { MultiplexerPanel } from '@renderer/components/connections/MultiplexerPanel'
-import { setSecretRedactionEnabled, isSecretRedactionEnabled } from '@renderer/lib/secret-redactor'
 
 type PrefsTab = 'terminal' | 'ai' | 'ssh' | 'security' | 'keybindings' | 'language' | 'network' | 'keepass' | 'sync' | 'plugins' | 'mcp'
 
@@ -252,6 +251,9 @@ export function Preferences(): JSX.Element {
                 onChange={setLocalMultiplexer}
               />
             </div>
+            <div className={sectionCard}>
+              <SessionCaptureSection />
+            </div>
           </div>
         )}
 
@@ -313,8 +315,8 @@ export function Preferences(): JSX.Element {
                   <label className="flex items-center justify-between cursor-pointer">
                     <span className="text-xs text-[var(--on-surface-variant)]">Redact secrets in terminal output</span>
                     <Switch
-                      checked={isSecretRedactionEnabled()}
-                      onCheckedChange={(v) => setSecretRedactionEnabled(v)}
+                      checked={terminal.secretRedactionEnabled}
+                      onCheckedChange={(v) => setTerminalPref('secretRedactionEnabled', v)}
                     />
                   </label>
                 </div>
@@ -395,6 +397,75 @@ export function Preferences(): JSX.Element {
           <McpSettingsPanel />
         )}
       </div>
+    </div>
+  )
+}
+
+/** Read-only utility surface: shows where session recordings and logs live and opens them. */
+function SessionCaptureSection(): JSX.Element {
+  const [recordingsDir, setRecordingsDir] = useState<string | null>(null)
+  const [logDir, setLogDir] = useState<string | null>(null)
+  const [openError, setOpenError] = useState<string | null>(null)
+
+  useEffect(() => {
+    window.bifrost?.system?.getRecordingsDir?.().then(setRecordingsDir).catch(() => {})
+    window.bifrost?.system?.getLogDir?.().then(setLogDir).catch(() => {})
+  }, [])
+
+  const openFolder = useCallback(async (dir: string | null) => {
+    if (!dir) return
+    setOpenError(null)
+    try {
+      const result = await window.bifrost?.system?.openPath?.(dir)
+      if (result) setOpenError(result)
+    } catch (err) {
+      setOpenError((err as Error).message)
+    }
+  }, [])
+
+  const pathRow = (
+    label: string,
+    dir: string | null
+  ): JSX.Element => (
+    <div>
+      <label className={fieldLabel}>{label}</label>
+      <div className="flex gap-2">
+        <div className="flex-1 min-w-0 flex h-9 items-center rounded-[var(--radius)] bg-[var(--surface-container-highest)] px-3 text-xs text-[var(--on-surface)] [font-family:var(--font-mono)]">
+          <span className="truncate" title={dir ?? undefined}>
+            {dir ?? 'Resolving…'}
+          </span>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!dir}
+          onClick={() => openFolder(dir)}
+        >
+          Open
+        </Button>
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="flex flex-col gap-4">
+      <h4 className="text-xs font-semibold text-[var(--on-surface)] uppercase tracking-wider">
+        Session Capture
+      </h4>
+      <p className="text-[10px] text-[var(--on-surface-variant)]">
+        Session <span className="text-[var(--on-surface)]">recordings</span> are asciicast{' '}
+        <code className="font-mono bg-[var(--surface-container-highest)] px-1 rounded">.cast</code>{' '}
+        files you can replay with{' '}
+        <code className="font-mono bg-[var(--surface-container-highest)] px-1 rounded">asciinema play &lt;file&gt;</code>.
+        Session <span className="text-[var(--on-surface)]">logs</span> are plain-text transcripts of terminal
+        output. Both live under Bifrost&apos;s user-data folder. Recording is started per-session from the
+        terminal&apos;s right-click → Capture menu.
+      </p>
+      {pathRow('RECORDINGS FOLDER', recordingsDir)}
+      {pathRow('SESSION LOGS FOLDER', logDir)}
+      {openError && (
+        <span className="text-[9px] text-[#ef4444] block">Could not open folder: {openError}</span>
+      )}
     </div>
   )
 }

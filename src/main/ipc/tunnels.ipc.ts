@@ -170,9 +170,8 @@ export function registerTunnelsIpc(): void {
             const fwdId = await sshManager.addRemoteForward(sessionId, fwd.remotePort, 'localhost', fwd.localPort)
             results.push(`Remote :${fwd.remotePort} → localhost:${fwd.localPort} [${fwdId}]`)
           } else if (fwd.type === 'dynamic') {
-            // Dynamic/SOCKS is handled differently — ssh2 doesn't natively support SOCKS
-            // For now, mark as unsupported
-            results.push(`Dynamic :${fwd.localPort} (SOCKS — requires ssh -D flag)`)
+            const fwdId = await sshManager.addDynamicForward(sessionId, fwd.localPort)
+            results.push(`Dynamic SOCKS5 :${fwd.localPort} [${fwdId}]`)
           }
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err)
@@ -324,6 +323,8 @@ export async function autoStartTunnels(): Promise<void> {
           await sshManager.addLocalForward(sessionId, fwd.localPort, fwd.remoteHost, fwd.remotePort)
         } else if (fwd.type === 'remote' && fwd.remotePort) {
           await sshManager.addRemoteForward(sessionId, fwd.remotePort, 'localhost', fwd.localPort)
+        } else if (fwd.type === 'dynamic') {
+          await sshManager.addDynamicForward(sessionId, fwd.localPort)
         }
       }
       activeTunnels.set(tunnel.id, { sessionId, startedAt: Date.now() })

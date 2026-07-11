@@ -4,7 +4,7 @@ import { DetachedTerminal } from '@renderer/components/terminal/DetachedTerminal
 import { DetachedAIAssistant } from '@renderer/components/terminal/DetachedAIAssistant'
 import { MarkdownViewer } from '@renderer/components/markdown/MarkdownViewer'
 import { RestoreSessionPrompt } from '@renderer/components/layout/RestoreSessionPrompt'
-import { useSessionsStore } from '@renderer/stores/sessions.store'
+import { useSessionsStore, type Tab } from '@renderer/stores/sessions.store'
 import { useMarkdownViewerStore } from '@renderer/stores/markdownViewer.store'
 import { usePreferencesStore } from '@renderer/stores/preferences.store'
 import { readManifest, writeManifest, deriveManifest } from '@renderer/lib/session-manifest'
@@ -39,6 +39,12 @@ export function App(): JSX.Element {
   const pendingChordRef = useRef<string | null>(null)
   const chordTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Rolling snapshot of every tab's latest state, keyed by tab id. The tab-reattach
+  // IPC event carries only the tabId, and detach removes the tab from the store
+  // before we ever see the event — so we stash each tab's last-known shape here
+  // (title, connectionId, styling, shell, live terminalId) to reconstruct it later.
+  const tabSnapshotsRef = useRef<Map<string, Tab>>(new Map())
+
   // Session restore: read the previous session's manifest once, before any tab is
   // created, so the restore prompt can offer it and persistence can't overwrite it first.
   const [restoreManifest] = useState(() => (isMainWindow ? readManifest() : { tabs: [], activeIndex: 0 }))
@@ -71,6 +77,49 @@ export function App(): JSX.Element {
     // Vanilla store subscription (not a React selector) — no re-render loop.
     return useSessionsStore.subscribe(persist)
   }, [isMainWindow, restoreDecided])
+
+  // Keep the tab snapshot map fed. Every store mutation notifies while a tab is
+  // still alive (createTab, setTerminalId, renameTab, …), so by detach time we
+  // already hold that tab's full shape. We never delete on close, so a detached
+  // tab's snapshot survives the closeTab() that detach performs. Vanilla
+  // subscription (not a selector) — no re-render loop.
+  useEffect(() => {
+    if (!isMainWindow) return
+    const capture = (): void => {
+      for (const tab of useSessionsStore.getState().tabs) {
+        tabSnapshotsRef.current.set(tab.id, tab)
+      }
+    }
+    capture()
+    return useSessionsStore.subscribe(capture)
+  }, [isMainWindow])
+
+  // Tab reattach (#72): when a detached terminal window closes, the main process
+  // fires window:tabReattached with the tabId. Nobody used to listen, so the tab
+  // was lost forever. Recreate it from the snapshot and hand the still-live
+  // session id to useTerminal, which ADOPTS it (reclaims ownership, replays the
+  // buffer, wires I/O to the existing PTY/SSH) instead of reconnecting.
+  useEffect(() => {
+    if (!isMainWindow || !window.bifrost?.window?.onTabReattached) return
+    const off = window.bifrost.window.onTabReattached((tabId: string) => {
+      const snap = tabSnapshotsRef.current.get(tabId)
+      if (!snap) return
+      tabSnapshotsRef.current.delete(tabId)
+
+      // Bring the tab back with its original title, connection, styling and shell;
+      // the last arg is the live session to adopt (see useTerminal adoptSession).
+      const newTabId = createTab(
+        snap.title,
+        snap.connectionId ?? undefined,
+        snap.terminalStyle,
+        snap.shell,
+        snap.shellArgs,
+        snap.rootPane.terminalId ?? undefined
+      )
+      if (snap.lockTitle) useSessionsStore.getState().toggleLockTitle(newTabId)
+    })
+    return off
+  }, [isMainWindow, createTab])
 
   const handleRestore = useCallback(async () => {
     for (let i = 0; i < restoreManifest.tabs.length; i++) {

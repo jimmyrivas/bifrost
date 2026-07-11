@@ -29,6 +29,10 @@ experience.
 > known gaps are listed under [limitations](#known-limitations-alpha). If you find
 > a claim here that isn't true, that's a bug — please open an issue.
 
+📖 **User guide**: [docs/guide](docs/guide/README.md) — chapter-by-chapter documentation
+derived from the project's OpenSpec capability specs and verified against the code
+(also [en español](docs/guide/es/README.md)).
+
 ## Features
 
 ### Connections & organization
@@ -49,7 +53,8 @@ experience.
 - **Copy as CSV / Markdown**: right-click any selection — ASCII-pipe, GFM, and box-drawing tables (`psql`, MySQL, etc.) are reconstructed into RFC 4180 CSV or clean Markdown; works in the terminal, the Markdown viewer, and AI responses
 - Paste an image from the clipboard straight to the server (Ctrl+Shift+I): uploaded via SFTP (jump chains included), path typed into the terminal, cleaned up on exit
 - ~50 built-in color schemes, per-connection scheme and background tint (production = red, staging = green), dynamic tab titles (OSC 0/2) with title lock
-- Detach a tab to its own window (the live session moves with it)
+- Detach a tab to its own window — and reattach it back, keeping the same live session (scrollback and running process intact)
+- Find in terminal (`Ctrl+Shift+F` or context menu) with highlighted matches; Clear/Reset terminal actions
 - Terminal screenshot to PNG, F11 fullscreen, idle-completion desktop notification
 - Error detection badges on failed commands, AI "Explain Command" on any selection, idle-session AI summary you can save as a note
 
@@ -64,7 +69,7 @@ experience.
 - TOTP/2FA: store a Base32 secret per connection and Bifrost auto-types the code when a verification prompt appears in the session
 - Host-key verification (TOFU, SHA-256 fingerprints) with a known-hosts management panel in Settings
 - **Jump-host chains** (multi-hop ProxyJump) with a visual chain editor — used by SSH, Mosh, and tunnels; inline hop passwords are encrypted at rest
-- **Tunnels**: local and remote port forwarding with a full manager UI, per-tunnel credentials, and auto-start on launch
+- **Tunnels**: local, remote, and **dynamic (SOCKS5)** port forwarding with a full manager UI, per-tunnel credentials, and auto-start on launch
 - **Mosh** as a first-class connection method (spawned via PTY, jump chains supported)
 
 ### SFTP & files
@@ -77,10 +82,13 @@ experience.
 - **Scripts**: sandboxed JavaScript (isolated worker) with `send`/`log`/`sleep`, editable in-app, run against the live terminal from the context menu
 - Snippet browser with categories, search, copy or run-in-terminal, `{{param}}` prompts
 - Variable expansion (`<IP>`, `<USER>`, `<ENV:name>`, `<GV:name>`, dates) in tab titles and remote commands
+- **Pre/post-connection hooks**: commands stored on a connection run locally on connect/disconnect, with optional per-command confirmation — every execution is audit-logged
 
 ### Observability & security
-- Append-only audit log (JSON Lines) of connections and credential events — it also powers the per-connection statistics
-- Secret redaction filter for terminal output (session toggle in Settings)
+- **Session recording** (asciicast v2 `.cast`, input + output) from the terminal's Capture menu: pulsing red dot on the tab, a blinking REC indicator in the status bar, stop-toast with the file path, and a Recordings manager (play command, reveal, delete) — replay with `asciinema play`
+- **Session logs**: plain-text transcripts per session (pattern-based file names), start/stop from the Capture menu, folders exposed in Preferences → Session Capture
+- Append-only audit log (JSON Lines) of connections, credential events, recording start/stop, and hook executions — it also powers the per-connection statistics
+- Secret redaction filter for terminal output (Settings toggle, persisted across restarts; off by default)
 - Encrypted credential storage throughout: connections, tunnels, and jump hops
 - Session idle detection with AI summaries; desktop notifications when long-running commands finish
 
@@ -90,7 +98,7 @@ experience.
 - **MCP server** for AI agents (e.g. Claude): **42 tools, 9 resources, 8 prompt templates**, stdio or HTTP with Bearer auth, destructive-command filtering, read-only DB access — see [`docs/MCP_ARCHITECTURE.md`](docs/MCP_ARCHITECTURE.md)
 
 ### App shell
-- Command palette (Ctrl+K) over connections and commands; a fixed set of global shortcuts including chords (Ctrl+K, then S/P/W)
+- Command palette (Ctrl+K) over connections and commands; a fixed set of global shortcuts
 - Plugin system: install/enable/disable npm-packaged plugins from Settings, against a documented hooks API ([`docs/PLUGIN_API.md`](docs/PLUGIN_API.md))
 - Config sync via git: export/import/sync your configuration to a repository you point it at
 - Window-state persistence, system tray, "Spectral Command" design system ([`docs/reference/DESIGN.md`](docs/reference/DESIGN.md))
@@ -111,20 +119,16 @@ They are the top of the roadmap, and each is a well-scoped contribution:
 - **Clusters**: persistent cluster backend (create/members/broadcast) — the current panel is a visual draft not yet wired to it
 - **Global variables editor** (the `<GV:>` resolver works; there's no UI to define them)
 - **Advanced SSH options plumb-through**: X11 forwarding, HTTP proxy, agent forwarding, cipher/KEX/MAC selection — the form saves them, the connect path must consume them
-- **Session file logging** (pattern-based `.log` writer) and **vault re-encryption**
+- **Vault re-encryption** (change the vault password over existing secrets)
 - Database encryption at rest (AES-256-GCM, needs the decrypt-on-startup half + UI)
 
 ## Known limitations (alpha)
 
-- Tab **detach** works; **reattach** doesn't yet (the detached window's session survives, but the main window doesn't reclaim it)
-- **Session recording** produces asciicast files without payload yet (header only) — don't rely on it
-- Pre/post-connection **hooks**: the editor saves them, but they are not executed on connect yet
-- **Find in terminal**, Clear/Reset terminal menu items, and keyboard pane-resize are not wired yet
-- **Dynamic (SOCKS) tunnels** are declared but not forwarded (local/remote work)
+- **Keyboard pane-resize** shortcuts are not wired yet (resize via splits/maximize)
 - **Zmodem** sz/rz is detected and redirects you to SFTP — no in-terminal transfer
 - **FIDO2** tab exists but ssh2 cannot yet use sk-keys directly (works only through ssh-agent)
 - Custom **keybindings editor** doesn't yet override the built-in shortcuts; tray connection menus are empty
-- Secret redaction is **off by default** and resets per session
+- **Session recording** covers SSH sessions only (local/mosh panes show the option disabled)
 
 ## Roadmap
 

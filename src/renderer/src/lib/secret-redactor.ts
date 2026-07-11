@@ -6,6 +6,8 @@
  * private keys, generic secrets in env-like assignments.
  */
 
+import { usePreferencesStore } from '@renderer/stores/preferences.store'
+
 const SECRET_PATTERNS: Array<{ name: string; regex: RegExp; replacement: string }> = [
   // AWS Access Key IDs
   { name: 'aws-key', regex: /\b(AKIA[0-9A-Z]{16})\b/g, replacement: 'AKIA****************' },
@@ -34,10 +36,21 @@ const SECRET_PATTERNS: Array<{ name: string; regex: RegExp; replacement: string 
   { name: 'hex-secret', regex: /((?:key|token|secret|hash)\s*[=:]\s*)([0-9a-f]{32,})/gi, replacement: '$1[REDACTED]' }
 ]
 
-let enabled = false
+/**
+ * Redaction state is persisted in the preferences store (a terminal
+ * preference), so the toggle survives restarts and is initialized on startup
+ * from the loaded value. We cache the flag locally — kept in sync with the
+ * store — so `redactSecrets` (called on every terminal data chunk) avoids a
+ * store read per write.
+ */
+let enabled = usePreferencesStore.getState().terminal.secretRedactionEnabled
+
+usePreferencesStore.subscribe((state) => {
+  enabled = state.terminal.secretRedactionEnabled
+})
 
 export function setSecretRedactionEnabled(value: boolean): void {
-  enabled = value
+  usePreferencesStore.getState().setTerminalPref('secretRedactionEnabled', value)
 }
 
 export function isSecretRedactionEnabled(): boolean {

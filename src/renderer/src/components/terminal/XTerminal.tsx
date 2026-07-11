@@ -21,10 +21,24 @@ interface XTerminalProps {
   terminalStyle?: TerminalStyle
   shell?: string
   shellArgs?: string[]
+  adoptSessionId?: string
   onTerminalCreated?: (terminalId: string) => void
 }
 
-export function XTerminal({ paneId, tabId, connectionId, terminalStyle, shell, shellArgs, onTerminalCreated }: XTerminalProps): JSX.Element {
+export function XTerminal({ paneId, tabId, connectionId, terminalStyle, shell, shellArgs, adoptSessionId, onTerminalCreated }: XTerminalProps): JSX.Element {
+  // State mirror of the live terminal id. terminalIdRef alone can't drive the
+  // data-terminal-id DOM attribute reliably — a ref update doesn't re-render,
+  // so consumers reading the attribute (context menu, scripts, recording)
+  // could see a stale empty value depending on render timing.
+  const [liveTerminalId, setLiveTerminalId] = useState<string | null>(null)
+  const handleTerminalCreated = useCallback(
+    (terminalId: string) => {
+      setLiveTerminalId(terminalId)
+      onTerminalCreated?.(terminalId)
+    },
+    [onTerminalCreated]
+  )
+
   const {
     containerRef,
     terminalIdRef,
@@ -43,7 +57,8 @@ export function XTerminal({ paneId, tabId, connectionId, terminalStyle, shell, s
     terminalStyle,
     shell,
     shellArgs,
-    onTerminalCreated
+    adoptSessionId,
+    onTerminalCreated: handleTerminalCreated
   })
 
   // Update tab title from OSC sequences (#8)
@@ -103,6 +118,23 @@ export function XTerminal({ paneId, tabId, connectionId, terminalStyle, shell, s
       paneEl.dispatchEvent(new CustomEvent('terminal:toggle-search'))
     }
   }, [paneId])
+
+  // Ctrl+Shift+F opens Find in the FOCUSED pane. Plain Ctrl+F is left for the
+  // shell (readline forward-char), matching terminal-emulator convention.
+  // Document-level listener gated on focus containment so split panes don't
+  // all open their search bars at once.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (!e.ctrlKey || !e.shiftKey || e.key.toLowerCase() !== 'f') return
+      const paneEl = document.querySelector(`[data-pane-id="${paneId}"]`)
+      if (paneEl && document.activeElement && paneEl.contains(document.activeElement)) {
+        e.preventDefault()
+        handleFindToggle()
+      }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [paneId, handleFindToggle])
 
   // ── Idle session summary ──────────────────────────────────────────────────
   // Surfaces only when an idle session has meaningful output; shows briefly then
@@ -341,7 +373,7 @@ export function XTerminal({ paneId, tabId, connectionId, terminalStyle, shell, s
         ref={containerRef}
         className="xterm-container w-full h-full"
         data-pane-id={paneId}
-        data-terminal-id={terminalIdRef.current ?? ''}
+        data-terminal-id={liveTerminalId ?? terminalIdRef.current ?? ''}
       />
       {showSearch && (
         <TerminalSearchBar paneId={paneId} onClose={() => setShowSearch(false)} />
@@ -448,10 +480,17 @@ function TerminalSearchBar({
     [paneId]
   )
 
+  // Closing the bar also clears the addon's match decorations (empty query).
+  const handleClose = useCallback(() => {
+    const paneEl = document.querySelector(`[data-pane-id="${paneId}"]`)
+    paneEl?.dispatchEvent(new CustomEvent('terminal:search', { detail: '' }))
+    onClose()
+  }, [paneId, onClose])
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose()
+        handleClose()
       } else if (e.key === 'Enter') {
         const paneEl = document.querySelector(`[data-pane-id="${paneId}"]`)
         if (paneEl) {
@@ -461,7 +500,7 @@ function TerminalSearchBar({
         }
       }
     },
-    [paneId, onClose]
+    [paneId, handleClose]
   )
 
   return (
@@ -476,7 +515,7 @@ function TerminalSearchBar({
         autoFocus
       />
       <button
-        onClick={onClose}
+        onClick={handleClose}
         className="text-[#c7c4d7]/50 hover:text-[#e6e1e5] transition-colors p-0.5"
         aria-label="Close search"
       >

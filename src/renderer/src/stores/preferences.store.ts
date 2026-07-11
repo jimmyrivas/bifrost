@@ -32,6 +32,9 @@ export interface TerminalPreferences {
   markdownMaxBytes: number
   /** Width of the docked AI Assistant side panel, in pixels (clamped 280–720). */
   aiPanelWidthPx: number
+  /** Mask secrets (API keys, tokens, passwords) in terminal output. Persisted
+   *  so the toggle survives restarts. Consumed by the secret-redactor. */
+  secretRedactionEnabled: boolean
 }
 
 /** Min/max bounds for the AI Assistant panel width (px). */
@@ -75,7 +78,8 @@ const defaultTerminal: TerminalPreferences = {
   markdownLinksEnabled: true,
   markdownLinkActivation: 'ctrl-click',
   markdownMaxBytes: 2_000_000,
-  aiPanelWidthPx: 320
+  aiPanelWidthPx: 320,
+  secretRedactionEnabled: false
 }
 
 const defaultLocalMultiplexer: MultiplexerConfig = {
@@ -130,6 +134,12 @@ export function migratePreferences(
       extraArgs: state.localMultiplexer.extraArgs ?? ''
     }
   }
+  // v8: secret-redaction toggle moved from ephemeral module state to a
+  // persisted terminal preference. Backfill the default (off) so the loaded
+  // value gates redaction on startup.
+  if (version < 8) {
+    state.terminal = { ...defaultTerminal, ...(state.terminal ?? {}) }
+  }
   return state as PreferencesState
 }
 
@@ -155,7 +165,7 @@ export const usePreferencesStore = create<PreferencesState>()(
     }),
     {
       name: 'bifrost-preferences',
-      version: 7,
+      version: 8,
       migrate: migratePreferences
     }
   )

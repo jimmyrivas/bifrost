@@ -29,6 +29,10 @@ con una experiencia de terminal moderna.
 > y los huecos conocidos están en [limitaciones](#limitaciones-conocidas-alpha).
 > Si encuentras aquí una afirmación que no sea cierta, es un bug — abre un issue.
 
+📖 **Guía de usuario**: [docs/guide/es](docs/guide/es/README.md) — documentación capítulo
+a capítulo derivada de las especificaciones OpenSpec del proyecto y verificada contra el
+código (también [in English](docs/guide/README.md)).
+
 ## Features
 
 ### Conexiones y organización
@@ -49,7 +53,8 @@ con una experiencia de terminal moderna.
 - **Copiar como CSV / Markdown**: clic derecho en cualquier selección — tablas de pipes ASCII, GFM y bordes de caja (`psql`, MySQL, etc.) se reconstruyen como CSV RFC 4180 o Markdown limpio; funciona en el terminal, el visor Markdown y las respuestas de la IA
 - Pega una imagen del portapapeles directo al servidor (Ctrl+Shift+I): se sube por SFTP (jump chains incluidas), la ruta se escribe en el terminal y se limpia al salir
 - ~50 esquemas de color integrados, esquema y tinte de fondo por conexión (producción = rojo, staging = verde), títulos dinámicos (OSC 0/2) con bloqueo de título
-- Separa una pestaña a su propia ventana (la sesión viva se mueve con ella)
+- Separa una pestaña a su propia ventana — y reincorpórala manteniendo la misma sesión viva (scrollback y proceso en marcha intactos)
+- Buscar en el terminal (`Ctrl+Shift+F` o menú contextual) con coincidencias resaltadas; acciones Clear/Reset del terminal
 - Captura del terminal a PNG, pantalla completa F11, notificación de escritorio al terminar procesos largos
 - Badges de detección de errores en comandos fallidos, "Explain Command" con IA sobre cualquier selección, resumen IA de sesión inactiva guardable como nota
 
@@ -64,7 +69,7 @@ con una experiencia de terminal moderna.
 - TOTP/2FA: guarda un secreto Base32 por conexión y Bifrost teclea el código automáticamente cuando aparece un prompt de verificación en la sesión
 - Verificación de host keys (TOFU, huellas SHA-256) con panel de known hosts en Ajustes
 - **Cadenas de jump hosts** (ProxyJump multi-salto) con editor visual — usadas por SSH, Mosh y túneles; las contraseñas inline de los saltos se cifran en reposo
-- **Túneles**: reenvío de puertos local y remoto con UI completa de gestión, credenciales por túnel y autoarranque al iniciar
+- **Túneles**: reenvío de puertos local, remoto y **dinámico (SOCKS5)** con UI completa de gestión, credenciales por túnel y autoarranque al iniciar
 - **Mosh** como método de conexión de primera clase (via PTY, con jump chains)
 
 ### SFTP y archivos
@@ -77,10 +82,13 @@ con una experiencia de terminal moderna.
 - **Scripts**: JavaScript aislado (worker sandbox) con `send`/`log`/`sleep`, editable en la app, ejecutado contra el terminal vivo desde el menú contextual
 - Navegador de snippets con categorías, búsqueda, copiar o ejecutar en el terminal, prompts `{{param}}`
 - Expansión de variables (`<IP>`, `<USER>`, `<ENV:name>`, `<GV:name>`, fechas) en títulos de pestaña y comandos remotos
+- **Hooks pre/post-conexión**: comandos guardados en la conexión se ejecutan localmente al conectar/desconectar, con confirmación opcional por comando — cada ejecución queda en el log de auditoría
 
 ### Observabilidad y seguridad
-- Log de auditoría de solo anexado (JSON Lines) de conexiones y eventos de credenciales — también alimenta las estadísticas por conexión
-- Filtro de redacción de secretos en la salida del terminal (interruptor de sesión en Ajustes)
+- **Grabación de sesiones** (asciicast v2 `.cast`, entrada + salida) desde el menú Capture del terminal: punto rojo pulsante en la pestaña, indicador REC parpadeante en la barra de estado, aviso con la ruta al detener y un gestor de grabaciones (comando de reproducción, revelar, borrar) — reproduce con `asciinema play`
+- **Logs de sesión**: transcripciones en texto plano por sesión (nombres de archivo con patrones), iniciar/detener desde el menú Capture, carpetas expuestas en Preferencias → Session Capture
+- Log de auditoría de solo anexado (JSON Lines) de conexiones, eventos de credenciales, inicio/fin de grabaciones y ejecución de hooks — también alimenta las estadísticas por conexión
+- Filtro de redacción de secretos en la salida del terminal (interruptor en Ajustes, persistente entre reinicios; desactivado por defecto)
 - Almacenamiento cifrado de credenciales en todo el producto: conexiones, túneles y saltos
 - Detección de inactividad con resúmenes IA; notificaciones de escritorio al terminar comandos largos
 
@@ -90,7 +98,7 @@ con una experiencia de terminal moderna.
 - **Servidor MCP** para agentes IA (p. ej. Claude): **42 herramientas, 9 recursos, 8 plantillas de prompt**, stdio o HTTP con auth Bearer, filtro de comandos destructivos, acceso a BD de solo lectura — ver [`docs/MCP_ARCHITECTURE.md`](docs/MCP_ARCHITECTURE.md)
 
 ### Shell de la aplicación
-- Paleta de comandos (Ctrl+K) sobre conexiones y comandos; conjunto fijo de atajos globales incluyendo acordes (Ctrl+K, luego S/P/W)
+- Paleta de comandos (Ctrl+K) sobre conexiones y comandos; conjunto fijo de atajos globales
 - Sistema de plugins: instala/activa/desactiva plugins npm desde Ajustes, contra un API de hooks documentado ([`docs/PLUGIN_API.md`](docs/PLUGIN_API.md))
 - Sincronización de configuración vía git: exporta/importa/sincroniza tu configuración a un repositorio que tú indicas
 - Persistencia del estado de ventana, bandeja del sistema, sistema de diseño "Spectral Command" ([`docs/reference/DESIGN.md`](docs/reference/DESIGN.md))
@@ -111,20 +119,16 @@ Es lo primero de la hoja de ruta, y cada punto es una contribución bien acotada
 - **Clústeres**: backend persistente (crear/miembros/broadcast) — el panel actual es un borrador visual aún no conectado
 - **Editor de variables globales** (el resolutor `<GV:>` funciona; falta la UI para definirlas)
 - **Plomería de opciones SSH avanzadas**: reenvío X11, proxy HTTP, reenvío de agente, selección de cifrados/KEX/MACs — el formulario las guarda, falta que el connect las consuma
-- **Logs de sesión a archivo** (escritor `.log` con patrones) y **recifrado del vault**
+- **Recifrado del vault** (cambiar la contraseña del vault sobre los secretos existentes)
 - Cifrado de la base de datos en reposo (AES-256-GCM; falta la mitad de descifrado al arranque + UI)
 
 ## Limitaciones conocidas (alpha)
 
-- **Detach** de pestañas funciona; **reattach** todavía no (la sesión de la ventana separada sobrevive, pero la ventana principal no la recupera)
-- **La grabación de sesiones** produce archivos asciicast sin contenido aún (solo cabecera) — no confíes en ella
-- **Hooks** pre/post-conexión: el editor los guarda, pero aún no se ejecutan al conectar
-- **Buscar en terminal**, los ítems Clear/Reset del menú y el redimensionado de paneles por teclado no están conectados aún
-- **Túneles dinámicos (SOCKS)** se declaran pero no reenvían (local/remoto funcionan)
+- Los atajos de **redimensionado de paneles por teclado** no están conectados aún (redimensiona con splits/maximizar)
 - **Zmodem** sz/rz se detecta y te redirige a SFTP — no hay transferencia en el terminal
 - La pestaña **FIDO2** existe pero ssh2 aún no usa llaves sk directamente (solo funciona a través de ssh-agent)
 - El **editor de atajos** todavía no reemplaza los atajos integrados; los menús de conexiones de la bandeja están vacíos
-- La redacción de secretos está **desactivada por defecto** y se reinicia por sesión
+- La **grabación de sesiones** cubre solo sesiones SSH (en paneles locales/mosh la opción aparece deshabilitada)
 
 ## Hoja de ruta
 

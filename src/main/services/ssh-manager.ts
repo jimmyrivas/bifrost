@@ -52,7 +52,7 @@ export interface SshConnectionConfig {
 
 export interface PortForward {
   id: string
-  type: 'local' | 'remote'
+  type: 'local' | 'remote' | 'dynamic'
   localPort: number
   remoteHost: string
   remotePort: number
@@ -931,6 +931,161 @@ export class SshManager extends EventEmitter {
   }
 
   /**
+   * Create a dynamic (SOCKS5) port forward: listen on localPort as a SOCKS5
+   * proxy and tunnel each CONNECT through the SSH session via `forwardOut`.
+   *
+   * Implements a minimal SOCKS5 server (RFC 1928) with a plain `net` listener:
+   *   - method negotiation: only "no authentication required" (0x00)
+   *   - command: only CONNECT (0x01)
+   *   - address types: IPv4 (0x01), domain name (0x03), IPv6 (0x04)
+   * No external SOCKS dependency is used.
+   */
+  addDynamicForward(sessionId: string, localPort: number): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const session = sessions.get(sessionId)
+      if (!session) {
+        reject(new Error(`SSH session ${sessionId} not found`))
+        return
+      }
+
+      const fwdId = `fwd-${++forwardIdCounter}`
+
+      const server = createServer((socket) => {
+        // Swallow socket errors so peer aborts don't crash the main process.
+        socket.on('error', () => { /* ignore */ })
+
+        // Reply with a SOCKS5 failure status and tear the client socket down.
+        const failWith = (rep: number): void => {
+          try {
+            // VER, REP, RSV, ATYP=IPv4, BND.ADDR=0.0.0.0, BND.PORT=0
+            socket.write(Buffer.from([0x05, rep, 0x00, 0x01, 0, 0, 0, 0, 0, 0]))
+          } catch { /* ignore */ }
+          socket.destroy()
+        }
+
+        // Minimal SOCKS5 state machine. `phase` walks greeting → request → piping.
+        let phase: 'greeting' | 'request' = 'greeting'
+        let buf = Buffer.alloc(0)
+
+        const onData = (chunk: Buffer): void => {
+          buf = Buffer.concat([buf, chunk])
+
+          if (phase === 'greeting') {
+            // VER, NMETHODS, METHODS...
+            if (buf.length < 2) return
+            if (buf[0] !== 0x05) { socket.destroy(); return }
+            const nmethods = buf[1]
+            if (buf.length < 2 + nmethods) return
+            buf = buf.subarray(2 + nmethods)
+            // Select "no authentication required".
+            socket.write(Buffer.from([0x05, 0x00]))
+            phase = 'request'
+            // Fall through: request bytes may already be buffered.
+          }
+
+          if (phase === 'request') {
+            // VER, CMD, RSV, ATYP, DST.ADDR, DST.PORT
+            if (buf.length < 4) return
+            if (buf[0] !== 0x05) { failWith(0x01); return }
+            const cmd = buf[1]
+            const atyp = buf[3]
+
+            let dstAddr: string
+            let headerLen: number
+            if (atyp === 0x01) {
+              if (buf.length < 10) return
+              dstAddr = `${buf[4]}.${buf[5]}.${buf[6]}.${buf[7]}`
+              headerLen = 10
+            } else if (atyp === 0x03) {
+              if (buf.length < 5) return
+              const len = buf[4]
+              if (buf.length < 5 + len + 2) return
+              dstAddr = buf.subarray(5, 5 + len).toString('utf8')
+              headerLen = 5 + len + 2
+            } else if (atyp === 0x04) {
+              if (buf.length < 22) return
+              const parts: string[] = []
+              for (let i = 0; i < 16; i += 2) parts.push(buf.readUInt16BE(4 + i).toString(16))
+              dstAddr = parts.join(':')
+              headerLen = 22
+            } else {
+              failWith(0x08) // address type not supported
+              return
+            }
+
+            const dstPort = buf.readUInt16BE(headerLen - 2)
+
+            if (cmd !== 0x01) {
+              failWith(0x07) // command not supported (only CONNECT)
+              return
+            }
+
+            // Bytes past the header are early payload (rare); forward them.
+            const earlyData = buf.subarray(headerLen)
+            buf = Buffer.alloc(0)
+            socket.removeListener('data', onData)
+
+            if (!sessions.has(sessionId)) {
+              failWith(0x01)
+              return
+            }
+
+            try {
+              session.client.forwardOut(
+                socket.remoteAddress ?? '127.0.0.1',
+                socket.remotePort ?? 0,
+                dstAddr,
+                dstPort,
+                (err, stream) => {
+                  if (err) {
+                    failWith(0x05) // connection refused
+                    return
+                  }
+                  stream.on('error', () => { /* ignore */ })
+                  // Success: VER, REP=0, RSV, ATYP=IPv4, BND.ADDR=0.0.0.0, BND.PORT=0
+                  socket.write(Buffer.from([0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]))
+                  if (earlyData.length > 0) stream.write(earlyData)
+                  socket.pipe(stream).pipe(socket)
+                }
+              )
+            } catch {
+              failWith(0x01)
+            }
+          }
+        }
+
+        socket.on('data', onData)
+      })
+
+      server.on('error', (err) => {
+        reject(err)
+      })
+
+      server.listen(localPort, '127.0.0.1', () => {
+        const forward: PortForward = {
+          id: fwdId,
+          type: 'dynamic',
+          localPort,
+          remoteHost: '',
+          remotePort: 0,
+          server
+        }
+        session.forwards.set(fwdId, forward)
+
+        auditLogger.log({
+          connectionId: sessionId,
+          connectionName: session.config.host,
+          host: session.config.host,
+          event: 'port_forward_start',
+          details: { type: 'dynamic', localPort, forwardId: fwdId }
+        })
+
+        resolve(fwdId)
+      })
+    })
+  }
+
+  /**
    * List all active port forwards for a session.
    */
   listForwards(sessionId: string): Array<Omit<PortForward, 'server'>> {
@@ -950,7 +1105,7 @@ export class SshManager extends EventEmitter {
     const forward = session.forwards.get(forwardId)
     if (!forward) return
 
-    if (forward.type === 'local' && forward.server) {
+    if ((forward.type === 'local' || forward.type === 'dynamic') && forward.server) {
       forward.server.close()
     }
 

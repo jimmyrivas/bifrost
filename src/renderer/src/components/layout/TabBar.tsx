@@ -1,11 +1,75 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { X, Plus, Terminal, Lock, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
+import { X, Plus, Terminal, Lock, ChevronDown, ChevronLeft, ChevronRight, ScrollText } from 'lucide-react'
 import { cn } from '@renderer/lib/utils'
-import { useSessionsStore } from '@renderer/stores/sessions.store'
+import { useSessionsStore, type TerminalPane } from '@renderer/stores/sessions.store'
+import { useCaptureStore } from '@renderer/stores/capture.store'
 
 const SPECTRAL_GRADIENT =
   'linear-gradient(135deg, #ff6b6b, #ffa36b, #ffd56b, #6bff6b, #6bd5ff, #6b6bff, #d56bff)'
+
+/**
+ * Terminal ids carry an `ssh:`/`mosh:` prefix, but the capture store is keyed
+ * by the RAW backend session id. Strip the prefix to line the two up.
+ * Mirrors the stripping logic in useTerminal.ts's handleSaveLog.
+ */
+function stripSessionPrefix(id: string): string {
+  if (id.startsWith('ssh:')) return id.slice(4)
+  if (id.startsWith('mosh:')) return id.slice(5)
+  return id
+}
+
+/** Walk a pane tree and collect the RAW (prefix-stripped) session ids of every leaf. */
+function collectRawSessionIds(pane: TerminalPane): string[] {
+  if (pane.split) {
+    return [
+      ...collectRawSessionIds(pane.split.panes[0]),
+      ...collectRawSessionIds(pane.split.panes[1])
+    ]
+  }
+  return pane.terminalId ? [stripSessionPrefix(pane.terminalId)] : []
+}
+
+/**
+ * Renders a capture indicator for a tab when any of its sessions is being
+ * recorded (asciicast) or logged (plain-text transcript). Recording wins.
+ *
+ * Zustand safety: both selectors return a boolean primitive, so they never
+ * produce a new reference per render (no React #185 render loop). `rawIds` is
+ * recomputed each render and captured by the selector closure — fine, because
+ * zustand only compares the returned primitive, not the selector identity.
+ */
+function TabCaptureIndicator({ rootPane }: { rootPane: TerminalPane }): JSX.Element | null {
+  const rawIds = collectRawSessionIds(rootPane)
+  const isRecording = useCaptureStore((s) => rawIds.some((id) => id in s.recordings))
+  const isLogging = useCaptureStore((s) => rawIds.some((id) => id in s.logs))
+
+  if (isRecording) {
+    return (
+      <span
+        className="shrink-0 flex items-center"
+        title="Recording session (asciicast)"
+        aria-label="Recording"
+      >
+        <span className="w-2 h-2 rounded-full bg-[var(--error)] animate-pulse shadow-[0_0_5px_var(--error)]" />
+      </span>
+    )
+  }
+
+  if (isLogging) {
+    return (
+      <span
+        className="shrink-0 flex items-center text-[#c7c4d7]/50"
+        title="Logging transcript"
+        aria-label="Logging transcript"
+      >
+        <ScrollText size={11} strokeWidth={1.75} />
+      </span>
+    )
+  }
+
+  return null
+}
 
 interface ShellInfo {
   id: string
@@ -201,6 +265,7 @@ export function TabBar(): JSX.Element {
               {tab.lockTitle && (
                 <Lock size={9} strokeWidth={2} className="shrink-0 opacity-40" />
               )}
+              <TabCaptureIndicator rootPane={tab.rootPane} />
               {isEditing ? (
                 <input
                   ref={inputRef}

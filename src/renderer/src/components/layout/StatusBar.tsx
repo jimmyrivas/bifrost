@@ -1,8 +1,9 @@
 import { useSessionsStore } from '@renderer/stores/sessions.store'
 import { useWorkspaceStore } from '@renderer/stores/workspace.store'
+import { useCaptureStore } from '@renderer/stores/capture.store'
 import { cn } from '@renderer/lib/utils'
 import { useState, useEffect } from 'react'
-import { Radio, Bot, Layers, Cpu } from 'lucide-react'
+import { Radio, Bot, Layers, Cpu, Video } from 'lucide-react'
 
 export function StatusBar(): JSX.Element {
   const tabs = useSessionsStore((s) => s.tabs)
@@ -16,6 +17,11 @@ export function StatusBar(): JSX.Element {
   const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId)
 
   const [mcpRunning, setMcpRunning] = useState(false)
+
+  // Live capture counts (session recording / logging). Primitive selectors, so
+  // the bar re-renders only when a capture starts or stops.
+  const recordingCount = useCaptureStore((s) => Object.keys(s.recordings).length)
+  const loggingCount = useCaptureStore((s) => Object.keys(s.logs).length)
 
   useEffect(() => {
     const check = (): void => {
@@ -86,6 +92,23 @@ export function StatusBar(): JSX.Element {
 
       {/* Right section */}
       <div className="flex items-center gap-3">
+        {/* Capture indicator — blinking red camera while any session is being
+            recorded (asciicast) or logged to a file */}
+        {(recordingCount > 0 || loggingCount > 0) && (
+          <span
+            className="flex items-center gap-1.5 text-[var(--error)] animate-pulse"
+            title={[
+              recordingCount > 0 ? `Recording ${recordingCount} session${recordingCount > 1 ? 's' : ''}` : null,
+              loggingCount > 0 ? `Logging ${loggingCount} session${loggingCount > 1 ? 's' : ''}` : null
+            ].filter(Boolean).join(' · ')}
+            role="status"
+            aria-label="Session capture active"
+          >
+            <Video size={11} strokeWidth={2} />
+            <span className="uppercase tracking-wide text-[10px] font-semibold">REC</span>
+          </span>
+        )}
+
         {/* MCP Server indicator */}
         <span
           className={cn(

@@ -9,6 +9,7 @@ import { useSessionsStore, type TerminalStyle } from '@renderer/stores/sessions.
 import { getSchemeByName, getDefaultScheme } from '@renderer/lib/color-schemes'
 import { scanForErrors, type DetectedError } from '@renderer/lib/error-patterns'
 import { redactSecrets } from '@renderer/lib/secret-redactor'
+import { clearCaptureForSession } from '@renderer/stores/capture.store'
 import { detectZmodem, notifyZmodemDetected } from '@renderer/lib/zmodem-handler'
 import { findMarkdownPaths } from '@renderer/lib/markdown-link-matcher'
 import { resolveRemotePath, parseCwdFromPrompt } from '@renderer/lib/markdown-path-resolver'
@@ -29,6 +30,9 @@ interface UseTerminalOptions {
   terminalStyle?: TerminalStyle
   shell?: string // shell path override for local terminals (e.g. /usr/bin/pwsh)
   shellArgs?: string[] // extra args for the shell
+  // A still-live backend session id to ADOPT on mount instead of opening a new
+  // connection. Set on tab reattach (#72): `ssh:<id>` for SSH, bare id for local.
+  adoptSessionId?: string
   onTerminalCreated?: (terminalId: string) => void
 }
 
@@ -125,10 +129,11 @@ function broadcastInput(originTerminalId: string, data: string): void {
   }
 }
 
-export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell, shellArgs, onTerminalCreated }: UseTerminalOptions): UseTerminalReturn {
+export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell, shellArgs, adoptSessionId, onTerminalCreated }: UseTerminalOptions): UseTerminalReturn {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const terminalRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
+  const searchAddonRef = useRef<SearchAddon | null>(null)
   const terminalIdRef = useRef<string | null>(null)
   const currentFontSizeRef = useRef<number>(0)
   // Host label for this connection, used by the Markdown viewer modal header.
@@ -533,7 +538,9 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
 
     const fitAddon = new FitAddon()
     terminal.loadAddon(fitAddon)
-    terminal.loadAddon(new SearchAddon())
+    const searchAddon = new SearchAddon()
+    terminal.loadAddon(searchAddon)
+    searchAddonRef.current = searchAddon
     terminal.loadAddon(new WebLinksAddon())
     terminal.open(containerRef.current)
 
@@ -728,6 +735,61 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
       }
     }
 
+    // ── Pane-element listeners for context-menu + search-bar actions ──
+    // These CustomEvents are dispatched on this pane's element (the div carrying
+    // data-pane-id, i.e. containerRef.current) with bubbles:false, so we listen
+    // on that element directly — no active-tab guard is needed since each pane
+    // element only ever receives its own events. Mirrors the `terminal:paste`
+    // add/removeEventListener lifecycle used above.
+    const paneEl = containerRef.current
+    // Highlight colors for search matches (Spectral Command palette).
+    const searchOptions = {
+      decorations: {
+        matchBackground: '#6bd5ff44',
+        matchOverviewRuler: '#6bd5ff',
+        activeMatchBackground: '#ffa36b66',
+        activeMatchColorOverviewRuler: '#ffa36b'
+      }
+    }
+    // The search bar's Enter (next/prev) event carries only a direction, so we
+    // remember the last query typed into the `terminal:search` event.
+    let lastSearchQuery = ''
+
+    const handleClear = (): void => terminal.clear()
+    const handleReset = (): void => terminal.reset()
+
+    const handleSearch = (e: Event): void => {
+      const addon = searchAddonRef.current
+      if (!addon) return
+      lastSearchQuery = (e as CustomEvent<string>).detail ?? ''
+      if (!lastSearchQuery) {
+        addon.clearDecorations()
+        return
+      }
+      addon.findNext(lastSearchQuery, searchOptions)
+    }
+
+    const handleSearchNext = (e: Event): void => {
+      const addon = searchAddonRef.current
+      if (!addon || !lastSearchQuery) return
+      if ((e as CustomEvent<string>).detail === 'prev') {
+        addon.findPrevious(lastSearchQuery, searchOptions)
+      } else {
+        addon.findNext(lastSearchQuery, searchOptions)
+      }
+    }
+
+    // NOTE: session-log start/stop is owned by the terminal context menu
+    // (TerminalContextMenu → Capture), which resolves the log path, tracks
+    // active state in the capture store, and surfaces the file location. The
+    // old fire-and-forget `terminal:save-log` pane event was removed to avoid a
+    // second, invisible logging path.
+
+    paneEl?.addEventListener('terminal:clear', handleClear)
+    paneEl?.addEventListener('terminal:reset', handleReset)
+    paneEl?.addEventListener('terminal:search', handleSearch)
+    paneEl?.addEventListener('terminal:search-next', handleSearchNext)
+
     let removeDataListener: (() => void) | null = null
     let removeExitListener: (() => void) | null = null
     let sshSessionId: string | null = null
@@ -826,7 +888,144 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
       }, delay)
     }
 
-    if (connectionId) {
+    // ── Adopt an already-live backend session (tab reattach, #72) ──
+    // Reclaim routing of the session detach kept alive, replay its buffered
+    // scrollback, and wire I/O to the EXISTING session — never reconnect. Mirrors
+    // DetachedTerminal's claim path, plus this hook's richer data handling.
+    const adoptSession = async (fullId: string): Promise<void> => {
+      const isSSH = fullId.startsWith('ssh:')
+      const rawId = isSSH ? fullId.slice(4) : fullId
+
+      terminalIdRef.current = fullId
+      onTerminalCreated?.(fullId)
+
+      // Route the live session's output back to this window.
+      try {
+        await window.bifrost.terminal.transferOwnership(rawId)
+      } catch {
+        /* best-effort — window-router may already own it */
+      }
+      // Replay whatever the session buffered while detached.
+      try {
+        const buf = await window.bifrost.terminal.getBuffer(rawId)
+        if (buf) terminal.write(buf)
+      } catch {
+        /* no buffer available */
+      }
+
+      if (isSSH) {
+        sshSessionId = rawId
+
+        terminal.onData(async (data: string) => {
+          if (data.includes('\n') || data.includes('\r\n')) {
+            const allowed = await shouldAllowPaste(data)
+            if (!allowed) return
+          }
+          window.bifrost.ssh.write(rawId, data)
+          broadcastInput(`ssh:${rawId}`, data)
+        })
+
+        terminal.onResize(({ cols, rows }: { cols: number; rows: number }) => {
+          window.bifrost.ssh.resize(rawId, cols, rows)
+        })
+
+        removeDataListener = window.bifrost.ssh.onData((id: string, data: string) => {
+          if (id === sshSessionId) {
+            terminal.write(redactSecrets(data))
+            lastOutputTimeRef.current = Date.now()
+            outputActiveRef.current = true
+            if (detectZmodem(data)) {
+              notifyZmodemDetected()
+            }
+            errorBufferRef.current += data
+            if (errorBufferRef.current.length > 4096) {
+              errorBufferRef.current = errorBufferRef.current.slice(-2048)
+            }
+            const errors = scanForErrors(data)
+            if (errors.length > 0) {
+              detectedErrorsRef.current = [...detectedErrorsRef.current.slice(-9), ...errors]
+            }
+            scanForAi(data)
+          }
+        })
+
+        removeExitListener = window.bifrost.ssh.onClose((id: string) => {
+          if (id === sshSessionId) {
+            terminal.write('\r\n\x1b[90m[SSH connection closed]\x1b[0m\r\n')
+            clearCaptureForSession(id)
+            const closedSessionId = sshSessionId
+            sshSessionId = null
+            setTimeout(() => {
+              if (sshSessionId === null) {
+                const { tabs } = useSessionsStore.getState()
+                const tab = tabs.find((t) => t.rootPane?.terminalId === `ssh:${closedSessionId}`)
+                if (tab) useSessionsStore.getState().closeTab(tab.id)
+              }
+            }, 2000)
+            if (!userDisconnected && connectionId) {
+              const autoReconnect = usePreferencesStore.getState().terminal.autoReconnect
+              if (autoReconnect) {
+                attemptReconnect(connectionId)
+              }
+            }
+          }
+        })
+      } else {
+        // Local PTY session
+        terminal.onData(async (data: string) => {
+          if (data.includes('\n') || data.includes('\r\n')) {
+            const allowed = await shouldAllowPaste(data)
+            if (!allowed) return
+          }
+          window.bifrost.terminal.write(rawId, data)
+          broadcastInput(rawId, data)
+        })
+
+        terminal.onResize(({ cols, rows }: { cols: number; rows: number }) => {
+          window.bifrost.terminal.resize(rawId, cols, rows)
+        })
+
+        removeDataListener = window.bifrost.terminal.onData((id: string, data: string) => {
+          if (id === terminalIdRef.current) {
+            terminal.write(redactSecrets(data))
+            lastOutputTimeRef.current = Date.now()
+            outputActiveRef.current = true
+            if (detectZmodem(data)) {
+              notifyZmodemDetected()
+            }
+            errorBufferRef.current += data
+            if (errorBufferRef.current.length > 4096) {
+              errorBufferRef.current = errorBufferRef.current.slice(-2048)
+            }
+            const errors = scanForErrors(data)
+            if (errors.length > 0) {
+              detectedErrorsRef.current = [...detectedErrorsRef.current.slice(-9), ...errors]
+            }
+            scanForAi(data)
+          }
+        })
+
+        removeExitListener = window.bifrost.terminal.onExit((id: string, exitCode: number) => {
+          if (id === terminalIdRef.current) {
+            terminal.write(`\r\n\x1b[90m[Process exited with code ${exitCode}]\x1b[0m\r\n`)
+            clearCaptureForSession(id)
+            setTimeout(() => {
+              const { tabs } = useSessionsStore.getState()
+              const tab = tabs.find((t) => t.rootPane?.terminalId === id)
+              if (tab) useSessionsStore.getState().closeTab(tab.id)
+            }, 1500)
+          }
+        })
+      }
+    }
+
+    if (adoptSessionId) {
+      // Reattach: take over the live session; do NOT open a new connection.
+      adoptSession(adoptSessionId).catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err)
+        terminal.write(`\r\n\x1b[31mFailed to reattach session: ${msg}\x1b[0m\r\n`)
+      })
+    } else if (connectionId) {
       // Detect protocol method for this connection
       const initConnection = async (): Promise<void> => {
         const conn = await window.bifrost.connections.get(connectionId).catch(() => null)
@@ -887,6 +1086,7 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
             removeExitListener = window.bifrost.protocols.onClose((id: string) => {
               if (id === moshSessionId) {
                 terminal.write('\r\n\x1b[90m[Mosh session ended]\x1b[0m\r\n')
+                clearCaptureForSession(id)
               }
             })
           } catch (err: unknown) {
@@ -955,6 +1155,7 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
           removeExitListener = window.bifrost.ssh.onClose((id: string) => {
             if (id === sshSessionId) {
               terminal.write('\r\n\x1b[90m[SSH connection closed]\x1b[0m\r\n')
+              clearCaptureForSession(id)
               const closedSessionId = sshSessionId
               sshSessionId = null
 
@@ -1040,6 +1241,7 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
       removeExitListener = window.bifrost.terminal.onExit((id: string, exitCode: number) => {
         if (id === terminalIdRef.current) {
           terminal.write(`\r\n\x1b[90m[Process exited with code ${exitCode}]\x1b[0m\r\n`)
+          clearCaptureForSession(id)
           // Auto-close tab after brief delay so user sees the exit message
           setTimeout(() => {
             const { tabs } = useSessionsStore.getState()
@@ -1055,6 +1257,10 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
       if (reconnectTimerId) clearTimeout(reconnectTimerId)
       if (progressCheckTimer) clearInterval(progressCheckTimer)
       resizeObserver.disconnect()
+      paneEl?.removeEventListener('terminal:clear', handleClear)
+      paneEl?.removeEventListener('terminal:reset', handleReset)
+      paneEl?.removeEventListener('terminal:search', handleSearch)
+      paneEl?.removeEventListener('terminal:search-next', handleSearchNext)
       markdownLinkDisposable.dispose()
       osc7Disposable.dispose()
       removeDataListener?.()
@@ -1068,6 +1274,9 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
         } else if (terminalIdRef.current && !connectionId) {
           window.bifrost.terminal.destroy(terminalIdRef.current)
         }
+        // The session is going away — drop its capture-indicator entries
+        // (main finalizes the recording/log files on its side).
+        clearCaptureForSession(terminalIdRef.current)
       }
       terminal.dispose()
     }

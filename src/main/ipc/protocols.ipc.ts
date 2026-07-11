@@ -3,6 +3,7 @@ import { externalProtocolManager, type RdpOptions } from '../services/external-p
 import { getDatabase, schema } from '../db'
 import { eq } from 'drizzle-orm'
 import { resolveJumpChainForJson } from '../services/jump-host/runtime'
+import { sessionLogger } from '../services/session-logger'
 
 export function registerProtocolsIpc(mainWindow: BrowserWindow): void {
   // RDP
@@ -126,6 +127,9 @@ export function registerProtocolsIpc(mainWindow: BrowserWindow): void {
     if (!mainWindow.isDestroyed()) {
       mainWindow.webContents.send('protocols:data', sessionId, data)
     }
+    // Feed an active session log (no-op when logging isn't started for this
+    // session) — covers mosh and the other PTY-backed protocols.
+    sessionLogger.write(sessionId, data)
   })
 
   externalProtocolManager.on('close', (...args: unknown[]) => {
@@ -133,6 +137,8 @@ export function registerProtocolsIpc(mainWindow: BrowserWindow): void {
     if (!mainWindow.isDestroyed()) {
       mainWindow.webContents.send('protocols:close', sessionId, code)
     }
+    // Close out an active session log (no-op when none is active).
+    sessionLogger.stopLogging(sessionId)
   })
 
   externalProtocolManager.on('error', (...args: unknown[]) => {

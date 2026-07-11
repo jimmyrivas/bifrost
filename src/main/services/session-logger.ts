@@ -50,9 +50,13 @@ export class SessionLogger {
       this.streams.delete(sessionId)
     })
 
-    // Write header
+    // Write header. Local terminals have no connection context — label them
+    // as such instead of printing "undefined (undefined@undefined)".
+    const label = context.name || context.host || context.user
+      ? `${context.name ?? context.host ?? 'unknown'} (${context.user ?? '?'}@${context.host ?? '?'})`
+      : 'local terminal'
     stream.write(`\n=== Session started: ${now.toISOString()} ===\n`)
-    stream.write(`=== Connection: ${context.name} (${context.user}@${context.host}) ===\n\n`)
+    stream.write(`=== Connection: ${label} ===\n\n`)
 
     this.streams.set(sessionId, stream)
     return filePath

@@ -213,6 +213,9 @@ export interface BifrostApi {
     logData: (sessionId: string, data: string) => void
     stopLogging: (sessionId: string) => Promise<void>
     getLogDir: () => Promise<string>
+    getRecordingsDir: () => Promise<string>
+    openPath: (targetPath: string) => Promise<string>
+    revealPath: (targetPath: string) => Promise<void>
     healthPing: (connectionId: string, host: string) => Promise<{ connectionId: string; host: string; reachable: boolean; latencyMs: number | null }>
   }
   import: {
@@ -631,6 +634,9 @@ const api: BifrostApi = {
     logData: (sessionId, data) => ipcRenderer.send('system:logData', sessionId, data),
     stopLogging: (sessionId) => ipcRenderer.invoke('system:stopLogging', sessionId),
     getLogDir: () => ipcRenderer.invoke('system:getLogDir'),
+    getRecordingsDir: () => ipcRenderer.invoke('system:getRecordingsDir'),
+    openPath: (targetPath) => ipcRenderer.invoke('system:openPath', targetPath),
+    revealPath: (targetPath) => ipcRenderer.invoke('system:revealPath', targetPath),
     healthPing: (connectionId, host) => ipcRenderer.invoke('health:ping', connectionId, host)
   },
   import: {
