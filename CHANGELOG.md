@@ -5,6 +5,64 @@ All notable changes to Bifrost will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-07-11
+
+Phase 1 of the post-audit wiring plan: every "pretends to work" feature now
+works end-to-end, plus a new observability home. All features GUI-verified.
+
+### Added
+- **Session recording, for real**: asciicast v2 `.cast` files now capture input
+  and output. Full UX: Capture submenu with dynamic Record/Stop, pulsing tab
+  badge, blinking REC indicator in the status bar, stop-toast with the file
+  path, and replay via `asciinema play`.
+- **Session logs**: plain-text transcripts for SSH, local, and Mosh sessions
+  with start/stop from the Capture menu, pattern-based file names, and honest
+  headers. Captures auto-finalize when a session closes.
+- **Session Captures browser**: one two-tab browser (Recordings | Session
+  Logs) with per-file actions (play command / open, reveal, delete, active-log
+  guard), reachable from the Capture menu and Preferences → Session Capture.
+- **Activity view** (sidebar): the audit log as a day-grouped timeline with
+  category filters, connection/host search, 24h/7d/30d ranges, live refresh,
+  expandable details, per-connection drill-down (plus a "View activity" link
+  in connection stats), insights counters, log rotation, and CSV/JSONL export
+  of the filtered events. New `session_log_start/stop` audit events.
+- **Tab reattach**: closing a detached window returns the tab to the main
+  window *adopting the same live session* — scrollback replayed, process
+  still running.
+- **Pre/post-connection hooks**: exec commands stored on a connection now run
+  on connect/disconnect (locally), honoring per-command confirmation; every
+  execution is audit-logged.
+- **Dynamic (SOCKS5) tunnels**: a real RFC 1928 proxy per tunnel backed by the
+  SSH connection (CONNECT, IPv4/domain/IPv6, 127.0.0.1-only), integrated with
+  start/stop/list/auto-start.
+- **Find in terminal**: `Ctrl+Shift+F` (plain `Ctrl+F` stays with the shell),
+  highlighted matches, Esc clears. Clear/Reset terminal actions wired.
+- **User guide**: bilingual chapter-by-chapter documentation under
+  `docs/guide/` (EN) and `docs/guide/es/`, verified against the code.
+
+### Changed
+- Terminal context menu redesigned: ~32 flat items → grouped submenus
+  (Copy as / Layout / Automation / Capture / Session). Everything dynamic
+  re-evaluates when the menu opens; empty submenus show a hint instead of
+  disappearing; recording is visibly "SSH only" on local/mosh panes.
+- Secret-redaction preference persists across restarts (still off by default).
+- Sidebar "Logs" section renamed to "Activity".
+- Early planning documents moved to `docs/archive/` with an honesty note —
+  `docs/guide/` and `openspec/specs/` are the source of truth.
+
+### Fixed
+- **AppImage portability**: the v0.3.0 AppImage was linked against the build
+  host's glibc 2.43 and crashed on most distros with a misleading
+  `pty.node` error. Releases are now built inside a Debian 11 container
+  (`scripts/build-appimage-docker.sh`) and run on glibc ≥ 2.28 systems
+  (Ubuntu 20.04+, Debian 11+, RHEL 8+).
+- Session logs used to write header/footer only (no output) for local and
+  Mosh terminals, with an `undefined (undefined@undefined)` header.
+- Context-menu entries could go missing or stale (Record Session, Remote
+  Commands) because the menu was evaluated at mount time, not open time.
+- The Electron download cache could leak into the packaged asar, inflating
+  the AppImage from 132 MB to 233 MB.
+
 ## [0.3.0] - 2026-07-10
 
 First public release — the repository is now available on GitHub under
