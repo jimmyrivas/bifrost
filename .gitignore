@@ -27,3 +27,4 @@ asbru-cm/
 # Personal agent config — never publish
 CLAUDE.local.md
 .claude/settings.local.json
+.cache/

@@ -10,6 +10,10 @@ files:
   - "!electron.vite.config.*"
   - "!{.eslintrc,.prettierrc,tsconfig*.json}"
   - "!{CLAUDE.md,README.md}"
+  # Build caches the Docker build keeps inside the project (see
+  # scripts/build-appimage-docker.sh) — must never ship in the asar.
+  - "!.cache/**"
+  - "!.pnpm-store/**"
 asarUnpack:
   - node_modules/better-sqlite3/**
   - node_modules/node-pty/**
