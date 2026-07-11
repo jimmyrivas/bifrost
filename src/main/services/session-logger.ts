@@ -1,6 +1,22 @@
 import { app } from 'electron'
-import { join } from 'path'
-import { createWriteStream, mkdirSync, type WriteStream } from 'fs'
+import { join, resolve, sep } from 'path'
+import {
+  createWriteStream,
+  mkdirSync,
+  readdirSync,
+  statSync,
+  unlinkSync,
+  type WriteStream
+} from 'fs'
+
+export interface LogFileInfo {
+  name: string
+  path: string
+  size: number
+  mtime: string
+  /** True while a session is still writing to this file — not deletable. */
+  active: boolean
+}
 
 export class SessionLogger {
   private streams = new Map<string, WriteStream>()
@@ -69,13 +85,17 @@ export class SessionLogger {
     }
   }
 
-  stopLogging(sessionId: string): void {
+  /**
+   * Stop logging a session. Returns the log file path when a log was active
+   * (so callers can audit the stop), or null when nothing was being logged.
+   */
+  stopLogging(sessionId: string): string | null {
     const stream = this.streams.get(sessionId)
-    if (stream) {
-      stream.write(`\n=== Session ended: ${new Date().toISOString()} ===\n`)
-      stream.end()
-      this.streams.delete(sessionId)
-    }
+    if (!stream) return null
+    stream.write(`\n=== Session ended: ${new Date().toISOString()} ===\n`)
+    stream.end()
+    this.streams.delete(sessionId)
+    return typeof stream.path === 'string' ? stream.path : null
   }
 
   stopAll(): void {
@@ -86,6 +106,61 @@ export class SessionLogger {
 
   getLogDir(): string {
     return this.ensureLogDir()
+  }
+
+  /** Paths currently backed by an open write stream. */
+  private activePaths(): Set<string> {
+    const paths = new Set<string>()
+    for (const stream of this.streams.values()) {
+      if (typeof stream.path === 'string') paths.add(resolve(stream.path))
+    }
+    return paths
+  }
+
+  /**
+   * List `.log` files in the session-logs directory, newest first. Uses
+   * readdir + stat (Electron's Node has no fs.globSync).
+   */
+  listLogs(): LogFileInfo[] {
+    const dir = this.ensureLogDir()
+    const active = this.activePaths()
+    const logs: LogFileInfo[] = []
+    for (const name of readdirSync(dir)) {
+      if (!name.endsWith('.log')) continue
+      const filePath = join(dir, name)
+      try {
+        const st = statSync(filePath)
+        if (!st.isFile()) continue
+        logs.push({
+          name,
+          path: filePath,
+          size: st.size,
+          mtime: st.mtime.toISOString(),
+          active: active.has(resolve(filePath))
+        })
+      } catch {
+        /* raced deletion — skip */
+      }
+    }
+    return logs.sort((a, b) => b.mtime.localeCompare(a.mtime))
+  }
+
+  /**
+   * Delete a log file. Refuses paths outside the session-logs directory and
+   * files that are still being written. Returns true when the file was removed.
+   */
+  deleteLog(filePath: string): boolean {
+    const dir = resolve(this.ensureLogDir())
+    const resolved = resolve(filePath)
+    if (resolved !== dir && !resolved.startsWith(dir + sep)) return false
+    if (resolved === dir) return false
+    if (this.activePaths().has(resolved)) return false
+    try {
+      unlinkSync(resolved)
+      return true
+    } catch {
+      return false
+    }
   }
 }
 

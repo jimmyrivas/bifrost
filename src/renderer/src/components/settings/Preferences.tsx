@@ -12,6 +12,7 @@ import { PluginManager } from './PluginManager'
 import { KeyBindings } from './KeyBindings'
 import { KnownHostsPanel } from './KnownHostsPanel'
 import { MultiplexerPanel } from '@renderer/components/connections/MultiplexerPanel'
+import { CaptureFilesBrowser, type CaptureTab } from '@renderer/components/terminal/CaptureFilesBrowser'
 
 type PrefsTab = 'terminal' | 'ai' | 'ssh' | 'security' | 'keybindings' | 'language' | 'network' | 'keepass' | 'sync' | 'plugins' | 'mcp'
 
@@ -406,6 +407,7 @@ function SessionCaptureSection(): JSX.Element {
   const [recordingsDir, setRecordingsDir] = useState<string | null>(null)
   const [logDir, setLogDir] = useState<string | null>(null)
   const [openError, setOpenError] = useState<string | null>(null)
+  const [browserTab, setBrowserTab] = useState<CaptureTab | null>(null)
 
   useEffect(() => {
     window.bifrost?.system?.getRecordingsDir?.().then(setRecordingsDir).catch(() => {})
@@ -425,7 +427,8 @@ function SessionCaptureSection(): JSX.Element {
 
   const pathRow = (
     label: string,
-    dir: string | null
+    dir: string | null,
+    tab: CaptureTab
   ): JSX.Element => (
     <div>
       <label className={fieldLabel}>{label}</label>
@@ -435,6 +438,9 @@ function SessionCaptureSection(): JSX.Element {
             {dir ?? 'Resolving…'}
           </span>
         </div>
+        <Button variant="outline" size="sm" onClick={() => setBrowserTab(tab)}>
+          Browse…
+        </Button>
         <Button
           variant="outline"
           size="sm"
@@ -461,11 +467,16 @@ function SessionCaptureSection(): JSX.Element {
         output. Both live under Bifrost&apos;s user-data folder. Recording is started per-session from the
         terminal&apos;s right-click → Capture menu.
       </p>
-      {pathRow('RECORDINGS FOLDER', recordingsDir)}
-      {pathRow('SESSION LOGS FOLDER', logDir)}
+      {pathRow('RECORDINGS FOLDER', recordingsDir, 'recordings')}
+      {pathRow('SESSION LOGS FOLDER', logDir, 'logs')}
       {openError && (
         <span className="text-[9px] text-[#ef4444] block">Could not open folder: {openError}</span>
       )}
+      <CaptureFilesBrowser
+        open={browserTab !== null}
+        defaultTab={browserTab ?? 'recordings'}
+        onClose={() => setBrowserTab(null)}
+      />
     </div>
   )
 }

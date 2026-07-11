@@ -21,7 +21,8 @@ import {
   Tv,
   Radio,
   Laptop,
-  Zap
+  Zap,
+  Activity
 } from 'lucide-react'
 import { cn } from '@renderer/lib/utils'
 import { ConnectionTree } from '@renderer/components/connections/ConnectionTree'
@@ -48,7 +49,7 @@ const NAV_ITEMS: Array<{ id: ViewSection; label: string; icon: typeof Network }>
   { id: 'tunnels', label: 'Tunnels', icon: Network },
   { id: 'keys', label: 'Keys', icon: KeyRound },
   { id: 'notes', label: 'Notes', icon: StickyNote },
-  { id: 'logs', label: 'Logs', icon: FileText }
+  { id: 'logs', label: 'Activity', icon: Activity }
 ]
 
 /** Section header label */

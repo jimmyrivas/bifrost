@@ -14,7 +14,7 @@ Para grabar:
 2. Mientras se graba, un punto rojo pulsante aparece en la pestaña y junto al submenú **Capture**, y el elemento de menú cambia a **Stop Recording**.
 3. Clic derecho → **Capture ▸ Stop Recording**. Un toast muestra la ruta del `.cast` guardado con acciones **Reveal in folder** y **Copy path**.
 
-Las grabaciones se guardan bajo la carpeta de datos de usuario de Bifrost en `recordings/` (en Linux típicamente `~/.config/bifrost/recordings/`). La grabación está disponible solo para sesiones SSH — el elemento de menú se oculta en terminales locales.
+Las grabaciones se guardan bajo la carpeta de datos de usuario de Bifrost en `recordings/` (en Linux típicamente `~/.config/bifrost/recordings/`). La grabación está disponible solo para sesiones SSH — en paneles locales o Mosh el elemento aparece deshabilitado con la pista "SSH only". Mientras haya cualquier captura activa, una cámara **REC** roja parpadeante se muestra además en la barra de estado junto al indicador MCP.
 
 ### Reproducir una grabación
 
@@ -24,15 +24,14 @@ asciinema play ~/.config/bifrost/recordings/rec-1720620000000-abc123.cast
 
 Necesitas [asciinema](https://asciinema.org/) instalado (`sudo apt install asciinema` o equivalente). También puedes subir un `.cast` con `asciinema upload <file>` para compartirlo.
 
-### El gestor de grabaciones
+### El navegador de archivos de captura
 
-Clic derecho en un terminal → **Capture ▸ Recordings…** abre un gestor que lista todas las grabaciones con su fecha, duración y tamaño de archivo. Por fila puedes:
+Clic derecho en un terminal → **Capture ▸ Recordings…** (o **Session Logs…**) abre un navegador compartido con dos pestañas — **Recordings** y **Session Logs** — que lista cada archivo capturado con su fecha y tamaño (más la duración en las grabaciones). Por fila:
 
-- Copiar el comando `asciinema play "<ruta>"` listo para ejecutar
-- Revelar el archivo en tu gestor de archivos
-- Eliminar la grabación
+- Grabaciones: copiar el comando `asciinema play "<ruta>"` listo para ejecutar, revelar el archivo en tu gestor de archivos, o eliminarlo
+- Logs de sesión: abrir el archivo en tu visor por defecto, revelarlo, o eliminarlo — un log aún en escritura muestra la insignia *logging…* y no puede borrarse hasta que lo detengas
 
-Un botón **Open folder** abre el directorio `recordings/` completo. El inicio y fin de cada grabación también se registran en el [log de auditoría](#log-de-auditoría).
+Un botón **Open folder** abre el directorio de la pestaña activa. El mismo navegador se abre desde **Settings → Terminal → Session Capture** con los botones **Browse…** de cada carpeta. El inicio y fin de cada grabación también se registran en el [log de auditoría](#log-de-auditoría).
 
 ## Logs de sesión (transcripciones en texto plano)
 
@@ -55,7 +54,7 @@ El nombre del archivo proviene del campo **Log pattern** de la conexión si lo c
 | `%h` | Host |
 | `%U` | Nombre de usuario |
 
-El menú **Capture** también ofrece **Open Logs Folder** y **Open Recordings Folder**, y **Settings → Terminal** tiene una sección **Session Capture** que muestra ambas rutas de carpeta con botones Open.
+El menú **Capture** también ofrece **Session Logs…** (el [navegador de archivos de captura](#el-navegador-de-archivos-de-captura) en su pestaña de logs), **Open Logs Folder** y **Open Recordings Folder**; **Settings → Terminal → Session Capture** muestra ambas rutas de carpeta con botones **Browse…** y **Open**.
 
 ## Log de auditoría
 
@@ -64,11 +63,20 @@ Bifrost anexa cada evento significativo a un archivo JSON Lines de solo anexado 
 - Conexión / desconexión, autenticación exitosa / fallida, prompts MFA
 - Clave de host verificada / rechazada / cambiada
 - Inicio / parada de reenvío de puertos
-- Inicio / parada de grabación
+- Inicio / parada de grabación y de logs de sesión
 - Eventos de credenciales: contraseña del vault cambiada, archivo de clave almacenado
 - Ejecuciones de hooks pre/post-conexión (ejecutado, omitido o fallido — ver [Automatización](08-automation.md))
 
 Las entradas de más de 30 días se rotan. El log de auditoría es también lo que alimenta las estadísticas por conexión que ves en la barra lateral (conexiones totales, última conexión, tiempo de sesión acumulado).
+
+## La vista Activity
+
+La sección **Activity** de la barra lateral es el log de auditoría hecho visible — una línea de tiempo de todo lo que pasó, más acceso rápido a tus archivos de captura.
+
+- **Pestaña Timeline**: eventos agrupados por día, los más recientes primero, cada uno con un punto de color por categoría, el tipo de evento, la conexión y el host. Haz clic en una fila para expandir su detalle completo; haz clic en el nombre de una conexión para filtrar la línea de tiempo a ella (el panel de estadísticas por conexión tiene un enlace **View activity** equivalente).
+- **Filtros**: chips por categoría (Sessions, Auth, Security, Tunnels, Captures, Automation, Errors), búsqueda de texto libre por conexión/host, y un rango temporal de 24h / 7d / 30d. Un toggle **live** refresca la línea de tiempo cada pocos segundos mientras observas.
+- **Cabecera de insights**: conexiones de hoy, fallos de autenticación de los últimos 7 días, capturas activas ahora mismo y el tamaño del archivo de auditoría — más **Rotate** (descarta entradas de más de 30 días) y **Export** de los eventos filtrados actuales como **CSV** o **JSONL** (un aviso te da la ruta del archivo).
+- **Pestaña Captures**: las mismas listas de grabaciones y logs de sesión que el [navegador de archivos de captura](#el-navegador-de-archivos-de-captura), embebidas en la vista.
 
 ## Monitorización de salud
 

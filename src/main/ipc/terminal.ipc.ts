@@ -16,6 +16,7 @@ import {
   type ShellInfo
 } from '../services/platform'
 import { sessionLogger } from '../services/session-logger'
+import { auditLogger } from '../services/audit-log'
 
 interface PtySession {
   process: pty.IPty
@@ -61,7 +62,16 @@ export function registerTerminalIpc(mainWindow: BrowserWindow): void {
       sendToOwner(id, 'terminal:exit', id, exitCode)
       removeOwner(id)
       // Close out an active session log (no-op when none is active).
-      sessionLogger.stopLogging(id)
+      const logPath = sessionLogger.stopLogging(id)
+      if (logPath) {
+        auditLogger.log({
+          connectionId: id,
+          connectionName: id,
+          host: '',
+          event: 'session_log_stop',
+          details: { sessionId: id, filePath: logPath, reason: 'session_closed' }
+        })
+      }
     })
 
     // Owner = the window that created it

@@ -87,7 +87,8 @@ derived from the project's OpenSpec capability specs and verified against the co
 ### Observability & security
 - **Session recording** (asciicast v2 `.cast`, input + output) from the terminal's Capture menu: pulsing red dot on the tab, a blinking REC indicator in the status bar, stop-toast with the file path, and a Recordings manager (play command, reveal, delete) — replay with `asciinema play`
 - **Session logs**: plain-text transcripts per session (pattern-based file names), start/stop from the Capture menu, folders exposed in Preferences → Session Capture
-- Append-only audit log (JSON Lines) of connections, credential events, recording start/stop, and hook executions — it also powers the per-connection statistics
+- Append-only audit log (JSON Lines) of connections, credential events, capture start/stop, and hook executions — it also powers the per-connection statistics
+- **Activity view** (sidebar): the audit log as a day-grouped timeline with category filters, search, 24h/7d/30d ranges, live refresh, per-connection drill-down, insights counters, log rotation, and CSV/JSONL export of the filtered events — plus a Captures tab over recordings and session logs
 - Secret redaction filter for terminal output (Settings toggle, persisted across restarts; off by default)
 - Encrypted credential storage throughout: connections, tunnels, and jump hops
 - Session idle detection with AI summaries; desktop notifications when long-running commands finish

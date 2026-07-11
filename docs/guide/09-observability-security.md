@@ -14,7 +14,7 @@ To record:
 2. While recording, a red pulsing dot appears on the tab and next to the **Capture** submenu, and the menu item changes to **Stop Recording**.
 3. Right-click → **Capture ▸ Stop Recording**. A toast shows the saved `.cast` path with **Reveal in folder** and **Copy path** actions.
 
-Recordings are saved under Bifrost's user-data folder in `recordings/` (on Linux typically `~/.config/bifrost/recordings/`). Recording is available for SSH sessions only — the menu item is hidden on local terminals.
+Recordings are saved under Bifrost's user-data folder in `recordings/` (on Linux typically `~/.config/bifrost/recordings/`). Recording is available for SSH sessions only — on local or Mosh panes the menu item appears disabled with an "SSH only" hint. While any capture is active, a blinking red **REC** camera also shows in the status bar next to the MCP indicator.
 
 ### Replay a recording
 
@@ -24,15 +24,14 @@ asciinema play ~/.config/bifrost/recordings/rec-1720620000000-abc123.cast
 
 You need [asciinema](https://asciinema.org/) installed (`sudo apt install asciinema` or equivalent). You can also upload a `.cast` with `asciinema upload <file>` to share it.
 
-### The recordings manager
+### The capture files browser
 
-Right-click a terminal → **Capture ▸ Recordings…** opens a manager listing every recording with its date, duration, and file size. Per row you can:
+Right-click a terminal → **Capture ▸ Recordings…** (or **Session Logs…**) opens a shared browser with two tabs — **Recordings** and **Session Logs** — listing every captured file with its date and size (plus duration for recordings). Per row:
 
-- Copy the ready-to-run `asciinema play "<path>"` command
-- Reveal the file in your file manager
-- Delete the recording
+- Recordings: copy the ready-to-run `asciinema play "<path>"` command, reveal the file in your file manager, or delete it
+- Session logs: open the file in your default viewer, reveal it, or delete it — a log still being written shows a *logging…* badge and can't be deleted until you stop it
 
-An **Open folder** button opens the whole `recordings/` directory. Recording start and stop are also written to the [audit log](#audit-log).
+An **Open folder** button opens the active tab's directory. The same browser opens from **Settings → Terminal → Session Capture** via the per-folder **Browse…** buttons. Recording start and stop are also written to the [audit log](#audit-log).
 
 ## Session logs (plain-text transcripts)
 
@@ -55,7 +54,7 @@ The file name comes from the connection's **Log pattern** field if you set one; 
 | `%h` | Host |
 | `%U` | Username |
 
-The **Capture** menu also offers **Open Logs Folder** and **Open Recordings Folder**, and **Settings → Terminal** has a **Session Capture** section showing both folder paths with Open buttons.
+The **Capture** menu also offers **Session Logs…** (the [capture files browser](#the-capture-files-browser) on its logs tab), **Open Logs Folder**, and **Open Recordings Folder**; **Settings → Terminal → Session Capture** shows both folder paths with **Browse…** and **Open** buttons.
 
 ## Audit log
 
@@ -64,11 +63,20 @@ Bifrost appends every significant event to an append-only JSON Lines file (`audi
 - Connect / disconnect, authentication success / failure, MFA prompts
 - Host-key verified / rejected / changed
 - Port-forward start / stop
-- Recording start / stop
+- Recording start / stop, session-log start / stop
 - Credential events: vault password changed, key file stored
 - Pre/post-connection hook executions (executed, skipped, or failed — see [Automation](08-automation.md))
 
 Entries older than 30 days are rotated out. The audit log is also what powers the per-connection statistics you see in the sidebar (total connects, last connected, accumulated session time).
+
+## The Activity view
+
+The sidebar's **Activity** section is the audit log made visible — a timeline of everything that happened, plus quick access to your capture files.
+
+- **Timeline tab**: events grouped by day, newest first, each with a colored category dot, the event type, connection, and host. Click a row to expand its full detail payload; click a connection name to filter the timeline to it (the per-connection statistics panel has a matching **View activity** link).
+- **Filters**: category chips (Sessions, Auth, Security, Tunnels, Captures, Automation, Errors), free-text search over connection/host, and a time range of 24h / 7d / 30d. A **live** toggle refreshes the timeline every few seconds while you watch.
+- **Insights header**: connects today, auth failures in the last 7 days, captures active right now, and the audit file size — plus **Rotate** (drop entries older than 30 days) and **Export** of the currently filtered events as **CSV** or **JSONL** (a toast gives you the file path).
+- **Captures tab**: the same recordings and session-log lists as the [capture files browser](#the-capture-files-browser), embedded in the view.
 
 ## Health monitoring
 

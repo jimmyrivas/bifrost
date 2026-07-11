@@ -87,7 +87,8 @@ código (también [in English](docs/guide/README.md)).
 ### Observabilidad y seguridad
 - **Grabación de sesiones** (asciicast v2 `.cast`, entrada + salida) desde el menú Capture del terminal: punto rojo pulsante en la pestaña, indicador REC parpadeante en la barra de estado, aviso con la ruta al detener y un gestor de grabaciones (comando de reproducción, revelar, borrar) — reproduce con `asciinema play`
 - **Logs de sesión**: transcripciones en texto plano por sesión (nombres de archivo con patrones), iniciar/detener desde el menú Capture, carpetas expuestas en Preferencias → Session Capture
-- Log de auditoría de solo anexado (JSON Lines) de conexiones, eventos de credenciales, inicio/fin de grabaciones y ejecución de hooks — también alimenta las estadísticas por conexión
+- Log de auditoría de solo anexado (JSON Lines) de conexiones, eventos de credenciales, inicio/fin de capturas y ejecución de hooks — también alimenta las estadísticas por conexión
+- **Vista Activity** (barra lateral): el log de auditoría como línea de tiempo agrupada por día con filtros por categoría, búsqueda, rangos 24h/7d/30d, refresco en vivo, drill-down por conexión, contadores de insights, rotación del log y export CSV/JSONL de los eventos filtrados — más una pestaña Captures sobre grabaciones y logs de sesión
 - Filtro de redacción de secretos en la salida del terminal (interruptor en Ajustes, persistente entre reinicios; desactivado por defecto)
 - Almacenamiento cifrado de credenciales en todo el producto: conexiones, túneles y saltos
 - Detección de inactividad con resúmenes IA; notificaciones de escritorio al terminar comandos largos

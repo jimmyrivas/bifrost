@@ -24,6 +24,7 @@ import { Preferences } from '@renderer/components/settings/Preferences'
 import { NotesPanel } from '@renderer/components/settings/NotesPanel'
 import { KeyBindings } from '@renderer/components/settings/KeyBindings'
 import { ConnectionForm } from '@renderer/components/connections/ConnectionForm'
+import { ActivityCenter } from '@renderer/components/activity/ActivityCenter'
 import { useSessionsStore } from '@renderer/stores/sessions.store'
 import { usePreferencesStore, clampAiPanelWidth } from '@renderer/stores/preferences.store'
 
@@ -54,6 +55,19 @@ export function AppShell(): JSX.Element {
   const createTab = useSessionsStore((s) => s.createTab)
   const [activeView, setActiveView] = useState<ViewSection>('connections')
   const [editingConnectionId, setEditingConnectionId] = useState<string | null>(null)
+  const [activityConnectionId, setActivityConnectionId] = useState<string | null>(null)
+
+  // Deep link into the Activity view pre-filtered to one connection
+  // (dispatched by ConnectionStats' "View activity" link).
+  useEffect(() => {
+    const handler = (e: Event): void => {
+      const connectionId = (e as CustomEvent<{ connectionId?: string }>).detail?.connectionId
+      setActivityConnectionId(connectionId ?? null)
+      setActiveView('logs')
+    }
+    document.addEventListener('open:activity', handler)
+    return () => document.removeEventListener('open:activity', handler)
+  }, [])
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false)
   const [aiDetached, setAiDetached] = useState(false)
@@ -285,11 +299,7 @@ export function AppShell(): JSX.Element {
           </div>
         )
       case 'logs':
-        return (
-          <div className="flex items-center justify-center h-full text-[#c7c4d7]/60 text-sm">
-            Session logs will appear here
-          </div>
-        )
+        return <ActivityCenter initialConnectionId={activityConnectionId} />
       case 'settings':
       case 'preferences':
         return (

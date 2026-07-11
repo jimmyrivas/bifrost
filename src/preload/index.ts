@@ -12,6 +12,7 @@ import type { HostKeyInfo, PortForward, SshAlgorithms, SshConnectionConfig } fro
 import type { AuditEvent, AuditEventType } from '../main/services/audit-log'
 import type { SignedCertificateResult, VaultSignOptions, LocalCaSignOptions } from '../main/services/ssh-ca'
 import type { RecordingInfo } from '../main/services/session-recorder'
+import type { LogFileInfo } from '../main/services/session-logger'
 import type { TerraformHost } from '../main/services/terraform-parser'
 import type { ProbeResult as MultiplexerProbeResult } from '../main/services/multiplexer'
 
@@ -214,6 +215,8 @@ export interface BifrostApi {
     stopLogging: (sessionId: string) => Promise<void>
     getLogDir: () => Promise<string>
     getRecordingsDir: () => Promise<string>
+    listSessionLogs: () => Promise<LogFileInfo[]>
+    deleteSessionLog: (filePath: string) => Promise<boolean>
     openPath: (targetPath: string) => Promise<string>
     revealPath: (targetPath: string) => Promise<void>
     healthPing: (connectionId: string, host: string) => Promise<{ connectionId: string; host: string; reachable: boolean; latencyMs: number | null }>
@@ -245,6 +248,17 @@ export interface BifrostApi {
     }) => Promise<AuditEvent[]>
     getLogSize: () => Promise<number>
     rotate: () => Promise<void>
+    export: (
+      options: {
+        connectionId?: string
+        since?: string
+        limit?: number
+        eventTypes?: AuditEventType[]
+        search?: string
+      } | undefined,
+      filePath: string,
+      format: 'jsonl' | 'csv'
+    ) => Promise<number>
   }
   ai: {
     checkAvailable: () => Promise<boolean>
@@ -635,6 +649,8 @@ const api: BifrostApi = {
     stopLogging: (sessionId) => ipcRenderer.invoke('system:stopLogging', sessionId),
     getLogDir: () => ipcRenderer.invoke('system:getLogDir'),
     getRecordingsDir: () => ipcRenderer.invoke('system:getRecordingsDir'),
+    listSessionLogs: () => ipcRenderer.invoke('system:listSessionLogs'),
+    deleteSessionLog: (filePath) => ipcRenderer.invoke('system:deleteSessionLog', filePath),
     openPath: (targetPath) => ipcRenderer.invoke('system:openPath', targetPath),
     revealPath: (targetPath) => ipcRenderer.invoke('system:revealPath', targetPath),
     healthPing: (connectionId, host) => ipcRenderer.invoke('health:ping', connectionId, host)
@@ -662,7 +678,9 @@ const api: BifrostApi = {
   audit: {
     query: (options?) => ipcRenderer.invoke('audit:query', options),
     getLogSize: () => ipcRenderer.invoke('audit:getLogSize'),
-    rotate: () => ipcRenderer.invoke('audit:rotate')
+    rotate: () => ipcRenderer.invoke('audit:rotate'),
+    export: (options, filePath, format) =>
+      ipcRenderer.invoke('audit:export', options, filePath, format)
   },
   ai: {
     checkAvailable: () => ipcRenderer.invoke('ai:checkAvailable'),

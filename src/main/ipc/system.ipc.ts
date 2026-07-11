@@ -4,6 +4,7 @@ import { sessionLogger } from '../services/session-logger'
 import { getRecordingsDir } from '../services/session-recorder'
 import { keepassBridge, type KeePassConfig } from '../services/keepass-bridge'
 import { connectionHealthMonitor } from '../services/connection-health'
+import { auditLogger } from '../services/audit-log'
 
 export function registerSystemIpc(): void {
   // Wake On LAN
@@ -46,7 +47,15 @@ export function registerSystemIpc(): void {
   ipcMain.handle(
     'system:startLogging',
     (_event, sessionId: string, pattern: string, context: { name?: string; host?: string; user?: string }) => {
-      return sessionLogger.startLogging(sessionId, pattern, context)
+      const filePath = sessionLogger.startLogging(sessionId, pattern, context)
+      auditLogger.log({
+        connectionId: sessionId,
+        connectionName: context.name ?? sessionId,
+        host: context.host ?? '',
+        event: 'session_log_start',
+        details: { sessionId, filePath }
+      })
+      return filePath
     }
   )
 
@@ -55,7 +64,16 @@ export function registerSystemIpc(): void {
   })
 
   ipcMain.handle('system:stopLogging', (_event, sessionId: string) => {
-    sessionLogger.stopLogging(sessionId)
+    const filePath = sessionLogger.stopLogging(sessionId)
+    if (filePath) {
+      auditLogger.log({
+        connectionId: sessionId,
+        connectionName: sessionId,
+        host: '',
+        event: 'session_log_stop',
+        details: { sessionId, filePath }
+      })
+    }
   })
 
   ipcMain.handle('system:getLogDir', () => {
@@ -64,6 +82,14 @@ export function registerSystemIpc(): void {
 
   ipcMain.handle('system:getRecordingsDir', () => {
     return getRecordingsDir()
+  })
+
+  ipcMain.handle('system:listSessionLogs', () => {
+    return sessionLogger.listLogs()
+  })
+
+  ipcMain.handle('system:deleteSessionLog', (_event, filePath: string) => {
+    return sessionLogger.deleteLog(filePath)
   })
 
   // Open a folder/file in the OS default handler; returns '' on success or an

@@ -22,7 +22,7 @@ Everything in this chapter is reachable from the terminal's context menu. Its to
 | **Find in Terminal** | Opens the search bar (`Ctrl+Shift+F`) |
 | **Layout ▸** | Split Horizontal / Split Vertical / Maximize Pane / Close Split Pane / Explode to Tabs / Combine All Tabs |
 | **Automation ▸** | Scripts, Remote Commands, Runbooks, Explain Command, AI Assistant, Broadcast toggle, Paste Image to Server, Enable cwd tracking |
-| **Capture ▸** | Record Session, Save Session Log, Take Screenshot, Save as Note, Recordings…, Open Recordings/Logs Folder |
+| **Capture ▸** | Record Session, Save Session Log, Take Screenshot, Save as Note, Recordings…, Session Logs…, Open Recordings/Logs Folder |
 | **Session ▸** | Rename Tab, Lock Title, Duplicate, Save as Connection, Open SFTP, Detach to Window |
 | **Clear Terminal** | Clears the screen and scrollback |
 | **Reset Terminal** | Full terminal reset (modes, charset, colors) |
@@ -108,8 +108,8 @@ On an SSH tab, `Ctrl+Shift+I` (or right-click → **Automation → Paste Image t
 
 Everything under right-click → **Capture**:
 
-- **Record Session** records an SSH session's input and output as an asciicast `.cast` file (SSH sessions only). Choose **Stop Recording** to finalize; a toast shows the file path. **Recordings…** opens a manager for past recordings, and **Open Recordings Folder** jumps to the directory.
-- **Save Session Log** streams the session's output to a `.log` file (named from the connection's log pattern); **Stop Session Log** ends it. **Open Logs Folder** shows the files.
+- **Record Session** records an SSH session's input and output as an asciicast `.cast` file (SSH sessions only). Choose **Stop Recording** to finalize; a toast shows the file path. **Recordings…** opens the capture files browser on its recordings tab, and **Open Recordings Folder** jumps to the directory.
+- **Save Session Log** streams the session's output to a `.log` file (named from the connection's log pattern); **Stop Session Log** ends it. **Session Logs…** opens the browser on its logs tab; **Open Logs Folder** shows the directory.
 - **Take Screenshot** saves the visible terminal as a PNG.
 - **Save as Note** stores the current selection as a per-connection note, tagged as Note, Evidence, Command, Error, or AI Prompt — searchable later from the notes panel.
 

@@ -247,7 +247,16 @@ export function registerSshIpc(mainWindow: BrowserWindow): void {
         // renderer's capture indicators can settle. Both are no-ops when
         // nothing is active for this session.
         stopRecording(sessionId)
-        sessionLogger.stopLogging(sessionId)
+        const logPath = sessionLogger.stopLogging(sessionId)
+        if (logPath) {
+          auditLogger.log({
+            connectionId: sessionId,
+            connectionName: sessionId,
+            host: '',
+            event: 'session_log_stop',
+            details: { sessionId, filePath: logPath, reason: 'session_closed' }
+          })
+        }
         sshManager.disconnect(sessionId)
       })
     }

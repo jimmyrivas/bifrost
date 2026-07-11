@@ -16,6 +16,8 @@ export type AuditEventType =
   | 'host_key_changed'
   | 'recording_start'
   | 'recording_stop'
+  | 'session_log_start'
+  | 'session_log_stop'
   | 'vault_password_changed'
   | 'key_file_stored'
   | 'mfa_prompt'
@@ -31,6 +33,33 @@ export interface AuditEvent {
 
 const RETENTION_DAYS = 30
 const MAX_FILE_SIZE_MB = 50
+
+/** Quote one CSV field per RFC 4180. */
+function csvField(value: string): string {
+  if (/[",\r\n]/.test(value)) {
+    return `"${value.replace(/"/g, '""')}"`
+  }
+  return value
+}
+
+/**
+ * Serialize audit events to CSV (RFC 4180). The details payload is kept as a
+ * single JSON-string column so no information is lost.
+ */
+export function auditEventsToCsv(events: AuditEvent[]): string {
+  const header = 'timestamp,event,connectionId,connectionName,host,details'
+  const rows = events.map((e) =>
+    [
+      csvField(e.timestamp),
+      csvField(e.event),
+      csvField(e.connectionId),
+      csvField(e.connectionName),
+      csvField(e.host),
+      csvField(JSON.stringify(e.details ?? {}))
+    ].join(',')
+  )
+  return [header, ...rows].join('\r\n') + '\r\n'
+}
 
 class AuditLogger {
   private logPath: string | null = null

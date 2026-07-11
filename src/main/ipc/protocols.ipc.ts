@@ -4,6 +4,7 @@ import { getDatabase, schema } from '../db'
 import { eq } from 'drizzle-orm'
 import { resolveJumpChainForJson } from '../services/jump-host/runtime'
 import { sessionLogger } from '../services/session-logger'
+import { auditLogger } from '../services/audit-log'
 
 export function registerProtocolsIpc(mainWindow: BrowserWindow): void {
   // RDP
@@ -138,7 +139,16 @@ export function registerProtocolsIpc(mainWindow: BrowserWindow): void {
       mainWindow.webContents.send('protocols:close', sessionId, code)
     }
     // Close out an active session log (no-op when none is active).
-    sessionLogger.stopLogging(sessionId)
+    const logPath = sessionLogger.stopLogging(sessionId)
+    if (logPath) {
+      auditLogger.log({
+        connectionId: sessionId,
+        connectionName: sessionId,
+        host: '',
+        event: 'session_log_stop',
+        details: { sessionId, filePath: logPath, reason: 'session_closed' }
+      })
+    }
   })
 
   externalProtocolManager.on('error', (...args: unknown[]) => {

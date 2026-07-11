@@ -51,7 +51,7 @@ import {
 } from '@renderer/components/ui/context-menu'
 import { useSessionsStore } from '@renderer/stores/sessions.store'
 import { useCaptureStore } from '@renderer/stores/capture.store'
-import { RecordingsManager } from './RecordingsManager'
+import { CaptureFilesBrowser, type CaptureTab } from './CaptureFilesBrowser'
 import { terminalToCsv, terminalToMarkdown } from '@renderer/lib/markdown-clip'
 import type { ScriptContext } from '@renderer/lib/script-runner'
 import { hasParams, promptForParams } from '@renderer/lib/workflow-params'
@@ -87,7 +87,7 @@ export function TerminalContextMenu({
   // mutations, so these re-render the menu only when a capture starts/stops.
   const recordings = useCaptureStore((s) => s.recordings)
   const logs = useCaptureStore((s) => s.logs)
-  const [recordingsOpen, setRecordingsOpen] = useState(false)
+  const [captureBrowserTab, setCaptureBrowserTab] = useState<CaptureTab | null>(null)
 
   // Bumped every time the context menu OPENS. Everything dynamic in the menu
   // (data-terminal-id reads, store getState() labels, scripts/remote-commands/
@@ -923,9 +923,13 @@ export function TerminalContextMenu({
 
             <ContextMenuSeparator />
 
-            <ContextMenuItem onClick={() => setRecordingsOpen(true)} className="gap-2">
+            <ContextMenuItem onClick={() => setCaptureBrowserTab('recordings')} className="gap-2">
               <Clapperboard size={14} strokeWidth={1.5} />
               Recordings…
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => setCaptureBrowserTab('logs')} className="gap-2">
+              <FileText size={14} strokeWidth={1.5} />
+              Session Logs…
             </ContextMenuItem>
             <ContextMenuItem onClick={openRecordingsFolder} className="gap-2">
               <FolderOpen size={14} strokeWidth={1.5} />
@@ -1120,7 +1124,11 @@ export function TerminalContextMenu({
         </div>
       )}
 
-      <RecordingsManager open={recordingsOpen} onClose={() => setRecordingsOpen(false)} />
+      <CaptureFilesBrowser
+        open={captureBrowserTab !== null}
+        defaultTab={captureBrowserTab ?? 'recordings'}
+        onClose={() => setCaptureBrowserTab(null)}
+      />
     </ContextMenu>
   )
 }

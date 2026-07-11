@@ -24,7 +24,7 @@ Todo lo de este capítulo es accesible desde el menú contextual del terminal. S
 | **Find in Terminal** | Abre la barra de búsqueda (`Ctrl+Shift+F`) |
 | **Layout ▸** | Split Horizontal / Split Vertical / Maximize Pane / Close Split Pane / Explode to Tabs / Combine All Tabs |
 | **Automation ▸** | Scripts, Remote Commands, Runbooks, Explain Command, AI Assistant, toggle de Broadcast, Paste Image to Server, Enable cwd tracking |
-| **Capture ▸** | Record Session, Save Session Log, Take Screenshot, Save as Note, Recordings…, Open Recordings/Logs Folder |
+| **Capture ▸** | Record Session, Save Session Log, Take Screenshot, Save as Note, Recordings…, Session Logs…, Open Recordings/Logs Folder |
 | **Session ▸** | Rename Tab, Lock Title, Duplicate, Save as Connection, Open SFTP, Detach to Window |
 | **Clear Terminal** | Limpia la pantalla y el scrollback |
 | **Reset Terminal** | Reinicio completo del terminal (modos, charset, colores) |
@@ -110,8 +110,8 @@ En una pestaña SSH, `Ctrl+Shift+I` (o clic derecho → **Automation → Paste I
 
 Todo bajo clic derecho → **Capture**:
 
-- **Record Session** graba la entrada y salida de una sesión SSH como archivo asciicast `.cast` (solo sesiones SSH). Elige **Stop Recording** para finalizar; un aviso muestra la ruta del archivo. **Recordings…** abre un gestor de grabaciones pasadas, y **Open Recordings Folder** lleva al directorio.
-- **Save Session Log** vuelca la salida de la sesión a un archivo `.log` (nombrado según el patrón de log de la conexión); **Stop Session Log** lo termina. **Open Logs Folder** muestra los archivos.
+- **Record Session** graba la entrada y salida de una sesión SSH como archivo asciicast `.cast` (solo sesiones SSH). Elige **Stop Recording** para finalizar; un aviso muestra la ruta del archivo. **Recordings…** abre el navegador de archivos de captura en su pestaña de grabaciones, y **Open Recordings Folder** lleva al directorio.
+- **Save Session Log** vuelca la salida de la sesión a un archivo `.log` (nombrado según el patrón de log de la conexión); **Stop Session Log** lo termina. **Session Logs…** abre el navegador en su pestaña de logs; **Open Logs Folder** muestra el directorio.
 - **Take Screenshot** guarda el terminal visible como PNG.
 - **Save as Note** guarda la selección actual como nota de la conexión, etiquetada como Note, Evidence, Command, Error o AI Prompt — buscable después desde el panel de notas.
 

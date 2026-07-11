@@ -113,8 +113,24 @@ export function ConnectionStats({ connectionId, connectionName }: ConnectionStat
 
   return (
     <div className="flex flex-col gap-2 p-3">
-      <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--on-surface-variant)]">
-        {connectionName}
+      <div className="flex items-center">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--on-surface-variant)]">
+          {connectionName}
+        </div>
+        <div className="flex-1" />
+        <button
+          type="button"
+          onClick={() =>
+            document.dispatchEvent(
+              new CustomEvent('open:activity', { detail: { connectionId } })
+            )
+          }
+          className="flex items-center gap-1 text-[10px] text-[#6bd5ff]/80 hover:text-[#6bd5ff] hover:underline"
+          title="Open the Activity view filtered to this connection"
+        >
+          <Activity size={10} />
+          View activity
+        </button>
       </div>
       <div className="grid grid-cols-2 gap-2">
         {items.map(({ icon: Icon, label, value }) => (
