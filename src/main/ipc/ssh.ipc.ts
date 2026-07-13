@@ -16,6 +16,7 @@ import {
 import { auditLogger } from '../services/audit-log'
 import { sessionLogger } from '../services/session-logger'
 import { resolveJumpChainForJson } from '../services/jump-host/runtime'
+import { parseSshOptions } from '../services/ssh-options'
 import { macroExecutor } from '../services/macro-executor'
 import type { VariableContext } from '../services/variable-engine'
 
@@ -156,6 +157,10 @@ export function registerSshIpc(mainWindow: BrowserWindow): void {
 
       const jumpChain = await resolveJumpChainForJson(conn.jumpServerConfig)
 
+      // Consume the saved Advanced-SSH options (ciphers/MACs/KEX/host-key
+      // algorithms, X11 forwarding) — previously stored but dropped here.
+      const sshOptions = parseSshOptions(conn.sshConfig)
+
       const config: SshConnectionConfig = {
         host: conn.host,
         port: conn.port ?? 22,
@@ -165,7 +170,9 @@ export function registerSshIpc(mainWindow: BrowserWindow): void {
         privateKeyPath: conn.privateKeyPath,
         encryptedPassphrase: conn.encryptedPassphrase,
         useFido2: conn.authType === 'fido2',
-        jumpChain: jumpChain.length > 0 ? jumpChain : undefined
+        jumpChain: jumpChain.length > 0 ? jumpChain : undefined,
+        algorithms: sshOptions.algorithms,
+        x11Forward: sshOptions.x11Forward
       }
 
       const sessionId = await sshManager.connect(config)

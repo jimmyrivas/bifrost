@@ -71,6 +71,8 @@ derived from the project's OpenSpec capability specs and verified against the co
 - **Jump-host chains** (multi-hop ProxyJump) with a visual chain editor — used by SSH, Mosh, and tunnels; inline hop passwords are encrypted at rest
 - **Tunnels**: local, remote, and **dynamic (SOCKS5)** port forwarding with a full manager UI, per-tunnel credentials, and auto-start on launch
 - **Mosh** as a first-class connection method (spawned via PTY, jump chains supported)
+- **More connection methods** from the terminal: **Telnet** (in-terminal), **RDP** and **VNC** (launch the external client), and **Custom Command** (run any command as the session) — alongside SSH and Mosh
+- **Advanced SSH options**: per-connection cipher / KEX / MAC / host-key algorithm selection and X11 forwarding are applied on connect
 
 ### SFTP & files
 - SFTP panel per SSH tab: browse, upload (multi-file), download, delete, mkdir
@@ -111,7 +113,7 @@ These exist as real, tested main-process implementations with IPC in place, but
 **no UI reaches them yet** — selecting them does nothing (or falls back to SSH).
 They are the top of the roadmap, and each is a well-scoped contribution:
 
-- **Protocol launchers**: RDP (xfreerdp/mstsc with clipboard/drive/audio flags), VNC, Telnet, FTP (lftp), TN3270, WebDAV, AWS SSM sessions
+- **Protocol launchers** without a menu entry: FTP (lftp), TN3270, WebDAV, AWS SSM sessions — the backend exists but the connection form only offers SSH/Mosh/RDP/VNC/Telnet/Custom
 - **Import**: `~/.ssh/config` parser, Ansible inventories, Terraform state, JSON export/import
 - **Cloud discovery**: AWS EC2, GCP, Azure VMs, Docker, Podman, Kubernetes — CLI-based scanners ready, no panel
 - **External password managers**: 1Password, Bitwarden, HashiCorp Vault, AWS Secrets Manager, Azure Key Vault, KeePassXC bridge
@@ -119,7 +121,7 @@ They are the top of the roadmap, and each is a well-scoped contribution:
 - **Expect engine** (pattern → response automation with jump rules) and **macros**
 - **Clusters**: persistent cluster backend (create/members/broadcast) — the current panel is a visual draft not yet wired to it
 - **Global variables editor** (the `<GV:>` resolver works; there's no UI to define them)
-- **Advanced SSH options plumb-through**: X11 forwarding, HTTP proxy, agent forwarding, cipher/KEX/MAC selection — the form saves them, the connect path must consume them
+- **Advanced SSH options — partial**: cipher/KEX/MAC/host-key algorithm selection and X11 forwarding are now consumed by the connect path; **agent forwarding and HTTP proxy** are saved by the form but not yet applied
 - **Vault re-encryption** (change the vault password over existing secrets)
 - Database encryption at rest (AES-256-GCM, needs the decrypt-on-startup half + UI)
 

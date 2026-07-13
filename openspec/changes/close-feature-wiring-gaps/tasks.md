@@ -11,11 +11,11 @@
 
 ## 2. Phase 2 — Protocol routing & SSH options plumb-through
 
-- [ ] 2.1 Route non-SSH methods in `useTerminal.initConnection`: dispatch `rdp`/`vnc` to `protocols.connectRDP/connectVNC` (external client, informative pane state), `telnet`/`ftp`/`ssm` to their PTY-backed launchers bound to the terminal data path, `custom` to `terminal.create` with the custom command.
-- [ ] 2.2 Surface launcher availability errors (missing xfreerdp/lftp/aws) as a toast with install hint.
-- [ ] 2.3 Parse `sshConfig.options` in `ssh:connect` into typed config: `x11Forward`, agent forwarding, `algorithms` (ciphers/KEX/MACs/host keys), `httpProxy`; treat invalid values as absent.
-- [ ] 2.4 Add an HTTP proxy field to the Advanced SSH tab (backend already supports it).
-- [ ] 2.5 Unit tests for the options parser and the method dispatch table; README: move RDP/VNC/Telnet/FTP/SSM/custom and SSH options out of pending.
+- [x] 2.1 Route non-SSH methods in `useTerminal.initConnection`: `rdp`/`vnc` → `protocols.connectRDP/connectVNC` (session tracked by id; stored RDP options + vault password passed so xfreerdp doesn't prompt on a piped stdin; client output/exit shown in the pane), `telnet`/`ftp`/`ssm` → PTY/socket launchers on the same data path as mosh (shared `wirePtyBackedProtocol`, initial PTY size sync), `custom`/`local` → `terminal.create` (custom command now persisted in sshConfig JSON — ConnectionForm saves/loads `customCommand` and `rdp` options). Cleanup disconnects every `protocols.*` session on tab close (was leaked for mosh). TN3270/WebDAV remain backend-only (not offered by the form); FTP/SSM route correctly for imported/discovered connections.
+- [x] 2.2 Launcher availability errors (missing xfreerdp/vncviewer/lftp/aws/mosh) surface as a global toast with a per-protocol install hint (`ToastHost` in App.tsx via `app:toast` CustomEvent; hints in `lib/protocol-dispatch.ts`), plus the same hint inline in the pane. VNC's synchronous "no viewer found" error is caught by registering the error listener before connect (prefix match until the session id is known).
+- [x] 2.3 Parse `sshConfig.options` in `ssh:connect` via `services/ssh-options.ts` into typed config: `algorithms` (Ciphers/MACs/KexAlgorithms/HostKeyAlgorithms) + `x11Forward` — both already consumed by ssh-manager; empty/invalid → absent. Agent forwarding + `httpProxy` intentionally NOT surfaced (connect path doesn't consume them — would be inert).
+- [~] 2.4 HTTP proxy field: DEFERRED — ssh-manager doesn't consume `httpProxy` yet, so a form field would be an inert control. Kept honest in README pending until the connect path wires HTTP CONNECT.
+- [x] 2.5 Unit tests for the options parser (`ssh-options.test.ts`, 6 cases; 335 total). Method dispatch verified by GUI. README EN/ES: RDP/VNC/Telnet/Custom + ciphers/KEX/MAC/X11 → Features; agent-forward/HTTP-proxy + FTP/SSM/3270/WebDAV kept honest in pending.
 
 ## 3. Phase 3 — Import/export & discovery UI
 

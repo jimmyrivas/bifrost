@@ -146,12 +146,13 @@ const migrations: Migration[] = [
     `)
   },
 
-  // Migration 1: Add 'mosh' to connections method (SQLite CHECK workaround)
-  // SQLite can't ALTER CHECK constraints, but Drizzle inserts bypass CHECK validation.
-  // This migration is a no-op marker to track schema version.
+  // Migration 1: (historical) intended to add 'mosh' to the connections method
+  // CHECK constraint. It was a no-op that wrongly assumed Drizzle bypasses
+  // SQLite CHECK validation — SQLite enforces CHECK regardless of the ORM, so
+  // saving mosh/custom connections failed. The real fix is Migration 7, which
+  // rebuilds the table. This stays a no-op to preserve the version numbering.
   (db) => {
-    // The schema.ts enum now includes 'mosh'. Drizzle ORM handles validation.
-    db.exec(`SELECT 1`) // no-op
+    db.exec(`SELECT 1`) // no-op (superseded by Migration 7)
   },
 
   // Migration 2: Remote Commands (Asbru-style)
@@ -254,6 +255,70 @@ const migrations: Migration[] = [
       DROP TABLE tunnels;
       ALTER TABLE tunnels_new RENAME TO tunnels;
     `)
+  },
+
+  // Migration 7: widen the connections.method CHECK constraint.
+  // The original table (Migration 0) only allowed ssh/rdp/vnc/telnet/local/ftp,
+  // so saving 'mosh' or 'custom' connections failed with SQLITE_CONSTRAINT_CHECK.
+  // Migration 1 was a no-op that wrongly assumed the ORM bypassed the CHECK.
+  // SQLite can't ALTER a CHECK constraint, so we recreate the table preserving
+  // every row and column. Foreign keys are deferred inside the migration
+  // transaction; the RENAME re-points existing child references automatically.
+  // NOTE: this DROPs the parent `connections` table. Child tables
+  // (exec_commands, macros, expect_rules, …) use ON DELETE CASCADE, so foreign
+  // key enforcement MUST be disabled while this runs or every hook/macro/rule
+  // would be cascade-deleted. runMigrations() turns foreign_keys OFF around the
+  // migration transaction (PRAGMA foreign_keys is a no-op *inside* a
+  // transaction, so it cannot be done here).
+  (db) => {
+    db.exec(`
+      CREATE TABLE connections_new (
+        id TEXT PRIMARY KEY,
+        group_id TEXT REFERENCES groups(id),
+        name TEXT NOT NULL,
+        method TEXT NOT NULL CHECK(method IN ('ssh','mosh','rdp','vnc','telnet','local','ftp','custom','ssm')),
+        host TEXT,
+        port INTEGER,
+        auth_type TEXT CHECK(auth_type IN ('userpass','key','key_pass','manual')),
+        username TEXT,
+        encrypted_password BLOB,
+        private_key_path TEXT,
+        encrypted_passphrase BLOB,
+        launch_on_startup BOOLEAN DEFAULT 0,
+        reconnect_on_disconnect BOOLEAN DEFAULT 0,
+        run_with_sudo BOOLEAN DEFAULT 0,
+        use_autossh BOOLEAN DEFAULT 0,
+        tab_title TEXT,
+        auto_save_log BOOLEAN DEFAULT 0,
+        log_pattern TEXT,
+        send_string TEXT,
+        send_interval_seconds INTEGER,
+        send_idle_only BOOLEAN DEFAULT 0,
+        network_mode TEXT DEFAULT 'global' CHECK(network_mode IN ('global','direct','socks','jump')),
+        proxy_config TEXT,
+        jump_server_config TEXT,
+        terminal_override BOOLEAN DEFAULT 0,
+        terminal_config TEXT,
+        ssh_config TEXT,
+        sort_order INTEGER DEFAULT 0,
+        template_id TEXT REFERENCES connection_templates(id),
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      INSERT INTO connections_new SELECT
+        id, group_id, name, method, host, port, auth_type, username,
+        encrypted_password, private_key_path, encrypted_passphrase,
+        launch_on_startup, reconnect_on_disconnect, run_with_sudo, use_autossh,
+        tab_title, auto_save_log, log_pattern, send_string, send_interval_seconds,
+        send_idle_only, network_mode, proxy_config, jump_server_config,
+        terminal_override, terminal_config, ssh_config, sort_order, template_id,
+        created_at, updated_at
+      FROM connections;
+
+      DROP TABLE connections;
+      ALTER TABLE connections_new RENAME TO connections;
+    `)
   }
 ]
 
@@ -263,6 +328,13 @@ export function runMigrations(): void {
 
   if (currentVersion >= migrations.length) return
 
+  // Some migrations rebuild parent tables (DROP + RENAME). With foreign_keys
+  // ON, dropping a parent triggers ON DELETE CASCADE on its children — wiping
+  // hooks/macros/rules. PRAGMA foreign_keys is a no-op inside a transaction, so
+  // disable it here (outside/around the transaction) and restore it after.
+  const fkWasOn = sqlite.pragma('foreign_keys', { simple: true }) === 1
+  if (fkWasOn) sqlite.pragma('foreign_keys = OFF')
+
   const migrate = sqlite.transaction(() => {
     for (let i = currentVersion; i < migrations.length; i++) {
       migrations[i](sqlite)
@@ -270,5 +342,15 @@ export function runMigrations(): void {
     sqlite.pragma(`user_version = ${migrations.length}`)
   })
 
-  migrate()
+  try {
+    migrate()
+    // Catch any orphaned references introduced by table rebuilds before we
+    // re-enable enforcement; foreign_key_check reports, it does not throw.
+    const violations = sqlite.pragma('foreign_key_check') as unknown[]
+    if (violations.length > 0) {
+      console.error('[migrate] foreign_key_check found violations after migration:', violations)
+    }
+  } finally {
+    if (fkWasOn) sqlite.pragma('foreign_keys = ON')
+  }
 }

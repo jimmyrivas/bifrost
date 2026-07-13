@@ -4,6 +4,7 @@ import { DetachedTerminal } from '@renderer/components/terminal/DetachedTerminal
 import { DetachedAIAssistant } from '@renderer/components/terminal/DetachedAIAssistant'
 import { MarkdownViewer } from '@renderer/components/markdown/MarkdownViewer'
 import { RestoreSessionPrompt } from '@renderer/components/layout/RestoreSessionPrompt'
+import { ToastHost } from '@renderer/components/ui/toast-host'
 import { useSessionsStore, type Tab } from '@renderer/stores/sessions.store'
 import { useMarkdownViewerStore } from '@renderer/stores/markdownViewer.store'
 import { usePreferencesStore } from '@renderer/stores/preferences.store'
@@ -360,6 +361,7 @@ export function App(): JSX.Element {
     <>
       <AppShell />
       <MarkdownViewer />
+      <ToastHost />
       {showRestorePrompt && (
         <RestoreSessionPrompt
           count={restoreManifest.tabs.length}

@@ -19,7 +19,7 @@ export const connections = sqliteTable('connections', {
   id: text('id').primaryKey(),
   groupId: text('group_id').references(() => groups.id),
   name: text('name').notNull(),
-  method: text('method', { enum: ['ssh', 'mosh', 'rdp', 'vnc', 'telnet', 'local', 'ftp'] }).notNull(),
+  method: text('method', { enum: ['ssh', 'mosh', 'rdp', 'vnc', 'telnet', 'local', 'ftp', 'custom', 'ssm'] }).notNull(),
   host: text('host'),
   port: integer('port'),
   authType: text('auth_type', { enum: ['userpass', 'key', 'key_pass', 'fido2', 'manual'] }),

@@ -224,6 +224,28 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
               return cfg.options ?? {}
             } catch { return {} }
           })(),
+          customCommand: (() => {
+            try {
+              const cfg = conn.sshConfig ? JSON.parse(conn.sshConfig) : {}
+              return typeof cfg.customCommand === 'string' ? cfg.customCommand : ''
+            } catch { return '' }
+          })(),
+          ...(() => {
+            try {
+              const cfg = conn.sshConfig ? JSON.parse(conn.sshConfig) : {}
+              const rdp = cfg.rdp
+              if (!rdp || typeof rdp !== 'object') return {}
+              return {
+                rdpClipboard: rdp.clipboard !== false,
+                rdpDriveRedirect: !!rdp.driveRedirect,
+                rdpPrinterRedirect: !!rdp.printerRedirect,
+                rdpAudioPlayback: !!rdp.audioPlayback,
+                rdpColorDepth: ([15, 16, 24, 32].includes(rdp.colorDepth) ? rdp.colorDepth : 24) as 15 | 16 | 24 | 32,
+                rdpFullscreen: !!rdp.fullscreen,
+                rdpResolution: typeof rdp.resolution === 'string' ? rdp.resolution : '1280x800'
+              }
+            } catch { return {} }
+          })(),
           multiplexer: (() => {
             try {
               const cfg = conn.sshConfig ? JSON.parse(conn.sshConfig) : {}
@@ -331,6 +353,22 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
       if (form.totpSecret.trim()) sshConfigObj.totpSecret = form.totpSecret.trim()
       if (Object.keys(form.sshOptions).length > 0) sshConfigObj.options = form.sshOptions
       if (form.multiplexer.preferred !== 'none') sshConfigObj.multiplexer = form.multiplexer
+      // Custom-command / RDP methods persist their settings in the same JSON
+      // blob (no dedicated DB columns) — read at connect time by useTerminal.
+      if (form.method === 'custom' && form.customCommand.trim()) {
+        sshConfigObj.customCommand = form.customCommand.trim()
+      }
+      if (form.method === 'rdp') {
+        sshConfigObj.rdp = {
+          clipboard: form.rdpClipboard,
+          driveRedirect: form.rdpDriveRedirect,
+          printerRedirect: form.rdpPrinterRedirect,
+          audioPlayback: form.rdpAudioPlayback,
+          colorDepth: form.rdpColorDepth,
+          fullscreen: form.rdpFullscreen,
+          resolution: form.rdpResolution
+        }
+      }
       const sshConfig = Object.keys(sshConfigObj).length > 0 ? JSON.stringify(sshConfigObj) : undefined
 
       const jumpServerConfig =
@@ -378,8 +416,10 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
       } else if (savedId && connectionId && loadedCreds.current.passphrase) {
         await window.bifrost.credentials.clearPassphrase?.(savedId)
       }
-      // Save exec commands (hooks)
-      if (savedId && execCmds.length > 0) {
+      // Save exec commands (hooks). Always sync — execCommands.save deletes and
+      // re-inserts, so an empty list must be persisted too, otherwise removing
+      // every hook in the editor would leave the old rows in the DB.
+      if (savedId) {
         await window.bifrost.execCommands.save(savedId, execCmds)
       }
       onClose()

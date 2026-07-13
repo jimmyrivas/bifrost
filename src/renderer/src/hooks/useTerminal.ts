@@ -14,6 +14,16 @@ import { detectZmodem, notifyZmodemDetected } from '@renderer/lib/zmodem-handler
 import { findMarkdownPaths } from '@renderer/lib/markdown-link-matcher'
 import { resolveRemotePath, parseCwdFromPrompt } from '@renderer/lib/markdown-path-resolver'
 import {
+  defaultPortFor,
+  launcherInstallHint,
+  launcherBinaryFor,
+  isLauncherMissingError,
+  parseRdpOptions,
+  parseCustomCommand,
+  parseSsmRegion,
+  showToast
+} from '@renderer/lib/protocol-dispatch'
+import {
   defaultMultiplexer,
   type MultiplexerConfig
 } from '@renderer/components/connections/MultiplexerPanel'
@@ -792,6 +802,7 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
 
     let removeDataListener: (() => void) | null = null
     let removeExitListener: (() => void) | null = null
+    let removeErrorListener: (() => void) | null = null
     let sshSessionId: string | null = null
     let reconnectTimerId: ReturnType<typeof setTimeout> | null = null
     let userDisconnected = false
@@ -1035,64 +1046,264 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
         const connectionName = conn?.name || 'session'
         hostLabelRef.current = hostLabel
 
-        if (method === 'mosh') {
-          // === MOSH MODE ===
-          terminal.write('\x1b[33mConnecting via Mosh...\x1b[0m\r\n')
+        // Bind a PTY/socket-backed external protocol (Mosh, Telnet, FTP, SSM)
+        // to this xterm: wires input/resize/output/close exactly like the
+        // local/SSH paths.
+        const wirePtyBackedProtocol = (
+          rawId: string,
+          prefix: 'mosh' | 'telnet' | 'ftp' | 'ssm',
+          write: (data: string) => void,
+          endedMessage: string
+        ): void => {
+          terminalIdRef.current = `${prefix}:${rawId}`
+          onTerminalCreated?.(`${prefix}:${rawId}`)
+
+          terminal.onData(async (data: string) => {
+            if (data.includes('\n') || data.includes('\r\n')) {
+              const allowed = await shouldAllowPaste(data)
+              if (!allowed) return
+            }
+            write(data)
+            broadcastInput(`${prefix}:${rawId}`, data)
+          })
+
+          terminal.onResize(({ cols, rows }: { cols: number; rows: number }) => {
+            window.bifrost.protocols.resizePty(rawId, cols, rows)
+          })
+
+          removeDataListener = window.bifrost.protocols.onData((id: string, data: string) => {
+            if (id === rawId) {
+              terminal.write(redactSecrets(data))
+              lastOutputTimeRef.current = Date.now()
+              outputActiveRef.current = true
+              errorBufferRef.current += data
+              if (errorBufferRef.current.length > 4096) {
+                errorBufferRef.current = errorBufferRef.current.slice(-2048)
+              }
+              const errors = scanForErrors(data)
+              if (errors.length > 0) {
+                detectedErrorsRef.current = [...detectedErrorsRef.current.slice(-9), ...errors]
+              }
+              scanForAi(data)
+            }
+          })
+
+          removeExitListener = window.bifrost.protocols.onClose((id: string) => {
+            if (id === rawId) {
+              terminal.write(endedMessage)
+              clearCaptureForSession(id)
+            }
+          })
+
+          removeErrorListener = window.bifrost.protocols.onError((id: string, message: string) => {
+            if (id !== rawId) return
+            terminal.write(`\r\n\x1b[31m${message}\x1b[0m\r\n`)
+            // #2.2: missing launcher binary (mosh/lftp/aws) → toast + install hint
+            if (isLauncherMissingError(message)) {
+              const hint = launcherInstallHint(prefix)
+              if (hint) terminal.write(`\x1b[90m${hint}\x1b[0m\r\n`)
+              showToast({
+                message: `${launcherBinaryFor(prefix)} not found — ${prefix.toUpperCase()} session failed`,
+                hint: hint ?? undefined,
+                variant: 'error'
+              })
+            }
+          })
+        }
+
+        if (method === 'mosh' || method === 'telnet' || method === 'ftp' || method === 'ssm') {
+          // === MOSH / TELNET / FTP / SSM (PTY- or socket-backed launcher) ===
+          const label = { mosh: 'Mosh', telnet: 'Telnet', ftp: 'FTP', ssm: 'AWS SSM' }[method]
+          terminal.write(`\x1b[33mConnecting via ${label}...\x1b[0m\r\n`)
           try {
-            const conn = await window.bifrost.connections.get(connectionId)
             const host = conn?.host ?? 'localhost'
             const user = conn?.username ?? undefined
             const port = conn?.port ?? undefined
-            const moshSessionId = await window.bifrost.protocols.connectMosh(
-              host,
-              user,
-              port,
-              undefined,
-              connectionId
+            let sid: string
+            if (method === 'telnet') {
+              sid = await window.bifrost.protocols.connectTelnet(
+                host,
+                port ?? defaultPortFor('telnet')
+              )
+            } else if (method === 'ftp') {
+              // lftp only auto-authenticates when both user and password exist;
+              // otherwise the client prompts inside the PTY.
+              let password: string | undefined
+              try {
+                password = (await window.bifrost.credentials.getPassword(connectionId)) ?? undefined
+              } catch {
+                password = undefined
+              }
+              sid = await window.bifrost.protocols.connectFTP(
+                host,
+                port ?? defaultPortFor('ftp'),
+                user,
+                password
+              )
+            } else if (method === 'ssm') {
+              // The host field carries the EC2 instance id; the AWS region is
+              // stored in the connection's sshConfig JSON (`region` key).
+              const region = parseSsmRegion(conn?.sshConfig)
+              if (!region) {
+                terminal.write('\x1b[90mNo AWS region configured — using us-east-1.\x1b[0m\r\n')
+              }
+              sid = await window.bifrost.protocols.connectSSM(host, region ?? 'us-east-1')
+            } else {
+              sid = await window.bifrost.protocols.connectMosh(
+                host,
+                user,
+                port,
+                undefined,
+                connectionId
+              )
+            }
+            const write =
+              method === 'telnet'
+                ? (d: string): void => window.bifrost.protocols.writeTelnet(sid, d)
+                : (d: string): void => window.bifrost.protocols.writePty(sid, d)
+            // PTY launchers spawn at 80x24 — sync to the real pane size
+            // (no-op for the telnet socket).
+            if (method !== 'telnet') {
+              window.bifrost.protocols.resizePty(sid, terminal.cols, terminal.rows)
+            }
+            wirePtyBackedProtocol(sid, method, write, `\r\n\x1b[90m[${label} session ended]\x1b[0m\r\n`)
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err)
+            terminal.write(`\x1b[31m${label} connection failed: ${msg}\x1b[0m\r\n`)
+            const hint = launcherInstallHint(method)
+            if (hint && isLauncherMissingError(msg)) {
+              terminal.write(`\x1b[90m${hint}\x1b[0m\r\n`)
+              showToast({
+                message: `${launcherBinaryFor(method)} not found — ${label} session failed`,
+                hint,
+                variant: 'error'
+              })
+            } else if (method === 'mosh') {
+              terminal.write('\x1b[90mEnsure mosh is installed: sudo apt install mosh\x1b[0m\r\n')
+            }
+          }
+        } else if (method === 'rdp' || method === 'vnc') {
+          // === RDP / VNC (external GUI client — pane shows client output) ===
+          const label = method.toUpperCase()
+          const host = conn?.host ?? 'localhost'
+          const port = conn?.port ?? defaultPortFor(method)
+          terminal.write(`\x1b[33mLaunching external ${label} client for ${host}:${port}...\x1b[0m\r\n`)
+          // Register the error listener BEFORE connecting: connectVNC emits its
+          // "no viewer found" error synchronously, ahead of the invoke reply.
+          // Until the session id is known we match by the `${method}-` prefix.
+          let externalSid: string | null = null
+          removeErrorListener = window.bifrost.protocols.onError((id: string, message: string) => {
+            if (externalSid ? id !== externalSid : !id.startsWith(`${method}-`)) return
+            terminal.write(`\r\n\x1b[31m${label} error: ${message}\x1b[0m\r\n`)
+            // #2.2: missing client binary → toast with an install hint
+            if (isLauncherMissingError(message) || /no vnc viewer/i.test(message)) {
+              const hint = launcherInstallHint(method)
+              if (hint) terminal.write(`\x1b[90m${hint}\x1b[0m\r\n`)
+              showToast({
+                message: `${launcherBinaryFor(method)} not found — cannot launch the ${label} client`,
+                hint: hint ?? undefined,
+                variant: 'error'
+              })
+            }
+          })
+          try {
+            // Pass the stored password (if any) so the client doesn't prompt on
+            // a piped stdin nobody can type into. VNC viewers prompt in their
+            // own window when no password is stored.
+            let password: string | undefined
+            try {
+              password = (await window.bifrost.credentials.getPassword(connectionId)) ?? undefined
+            } catch {
+              password = undefined
+            }
+            const sid =
+              method === 'rdp'
+                ? await window.bifrost.protocols.connectRDP(
+                    host,
+                    port,
+                    conn?.username ?? '',
+                    password,
+                    parseRdpOptions(conn?.sshConfig)
+                  )
+                : await window.bifrost.protocols.connectVNC(host, port, password)
+            externalSid = sid
+            terminalIdRef.current = `${method}:${sid}`
+            onTerminalCreated?.(`${method}:${sid}`)
+            terminal.write(
+              `\x1b[32m${label} client launched\x1b[0m — the session opens in its own window.\r\n`
             )
-            terminalIdRef.current = `mosh:${moshSessionId}`
-            onTerminalCreated?.(`mosh:${moshSessionId}`)
-
-            terminal.onData(async (data: string) => {
-              if (data.includes('\n') || data.includes('\r\n')) {
-                const allowed = await shouldAllowPaste(data)
-                if (!allowed) return
-              }
-              window.bifrost.protocols.writePty(moshSessionId, data)
-              broadcastInput(`mosh:${moshSessionId}`, data)
-            })
-
-            terminal.onResize(({ cols, rows }: { cols: number; rows: number }) => {
-              window.bifrost.protocols.resizePty(moshSessionId, cols, rows)
-            })
-
+            terminal.write(
+              '\x1b[90mClient output appears below; closing this tab ends the session.\x1b[0m\r\n'
+            )
             removeDataListener = window.bifrost.protocols.onData((id: string, data: string) => {
-              if (id === moshSessionId) {
-                terminal.write(redactSecrets(data))
-                lastOutputTimeRef.current = Date.now()
-                outputActiveRef.current = true
-                errorBufferRef.current += data
-                if (errorBufferRef.current.length > 4096) {
-                  errorBufferRef.current = errorBufferRef.current.slice(-2048)
-                }
-                const errors = scanForErrors(data)
-                if (errors.length > 0) {
-                  detectedErrorsRef.current = [...detectedErrorsRef.current.slice(-9), ...errors]
-                }
-                scanForAi(data)
-              }
+              if (id === sid) terminal.write(data)
             })
-
-            removeExitListener = window.bifrost.protocols.onClose((id: string) => {
-              if (id === moshSessionId) {
-                terminal.write('\r\n\x1b[90m[Mosh session ended]\x1b[0m\r\n')
-                clearCaptureForSession(id)
+            removeExitListener = window.bifrost.protocols.onClose((id: string, code: number) => {
+              if (id === sid) {
+                terminal.write(`\r\n\x1b[90m[${label} client exited (code ${code})]\x1b[0m\r\n`)
               }
             })
           } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : String(err)
-            terminal.write(`\x1b[31mMosh connection failed: ${msg}\x1b[0m\r\n`)
-            terminal.write('\x1b[90mEnsure mosh is installed: sudo apt install mosh\x1b[0m\r\n')
+            terminal.write(`\x1b[31m${label} launch failed: ${msg}\x1b[0m\r\n`)
+          }
+        } else if (method === 'custom' || method === 'local') {
+          // === CUSTOM COMMAND / LOCAL (local PTY; optional configured command) ===
+          // The custom command is persisted in the connection's sshConfig JSON
+          // (`customCommand` key) — there is no dedicated DB column. A `local`
+          // method connection simply opens the default shell.
+          const command = method === 'custom' ? parseCustomCommand(conn?.sshConfig) : null
+          if (method === 'custom' && !command) {
+            terminal.write('\x1b[31mNo custom command configured for this connection.\x1b[0m\r\n')
+            terminal.write('\x1b[90mEdit the connection and set the command to run.\x1b[0m\r\n')
+          } else {
+            terminal.write(
+              command
+                ? '\x1b[33mRunning custom command...\x1b[0m\r\n'
+                : '\x1b[33mStarting local shell...\x1b[0m\r\n'
+            )
+            try {
+              const { cols, rows } = terminal
+              // multiplexerCmd arg runs `/bin/sh -c <command>` in the PTY;
+              // undefined falls back to the default shell.
+              const id = await window.bifrost.terminal.create(
+                cols,
+                rows,
+                undefined,
+                undefined,
+                command ?? undefined
+              )
+              terminalIdRef.current = id
+              onTerminalCreated?.(id)
+
+              terminal.onData(async (data: string) => {
+                if (data.includes('\n') || data.includes('\r\n')) {
+                  const allowed = await shouldAllowPaste(data)
+                  if (!allowed) return
+                }
+                window.bifrost.terminal.write(id, data)
+                broadcastInput(id, data)
+              })
+              terminal.onResize(({ cols, rows }: { cols: number; rows: number }) => {
+                window.bifrost.terminal.resize(id, cols, rows)
+              })
+              removeDataListener = window.bifrost.terminal.onData((tid: string, data: string) => {
+                if (tid === terminalIdRef.current) {
+                  terminal.write(redactSecrets(data))
+                  lastOutputTimeRef.current = Date.now()
+                  outputActiveRef.current = true
+                }
+              })
+              removeExitListener = window.bifrost.terminal.onExit((tid: string, exitCode: number) => {
+                if (tid === terminalIdRef.current) {
+                  terminal.write(`\r\n\x1b[90m[Command exited with code ${exitCode}]\x1b[0m\r\n`)
+                  clearCaptureForSession(tid)
+                }
+              })
+            } catch (err: unknown) {
+              const msg = err instanceof Error ? err.message : String(err)
+              terminal.write(`\x1b[31mCustom command failed: ${msg}\x1b[0m\r\n`)
+            }
           }
         } else {
           // === SSH MODE ===
@@ -1265,18 +1476,26 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
       osc7Disposable.dispose()
       removeDataListener?.()
       removeExitListener?.()
+      removeErrorListener?.()
       // Don't kill PTY/SSH if this tab is being detached (session transferred)
       const detaching = useSessionsStore.getState()._detachingTabs.has(paneId) ||
         Array.from(useSessionsStore.getState()._detachingTabs).length > 0
       if (!detaching) {
+        const termId = terminalIdRef.current
         if (connectionId && sshSessionId) {
           window.bifrost.ssh.disconnect(sshSessionId)
-        } else if (terminalIdRef.current && !connectionId) {
-          window.bifrost.terminal.destroy(terminalIdRef.current)
+        } else if (termId && termId.includes(':') && !termId.startsWith('ssh:')) {
+          // protocols.* session (mosh/telnet/ftp/ssm/rdp/vnc) — tear down the
+          // backend PTY/socket/external client.
+          window.bifrost.protocols.disconnect(termId.slice(termId.indexOf(':') + 1))
+        } else if (termId && !termId.includes(':')) {
+          // Local PTY — covers both local terminals and custom-command tabs
+          // (which carry a connectionId but run a `terminal-N` PTY).
+          window.bifrost.terminal.destroy(termId)
         }
         // The session is going away — drop its capture-indicator entries
         // (main finalizes the recording/log files on its side).
-        clearCaptureForSession(terminalIdRef.current)
+        clearCaptureForSession(termId)
       }
       terminal.dispose()
     }

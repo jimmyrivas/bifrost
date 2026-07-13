@@ -71,6 +71,8 @@ código (también [in English](docs/guide/README.md)).
 - **Cadenas de jump hosts** (ProxyJump multi-salto) con editor visual — usadas por SSH, Mosh y túneles; las contraseñas inline de los saltos se cifran en reposo
 - **Túneles**: reenvío de puertos local, remoto y **dinámico (SOCKS5)** con UI completa de gestión, credenciales por túnel y autoarranque al iniciar
 - **Mosh** como método de conexión de primera clase (via PTY, con jump chains)
+- **Más métodos de conexión** desde el terminal: **Telnet** (en el terminal), **RDP** y **VNC** (lanzan el cliente externo) y **Comando personalizado** (ejecuta cualquier comando como sesión) — junto a SSH y Mosh
+- **Opciones SSH avanzadas**: selección por conexión de cifrados / KEX / MACs / algoritmos de host-key y reenvío X11 se aplican al conectar
 
 ### SFTP y archivos
 - Panel SFTP por pestaña SSH: navegar, subir (multi-archivo), descargar, borrar, mkdir
@@ -111,7 +113,7 @@ Esto existe como implementación real y probada en el proceso main, con IPC list
 pero **ninguna UI llega ahí todavía** — seleccionarlo no hace nada (o cae a SSH).
 Es lo primero de la hoja de ruta, y cada punto es una contribución bien acotada:
 
-- **Lanzadores de protocolos**: RDP (xfreerdp/mstsc con flags de portapapeles/discos/audio), VNC, Telnet, FTP (lftp), TN3270, WebDAV, sesiones AWS SSM
+- **Lanzadores de protocolos** sin entrada en el menú: FTP (lftp), TN3270, WebDAV, sesiones AWS SSM — el backend existe pero el formulario solo ofrece SSH/Mosh/RDP/VNC/Telnet/Custom
 - **Importación**: parser de `~/.ssh/config`, inventarios Ansible, estado de Terraform, exportar/importar JSON
 - **Descubrimiento en la nube**: AWS EC2, GCP, Azure VMs, Docker, Podman, Kubernetes — escáneres por CLI listos, sin panel
 - **Gestores de contraseñas externos**: 1Password, Bitwarden, HashiCorp Vault, AWS Secrets Manager, Azure Key Vault, puente KeePassXC
@@ -119,7 +121,7 @@ Es lo primero de la hoja de ruta, y cada punto es una contribución bien acotada
 - **Motor Expect** (automatización patrón → respuesta con reglas de salto) y **macros**
 - **Clústeres**: backend persistente (crear/miembros/broadcast) — el panel actual es un borrador visual aún no conectado
 - **Editor de variables globales** (el resolutor `<GV:>` funciona; falta la UI para definirlas)
-- **Plomería de opciones SSH avanzadas**: reenvío X11, proxy HTTP, reenvío de agente, selección de cifrados/KEX/MACs — el formulario las guarda, falta que el connect las consuma
+- **Opciones SSH avanzadas — parcial**: la selección de cifrados/KEX/MACs/algoritmos de host-key y el reenvío X11 ya los consume el connect; **reenvío de agente y proxy HTTP** los guarda el formulario pero aún no se aplican
 - **Recifrado del vault** (cambiar la contraseña del vault sobre los secretos existentes)
 - Cifrado de la base de datos en reposo (AES-256-GCM; falta la mitad de descifrado al arranque + UI)
 

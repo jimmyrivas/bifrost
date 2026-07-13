@@ -5,6 +5,34 @@ All notable changes to Bifrost will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2026-07-12
+
+Phase 2 of the post-audit wiring plan (protocol routing & SSH options) plus two
+correctness fixes found during GUI verification. All GUI-verified.
+
+### Added
+- **Protocol routing**: RDP/VNC now launch the external client (with stored
+  options and the vault password passed through so `xfreerdp` doesn't prompt on
+  a dead stdin); Telnet/FTP/SSM/Mosh run on the shared PTY-backed data path;
+  Custom Command and Local open a local PTY. Custom command and RDP options are
+  now persisted in the connection form (previously discarded on save).
+- **Launcher-missing feedback**: a global toast with a per-protocol install hint
+  (`apt install …`) when `xfreerdp`/`vncviewer`/`lftp`/`aws`/`mosh` is absent,
+  mirrored inline in the pane.
+- **SSH advanced options**: `Ciphers`/`MACs`/`KexAlgorithms`/`HostKeyAlgorithms`
+  and `ForwardX11` from a connection's SSH options are now applied at connect
+  time (parsed by `services/ssh-options.ts`).
+
+### Fixed
+- **Saving Mosh/Custom connections failed** with `SQLITE_CONSTRAINT_CHECK`: the
+  `connections.method` CHECK constraint only allowed six methods. A table-rebuild
+  migration widens it to include `mosh`, `custom`, and `ssm`. Foreign-key
+  enforcement is disabled around the migration so the parent-table rebuild does
+  **not** cascade-delete existing hooks/macros/expect rules.
+- **Removing all connection hooks didn't persist**: the editor skipped the save
+  when the hook list was empty, leaving stale rows in the database. It now always
+  syncs the list.
+
 ## [0.3.1] - 2026-07-11
 
 Phase 1 of the post-audit wiring plan: every "pretends to work" feature now
