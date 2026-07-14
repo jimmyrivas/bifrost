@@ -5,6 +5,23 @@ All notable changes to Bifrost will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.3] - 2026-07-14
+
+Follow-up to Phase 2: close the session-id prefix debt so the new protocols
+behave like SSH/Mosh everywhere.
+
+### Fixed
+- **Capture indicators and session summaries** now work for Telnet/FTP/SSM
+  sessions. The recording/logging badges, the global REC indicator, and the
+  idle session summary keyed off a `mosh:`-only prefix strip, so they missed
+  every other prefixed protocol.
+- **Command/runbook/snippet writes** to Telnet/FTP/SSM sessions now go to the
+  PTY launcher (`protocols.writePty`) instead of the local-terminal channel;
+  the terminal context menu also mis-sent Mosh input to the local channel.
+- All session-id handling is centralized in `lib/session-id.ts`
+  (`parseSessionId`/`rawSessionId`/`writeToSession`), which recognizes every
+  protocol prefix (`ssh`/`mosh`/`telnet`/`ftp`/`ssm`/`rdp`/`vnc`).
+
 ## [0.3.2] - 2026-07-12
 
 Phase 2 of the post-audit wiring plan (protocol routing & SSH options) plus two

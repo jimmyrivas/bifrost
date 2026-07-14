@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { rawSessionId } from '@renderer/lib/session-id'
 
 /**
  * Tracks which live sessions are being recorded (asciicast) or logged
@@ -19,16 +20,12 @@ interface CaptureState {
 /**
  * Drop any capture entries for a session that just ended (tab closed, remote
  * disconnect, process exit). Accepts a prefixed terminal id (`ssh:x`,
- * `mosh:x`) or a raw session id. Keeps the global REC indicator honest — the
- * main process finalizes the files on its side.
+ * `telnet:x`, …) or a raw session id. Keeps the global REC indicator honest —
+ * the main process finalizes the files on its side.
  */
 export function clearCaptureForSession(terminalId: string | null | undefined): void {
-  if (!terminalId) return
-  const raw = terminalId.startsWith('ssh:')
-    ? terminalId.slice(4)
-    : terminalId.startsWith('mosh:')
-      ? terminalId.slice(5)
-      : terminalId
+  const raw = rawSessionId(terminalId)
+  if (!raw) return
   const s = useCaptureStore.getState()
   s.clearRecording(raw)
   s.clearLogging(raw)

@@ -8,6 +8,7 @@ import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { cn } from '@renderer/lib/utils'
 import { useSessionsStore, type Tab } from '@renderer/stores/sessions.store'
+import { writeToSession } from '@renderer/lib/session-id'
 import { detectDangerousCommands, type DangerousMatch } from '@renderer/lib/dangerous-commands'
 
 interface Runbook {
@@ -47,13 +48,7 @@ function writeToTab(tabId: string, command: string): void {
   const tab = tabs.find((t) => t.id === tabId)
   const termId = tab?.rootPane.terminalId
   if (!termId) return
-  if (termId.startsWith('ssh:')) {
-    window.bifrost?.ssh?.write(termId.slice(4), command + '\n')
-  } else if (termId.startsWith('mosh:')) {
-    window.bifrost?.protocols?.writePty(termId.slice(5), command + '\n')
-  } else {
-    window.bifrost?.terminal?.write(termId, command + '\n')
-  }
+  writeToSession(termId, command + '\n')
 }
 
 // ═══════════════════════════════════════════

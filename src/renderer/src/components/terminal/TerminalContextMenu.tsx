@@ -56,6 +56,7 @@ import { terminalToCsv, terminalToMarkdown } from '@renderer/lib/markdown-clip'
 import type { ScriptContext } from '@renderer/lib/script-runner'
 import { hasParams, promptForParams } from '@renderer/lib/workflow-params'
 import { OSC7_CWD_SETUP } from '@renderer/lib/shell-integration'
+import { parseSessionId, writeToSession } from '@renderer/lib/session-id'
 
 interface TerminalContextMenuProps {
   children: React.ReactNode
@@ -182,9 +183,8 @@ export function TerminalContextMenu({
     const paneEl = document.querySelector(`[data-pane-id="${paneId}"]`)
     const termId = paneEl?.getAttribute('data-terminal-id') ?? ''
     if (!termId) return null
-    if (termId.startsWith('ssh:')) return { raw: termId.slice(4), isSSH: true }
-    if (termId.startsWith('mosh:')) return { raw: termId.slice(5), isSSH: false }
-    return { raw: termId, isSSH: false }
+    const { protocol, raw } = parseSessionId(termId)
+    return { raw, isSSH: protocol === 'ssh' }
   }, [paneId])
 
   // Toast with an optional file path (offers Reveal / Copy path actions).
@@ -337,12 +337,7 @@ export function TerminalContextMenu({
     if (!termId) return
 
     const writeToTerminal = (text: string): void => {
-      if (termId.startsWith('ssh:')) {
-        const sshSessionId = termId.slice(4)
-        window.bifrost.ssh.write(sshSessionId, text)
-      } else {
-        window.bifrost.terminal.write(termId, text)
-      }
+      writeToSession(termId, text)
     }
 
     // Listen for worker output messages (send/log) from the isolated worker
@@ -393,11 +388,7 @@ export function TerminalContextMenu({
     if (!termId) return
 
     const writeCmd = (cmd: string): void => {
-      if (termId.startsWith('ssh:')) {
-        window.bifrost.ssh.write(termId.slice(4), cmd + '\n')
-      } else {
-        window.bifrost.terminal.write(termId, cmd + '\n')
-      }
+      writeToSession(termId, cmd + '\n')
     }
 
     // Parse code blocks and execute non-commented lines
@@ -462,12 +453,7 @@ export function TerminalContextMenu({
     }
 
     const payload = cmd.sendIntro !== false ? resolved + '\n' : resolved
-
-    if (termId.startsWith('ssh:')) {
-      window.bifrost.ssh.write(termId.slice(4), payload)
-    } else {
-      window.bifrost.terminal.write(termId, payload)
-    }
+    writeToSession(termId, payload)
   }, [paneId, connectionId])
 
   // #98 Explain Command

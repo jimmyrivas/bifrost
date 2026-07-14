@@ -4,20 +4,10 @@ import { X, Plus, Terminal, Lock, ChevronDown, ChevronLeft, ChevronRight, Scroll
 import { cn } from '@renderer/lib/utils'
 import { useSessionsStore, type TerminalPane } from '@renderer/stores/sessions.store'
 import { useCaptureStore } from '@renderer/stores/capture.store'
+import { rawSessionId } from '@renderer/lib/session-id'
 
 const SPECTRAL_GRADIENT =
   'linear-gradient(135deg, #ff6b6b, #ffa36b, #ffd56b, #6bff6b, #6bd5ff, #6b6bff, #d56bff)'
-
-/**
- * Terminal ids carry an `ssh:`/`mosh:` prefix, but the capture store is keyed
- * by the RAW backend session id. Strip the prefix to line the two up.
- * Mirrors the stripping logic in useTerminal.ts's handleSaveLog.
- */
-function stripSessionPrefix(id: string): string {
-  if (id.startsWith('ssh:')) return id.slice(4)
-  if (id.startsWith('mosh:')) return id.slice(5)
-  return id
-}
 
 /** Walk a pane tree and collect the RAW (prefix-stripped) session ids of every leaf. */
 function collectRawSessionIds(pane: TerminalPane): string[] {
@@ -27,7 +17,8 @@ function collectRawSessionIds(pane: TerminalPane): string[] {
       ...collectRawSessionIds(pane.split.panes[1])
     ]
   }
-  return pane.terminalId ? [stripSessionPrefix(pane.terminalId)] : []
+  const raw = rawSessionId(pane.terminalId)
+  return raw ? [raw] : []
 }
 
 /**

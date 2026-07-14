@@ -4,6 +4,7 @@ import { cn } from '@renderer/lib/utils'
 import { getFallbackSuggestions } from '@renderer/lib/command-suggestions'
 import { hasParams, promptForParams } from '@renderer/lib/workflow-params'
 import { useSessionsStore } from '@renderer/stores/sessions.store'
+import { writeToSession } from '@renderer/lib/session-id'
 
 const CATEGORIES = [
   { id: 'all', label: 'All' },
@@ -43,13 +44,7 @@ export function SnippetBrowser(): JSX.Element {
     const tab = tabs.find((t) => t.id === activeTabId)
     const termId = tab?.rootPane.terminalId
     if (!termId) return
-    if (termId.startsWith('ssh:')) {
-      window.bifrost?.ssh?.write(termId.slice(4), command + '\n')
-    } else if (termId.startsWith('mosh:')) {
-      window.bifrost?.protocols?.writePty(termId.slice(5), command + '\n')
-    } else {
-      window.bifrost?.terminal?.write(termId, command + '\n')
-    }
+    writeToSession(termId, command + '\n')
   }
 
   return (

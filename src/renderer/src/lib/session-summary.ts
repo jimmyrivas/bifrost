@@ -1,21 +1,13 @@
 /**
  * Helpers for the idle session-summary feature.
  *
- * Output buffers in the main process (`window-router`) are keyed by the RAW session id,
- * while the renderer tracks terminals with a protocol prefix (`ssh:` / `mosh:`). Callers
- * must strip the prefix before `terminal.getBuffer`, or the lookup misses and the summary
- * reports "no terminal output available".
+ * Output buffers in the main process (`window-router`) are keyed by the RAW
+ * session id, while the renderer tracks terminals with a protocol prefix. The
+ * raw-key stripping lives in `./session-id` (protocol-complete); re-exported
+ * here for the existing callers.
  */
 
-/** Strip a leading `ssh:` / `mosh:` protocol prefix to get the raw buffer key. */
-export function rawSessionId(id: string | null | undefined): string | null {
-  if (!id) return null
-  const colon = id.indexOf(':')
-  if (colon === -1) return id
-  const prefix = id.slice(0, colon)
-  if (prefix === 'ssh' || prefix === 'mosh') return id.slice(colon + 1)
-  return id
-}
+export { rawSessionId } from './session-id'
 
 /** Count non-trivial (non-blank after trim) lines in a terminal buffer. */
 export function meaningfulLineCount(buffer: string | null | undefined): number {

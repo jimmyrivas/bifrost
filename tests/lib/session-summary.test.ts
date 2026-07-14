@@ -7,18 +7,24 @@ import {
 } from '../../src/renderer/src/lib/session-summary'
 
 describe('rawSessionId', () => {
-  it('strips ssh: and mosh: prefixes', () => {
+  it('strips every known protocol prefix', () => {
     expect(rawSessionId('ssh:abc123')).toBe('abc123')
     expect(rawSessionId('mosh:xyz')).toBe('xyz')
+    expect(rawSessionId('telnet:host')).toBe('host')
+    expect(rawSessionId('ftp:host')).toBe('host')
+    expect(rawSessionId('ssm:i-0abc')).toBe('i-0abc')
+    expect(rawSessionId('rdp:win')).toBe('win')
+    expect(rawSessionId('vnc:box')).toBe('box')
   })
 
   it('leaves unprefixed (local PTY) ids untouched', () => {
     expect(rawSessionId('local-42')).toBe('local-42')
     expect(rawSessionId('pty123')).toBe('pty123')
+    expect(rawSessionId('terminal-7')).toBe('terminal-7')
   })
 
-  it('does not strip unknown prefixes', () => {
-    expect(rawSessionId('telnet:host')).toBe('telnet:host')
+  it('does not strip an unknown prefix', () => {
+    expect(rawSessionId('foo:bar')).toBe('foo:bar')
   })
 
   it('handles a raw id that itself contains a colon after a known prefix', () => {
