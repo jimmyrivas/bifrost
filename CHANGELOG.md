@@ -7,8 +7,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [0.3.4] - Unreleased
 
-Phase 3 of the post-audit wiring plan: reach the import, discovery, and tray
-backends that shipped without any UI. (In progress — Phase 4 lands here too.)
+Phases 3 and 4 of the post-audit wiring plan: reach the import, discovery, tray,
+variables, macros, expect, and cluster backends that shipped without any UI.
 
 ### Added
 - **Import / Export** (Settings → Import / Export): import `~/.ssh/config`,
@@ -34,8 +34,12 @@ backends that shipped without any UI. (In progress — Phase 4 lands here too.)
   right-click **Macros** submenu (remote macros type into the session with
   variable resolution; local macros run and echo their output; honors the
   confirm flag).
+- **Clusters** (Clusters view): the cluster manager is wired to the real
+  backend — create/delete, a member picker and regex auto-cluster, a live tree
+  inspector; "Open cluster" opens every member connection in its own tab and
+  turns on all-tabs broadcast.
 - Preload namespaces for `cluster.*`, `macros.*`, `variables.*`, and the full
-  `expect.*` surface (foundation for the remaining automation editors).
+  `expect.*` surface.
 - `success` toast variant (green) for positive feedback.
 
 ## [0.3.3] - 2026-07-14

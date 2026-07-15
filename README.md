@@ -87,6 +87,7 @@ derived from the project's OpenSpec capability specs and verified against the co
 - **Global variables editor** (Keys view): define the values behind `<GV:name>`, with secret masking
 - **Macros** (Automation view): global and per-connection command macros (remote or local), run from the terminal's right-click **Macros** submenu with an optional confirm flag
 - **Expect automation** (connection editor → EXPECT tab): per-connection regex→response rules that fire automatically on the live SSH session, with send-Enter and hide-from-log options
+- **Clusters**: group connections manually or by regex auto-cluster; "Open cluster" opens every member in its own tab and turns on all-tabs broadcast so you drive the whole group at once
 - **Pre/post-connection hooks**: commands stored on a connection run locally on connect/disconnect, with optional per-command confirmation — every execution is audit-logged
 
 ### Observability & security
@@ -121,7 +122,6 @@ They are the top of the roadmap, and each is a well-scoped contribution:
 - **Protocol launchers** without a menu entry: FTP (lftp), TN3270, WebDAV, AWS SSM sessions — the backend exists but the connection form only offers SSH/Mosh/RDP/VNC/Telnet/Custom
 - **External password managers**: 1Password, Bitwarden, HashiCorp Vault, AWS Secrets Manager, Azure Key Vault, KeePassXC bridge
 - **SSH CA**: certificate signing via HashiCorp Vault or a local CA
-- **Clusters**: persistent cluster backend (create/members/broadcast) — the current panel is a visual draft not yet wired to it
 - **Advanced SSH options — partial**: cipher/KEX/MAC/host-key algorithm selection and X11 forwarding are now consumed by the connect path; **agent forwarding and HTTP proxy** are saved by the form but not yet applied
 - **Vault re-encryption** (change the vault password over existing secrets)
 - Database encryption at rest (AES-256-GCM, needs the decrypt-on-startup half + UI)

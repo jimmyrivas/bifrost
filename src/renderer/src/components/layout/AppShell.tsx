@@ -80,6 +80,7 @@ export function AppShell(): JSX.Element {
   const sftpOpenTabIds = useSessionsStore((s) => s.sftpOpenTabIds)
   const broadcastMode = useSessionsStore((s) => s.broadcastMode)
   const cycleBroadcastMode = useSessionsStore((s) => s.cycleBroadcastMode)
+  const setBroadcastMode = useSessionsStore((s) => s.setBroadcastMode)
 
   // Global Ctrl+K shortcut for command palette
   useEffect(() => {
@@ -226,6 +227,17 @@ export function AppShell(): JSX.Element {
     }
   }, [handleConnectSSH])
 
+  // Open a cluster (#4.3): open a tab for every member connection, then turn on
+  // all-tabs broadcast so typing goes to the whole cluster.
+  const handleOpenCluster = useCallback(
+    (connectionIds: string[]) => {
+      if (connectionIds.length === 0) return
+      connectionIds.forEach((id) => handleConnectSSH(id))
+      setBroadcastMode('all-tabs')
+    },
+    [handleConnectSSH, setBroadcastMode]
+  )
+
   const handleQuickConnect = useCallback(
     (host: string, _port: number, username: string) => {
       const label = username ? `${username}@${host}` : host
@@ -256,7 +268,7 @@ export function AppShell(): JSX.Element {
       case 'clusters':
         return (
           <div className="flex flex-col gap-6 h-full overflow-y-auto">
-            <ClusterManagerUI />
+            <ClusterManagerUI onOpenCluster={handleOpenCluster} />
             <div className="px-6 pb-6">
               <MultiplexerManager
                 terminalId={tabs.find((t) => t.id === activeTabId)?.rootPane.terminalId ?? null}

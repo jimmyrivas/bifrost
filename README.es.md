@@ -87,6 +87,7 @@ código (también [in English](docs/guide/README.md)).
 - **Editor de variables globales** (vista Keys): define los valores detrás de `<GV:name>`, con enmascarado de secretos
 - **Macros** (vista Automatización): macros de comandos globales y por conexión (remotas o locales), ejecutables desde el submenú **Macros** del menú contextual del terminal con confirmación opcional
 - **Automatización Expect** (editor de conexión → pestaña EXPECT): reglas regex→respuesta por conexión que se disparan automáticamente en la sesión SSH viva, con opciones de enviar-Enter y ocultar-del-log
+- **Clústeres**: agrupa conexiones manualmente o por regex (auto-cluster); "Open cluster" abre cada miembro en su pestaña y activa el broadcast a todas las pestañas para manejar todo el grupo a la vez
 - **Hooks pre/post-conexión**: comandos guardados en la conexión se ejecutan localmente al conectar/desconectar, con confirmación opcional por comando — cada ejecución queda en el log de auditoría
 
 ### Observabilidad y seguridad
@@ -121,7 +122,6 @@ Es lo primero de la hoja de ruta, y cada punto es una contribución bien acotada
 - **Lanzadores de protocolos** sin entrada en el menú: FTP (lftp), TN3270, WebDAV, sesiones AWS SSM — el backend existe pero el formulario solo ofrece SSH/Mosh/RDP/VNC/Telnet/Custom
 - **Gestores de contraseñas externos**: 1Password, Bitwarden, HashiCorp Vault, AWS Secrets Manager, Azure Key Vault, puente KeePassXC
 - **SSH CA**: firma de certificados vía HashiCorp Vault o CA local
-- **Clústeres**: backend persistente (crear/miembros/broadcast) — el panel actual es un borrador visual aún no conectado
 - **Opciones SSH avanzadas — parcial**: la selección de cifrados/KEX/MACs/algoritmos de host-key y el reenvío X11 ya los consume el connect; **reenvío de agente y proxy HTTP** los guarda el formulario pero aún no se aplican
 - **Recifrado del vault** (cambiar la contraseña del vault sobre los secretos existentes)
 - Cifrado de la base de datos en reposo (AES-256-GCM; falta la mitad de descifrado al arranque + UI)

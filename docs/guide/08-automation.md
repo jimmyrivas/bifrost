@@ -126,15 +126,25 @@ Bifrost expands `<VAR>` tokens in dynamic tab titles, remote commands, and conne
 
 Scope resolution: when the same name is defined both globally and on a connection, the **connection-scoped value wins** for that connection.
 
-Honesty note on `<GV:name>`: the expansion engine resolves global variables, but there is **no in-app editor to define them yet** — the Keys view is a visual draft that doesn't persist anything. Until that lands, `<GV:>` tokens only resolve values that already exist in the database; treat the token as not usable in practice.
+## Global variables
+
+The **Keys** view is a real editor for global variables: add/edit/delete names and values, and mark a value as a secret to mask it. These are **global** (not per-terminal); reference one as `<GV:name>` wherever variables expand (remote commands, macros, tab titles). Typing `<GV:name>` directly into a terminal is not expanded.
+
+## Macros
+
+The **Automation** view has a macros editor with **Global** and **Per-Connection** scopes (pick the target connection from the dropdown). A macro is a named command, `remote` (typed into the session) or `local` (run on your machine), with an optional confirm flag. Run one from the terminal's right-click **Macros** submenu.
+
+## Expect automation
+
+Open a connection's editor → **EXPECT** tab (SSH connections). Add regex→response rules; while the session is connected, any output matching a rule's pattern triggers its response automatically (with send-Enter and a secret/hide-from-log toggle). Rules are independent, always-active triggers.
+
+## Clusters
+
+The **Clusters** view groups connections — manually (pick members) or by **auto-cluster** (a regex over names/hosts). "Open cluster" (the play button, or *Open Cluster Console* for the selected one) opens every member connection in its own tab and enables all-tabs broadcast, so your keystrokes drive the whole group. Editing membership is delete + recreate.
 
 ## Not available yet
 
-- **Expect engine** (pattern → response automation): the backend exists, but there is no working UI to define or run rules.
-- **Macros**: backend only, no UI.
-- **Global variables editor**: no UI (see the `<GV:>` note above).
-- **Clusters**: the Clusters panel is a visual draft not wired to its backend — don't rely on it.
-- **Automatic clusters** (regex rules): not reachable in the UI.
+- **Cluster broadcast via a dedicated cluster session** (`cluster:startSession`): open-cluster uses the general all-tabs broadcast instead.
 
 ---
 

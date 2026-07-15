@@ -126,15 +126,25 @@ Bifrost expande tokens `<VAR>` en títulos dinámicos de pestaña, comandos remo
 
 Resolución de ámbito: cuando el mismo nombre está definido globalmente y en una conexión, **gana el valor de la conexión** para esa conexión.
 
-Nota de honestidad sobre `<GV:nombre>`: el motor de expansión resuelve variables globales, pero todavía **no hay editor en la app para definirlas** — la vista Keys es un borrador visual que no persiste nada. Hasta que eso llegue, los tokens `<GV:>` solo resuelven valores que ya existan en la base de datos; en la práctica, trata el token como no utilizable.
+## Variables globales
+
+La vista **Keys** es un editor real de variables globales: añade/edita/borra nombres y valores, y marca un valor como secreto para enmascararlo. Son **globales** (no por-terminal); referencia una como `<GV:nombre>` donde la app expande variables (comandos remotos, macros, títulos de pestaña). Escribir `<GV:nombre>` directo en el terminal no se expande.
+
+## Macros
+
+La vista **Automatización** tiene un editor de macros con ámbitos **Global** y **Por-Conexión** (elige la conexión destino en el desplegable). Una macro es un comando con nombre, `remote` (se teclea en la sesión) o `local` (corre en tu máquina), con flag de confirmación opcional. Ejecútala desde el submenú **Macros** del clic derecho del terminal.
+
+## Automatización Expect
+
+Abre el editor de una conexión → pestaña **EXPECT** (conexiones SSH). Añade reglas regex→respuesta; mientras la sesión está conectada, cualquier salida que coincida con el patrón de una regla dispara su respuesta automáticamente (con enviar-Enter y un toggle de secreto/ocultar-del-log). Las reglas son disparadores independientes siempre activos.
+
+## Clústeres
+
+La vista **Clusters** agrupa conexiones — manualmente (elige miembros) o por **auto-cluster** (un regex sobre nombres/hosts). "Open cluster" (el botón play, o *Open Cluster Console* para el seleccionado) abre cada conexión miembro en su pestaña y activa el broadcast a todas las pestañas, para que tus pulsaciones manejen todo el grupo. Editar la membresía es borrar + recrear.
 
 ## Aún no disponible
 
-- **Motor expect** (automatización patrón → respuesta): el backend existe, pero no hay UI funcional para definir o ejecutar reglas.
-- **Macros**: solo backend, sin UI.
-- **Editor de variables globales**: sin UI (ver la nota `<GV:>` arriba).
-- **Clusters**: el panel de Clusters es un borrador visual no conectado a su backend — no confíes en él.
-- **Clusters automáticos** (reglas regex): no alcanzables desde la UI.
+- **Broadcast de cluster vía sesión de cluster dedicada** (`cluster:startSession`): open-cluster usa el broadcast general a todas las pestañas en su lugar.
 
 ---
 
