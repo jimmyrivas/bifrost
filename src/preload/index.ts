@@ -15,10 +15,62 @@ import type { RecordingInfo } from '../main/services/session-recorder'
 import type { LogFileInfo } from '../main/services/session-logger'
 import type { TerraformHost } from '../main/services/terraform-parser'
 import type { ProbeResult as MultiplexerProbeResult } from '../main/services/multiplexer'
+import type { ExpectEvent as ExpectEventPayload } from '../main/services/expect-engine'
 
 export interface AiChunkCallback {
   (text: string, done: boolean): void
 }
+
+// ── Phase 4 automation row/input shapes (mirror the DB schema) ──
+export interface ExpectRuleRow {
+  id: string
+  connectionId: string | null
+  sortOrder: number
+  pattern: string
+  sendText: string
+  sendReturn: boolean | null
+  hideFromLog: boolean | null
+  timeoutMs: number | null
+  onMatchRuleId: string | null
+  onFailRuleId: string | null
+}
+export interface ExpectRuleInput {
+  pattern: string
+  sendText: string
+  sendReturn?: boolean
+  hideFromLog?: boolean
+  timeoutMs?: number
+  sortOrder?: number
+  onMatchRuleId?: string | null
+  onFailRuleId?: string | null
+}
+export interface ClusterRow {
+  id: string
+  name: string
+  createdAt: string | null
+}
+export interface MacroRow {
+  id: string
+  connectionId: string | null
+  name: string
+  command: string
+  type: 'remote' | 'local'
+  sortOrder: number | null
+  confirmBeforeExec: boolean | null
+}
+export interface MacroInput {
+  name: string
+  command: string
+  type: 'remote' | 'local'
+  confirmBeforeExec?: boolean
+}
+export interface GlobalVariableRow {
+  id: string
+  name: string
+  value: string
+  isPassword: boolean | null
+}
+export type { ExpectEventPayload }
 
 export interface BifrostApi {
   terminal: {
@@ -329,8 +381,41 @@ export interface BifrostApi {
     delete: (id: string) => Promise<void>
   }
   expect: {
+    create: (sessionId: string, connectionId: string) => Promise<number>
+    start: (sessionId: string) => Promise<void>
+    stop: (sessionId: string) => Promise<void>
+    feed: (sessionId: string, data: string) => void
+    destroy: (sessionId: string) => Promise<void>
     setDebug: (sessionId: string, enabled: boolean) => Promise<void>
     getStatus: (sessionId: string) => Promise<{ active: boolean; rulesCount: number; currentRule: { id: string; pattern: string } | null; debug: boolean; log: string[] }>
+    listRules: (connectionId: string) => Promise<ExpectRuleRow[]>
+    saveRules: (connectionId: string, rules: ExpectRuleInput[]) => Promise<void>
+    onEvent: (callback: (sessionId: string, event: ExpectEventPayload) => void) => () => void
+    onBufferUpdate: (callback: (sessionId: string, buffer: string) => void) => () => void
+  }
+  cluster: {
+    list: () => Promise<ClusterRow[]>
+    create: (name: string, connectionIds: string[]) => Promise<string>
+    update: (id: string, name: string, connectionIds: string[]) => Promise<void>
+    delete: (id: string) => Promise<void>
+    getMembers: (clusterId: string) => Promise<Array<{ clusterId: string; connectionId: string }>>
+    startSession: (name: string, sshSessionIds: string[]) => Promise<string>
+    broadcastInput: (clusterSessionId: string, data: string) => void
+    setSyncInput: (clusterSessionId: string, enabled: boolean) => Promise<void>
+    destroySession: (clusterSessionId: string) => Promise<void>
+    getActiveSessions: () => Promise<Array<{ id: string; name: string; memberSessionIds: string[]; syncInput: boolean }>>
+    pccBroadcast: (data: string) => void
+  }
+  macros: {
+    list: (connectionId?: string) => Promise<MacroRow[]>
+    save: (connectionId: string | null, macros: MacroInput[]) => Promise<void>
+    execute: (macro: MacroRow, context: Record<string, unknown>) => Promise<string | void>
+  }
+  variables: {
+    resolve: (input: string, context: Record<string, unknown>) => Promise<string>
+    listGlobal: () => Promise<GlobalVariableRow[]>
+    setGlobal: (id: string, name: string, value: string, isPassword: boolean) => Promise<void>
+    deleteGlobal: (id: string) => Promise<void>
   }
   tunnels: {
     list: () => Promise<TunnelData[]>
@@ -775,8 +860,51 @@ const api: BifrostApi = {
     delete: (id) => ipcRenderer.invoke('templates:delete', id)
   },
   expect: {
+    create: (sessionId, connectionId) => ipcRenderer.invoke('expect:create', sessionId, connectionId),
+    start: (sessionId) => ipcRenderer.invoke('expect:start', sessionId),
+    stop: (sessionId) => ipcRenderer.invoke('expect:stop', sessionId),
+    feed: (sessionId, data) => ipcRenderer.send('expect:feed', sessionId, data),
+    destroy: (sessionId) => ipcRenderer.invoke('expect:destroy', sessionId),
     setDebug: (sessionId, enabled) => ipcRenderer.invoke('expect:setDebug', sessionId, enabled),
-    getStatus: (sessionId) => ipcRenderer.invoke('expect:getStatus', sessionId)
+    getStatus: (sessionId) => ipcRenderer.invoke('expect:getStatus', sessionId),
+    listRules: (connectionId) => ipcRenderer.invoke('expect:listRules', connectionId),
+    saveRules: (connectionId, rules) => ipcRenderer.invoke('expect:saveRules', connectionId, rules),
+    onEvent: (callback) => {
+      const handler = (_e: IpcRendererEvent, sessionId: string, event: ExpectEventPayload): void =>
+        callback(sessionId, event)
+      ipcRenderer.on('expect:event', handler)
+      return () => ipcRenderer.removeListener('expect:event', handler)
+    },
+    onBufferUpdate: (callback) => {
+      const handler = (_e: IpcRendererEvent, sessionId: string, buffer: string): void =>
+        callback(sessionId, buffer)
+      ipcRenderer.on('expect:bufferUpdate', handler)
+      return () => ipcRenderer.removeListener('expect:bufferUpdate', handler)
+    }
+  },
+  cluster: {
+    list: () => ipcRenderer.invoke('cluster:list'),
+    create: (name, connectionIds) => ipcRenderer.invoke('cluster:create', name, connectionIds),
+    update: (id, name, connectionIds) => ipcRenderer.invoke('cluster:update', id, name, connectionIds),
+    delete: (id) => ipcRenderer.invoke('cluster:delete', id),
+    getMembers: (clusterId) => ipcRenderer.invoke('cluster:getMembers', clusterId),
+    startSession: (name, sshSessionIds) => ipcRenderer.invoke('cluster:startSession', name, sshSessionIds),
+    broadcastInput: (clusterSessionId, data) => ipcRenderer.send('cluster:broadcastInput', clusterSessionId, data),
+    setSyncInput: (clusterSessionId, enabled) => ipcRenderer.invoke('cluster:setSyncInput', clusterSessionId, enabled),
+    destroySession: (clusterSessionId) => ipcRenderer.invoke('cluster:destroySession', clusterSessionId),
+    getActiveSessions: () => ipcRenderer.invoke('cluster:getActiveSessions'),
+    pccBroadcast: (data) => ipcRenderer.send('cluster:pccBroadcast', data)
+  },
+  macros: {
+    list: (connectionId) => ipcRenderer.invoke('macros:list', connectionId),
+    save: (connectionId, macros) => ipcRenderer.invoke('macros:save', connectionId, macros),
+    execute: (macro, context) => ipcRenderer.invoke('macros:execute', macro, context)
+  },
+  variables: {
+    resolve: (input, context) => ipcRenderer.invoke('variables:resolve', input, context),
+    listGlobal: () => ipcRenderer.invoke('variables:listGlobal'),
+    setGlobal: (id, name, value, isPassword) => ipcRenderer.invoke('variables:setGlobal', id, name, value, isPassword),
+    deleteGlobal: (id) => ipcRenderer.invoke('variables:deleteGlobal', id)
   },
   tunnels: {
     list: () => ipcRenderer.invoke('tunnels:list'),

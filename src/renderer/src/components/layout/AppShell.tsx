@@ -13,13 +13,13 @@ import { SftpPanel } from '@renderer/components/terminal/SftpPanel'
 import { ClusterManagerUI } from '@renderer/components/cluster/ClusterManagerUI'
 import { PCCBar } from '@renderer/components/cluster/PCCBar'
 import { MultiplexerManager } from '@renderer/components/terminal/MultiplexerManager'
-import { ExpectEditor } from '@renderer/components/automation/ExpectEditor'
 import { ScriptEditor } from '@renderer/components/automation/ScriptEditor'
 import { RemoteCommandsEditor } from '@renderer/components/automation/RemoteCommandsEditor'
 import { SnippetBrowser } from '@renderer/components/automation/SnippetBrowser'
 import { RunbookEditor } from '@renderer/components/automation/RunbookEditor'
 import { TunnelManager } from '@renderer/components/tunnels/TunnelManager'
-import { VariableManager } from '@renderer/components/automation/VariableManager'
+import { GlobalVariablesPanel } from '@renderer/components/automation/GlobalVariablesPanel'
+import { MacrosPanel } from '@renderer/components/automation/MacrosPanel'
 import { Preferences } from '@renderer/components/settings/Preferences'
 import { NotesPanel } from '@renderer/components/settings/NotesPanel'
 import { KeyBindings } from '@renderer/components/settings/KeyBindings'
@@ -282,9 +282,13 @@ export function AppShell(): JSX.Element {
               <ScriptEditor />
               <div className="mt-4">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--on-surface-variant)] mb-3">
-                  EXPECT RULES & MACROS
+                  MACROS
                 </p>
-                <ExpectEditor rules={[]} onChange={() => {}} />
+                <MacrosPanel />
+                <p className="text-[10px] text-[var(--on-surface-variant)] mt-2">
+                  Expect rules are configured per connection — open a connection&apos;s editor and use the
+                  EXPECT tab.
+                </p>
               </div>
             </div>
             <div className="w-72 shrink-0 overflow-y-auto">
@@ -313,7 +317,7 @@ export function AppShell(): JSX.Element {
       case 'keys':
         return (
           <div className="p-6 h-full overflow-y-auto">
-            <VariableManager variables={[]} onChange={() => {}} />
+            <GlobalVariablesPanel />
           </div>
         )
       case 'notes':

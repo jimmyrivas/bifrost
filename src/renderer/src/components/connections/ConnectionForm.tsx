@@ -18,7 +18,7 @@ import { COLOR_SCHEMES } from '@renderer/lib/color-schemes'
 
 type Method = 'ssh' | 'mosh' | 'rdp' | 'vnc' | 'telnet' | 'local' | 'ftp' | 'custom'
 type AuthType = 'userpass' | 'key' | 'key_pass' | 'fido2' | 'manual'
-type FormTab = 'general' | 'advanced' | 'routing' | 'session' | 'hooks' | 'terminal'
+type FormTab = 'general' | 'advanced' | 'routing' | 'session' | 'hooks' | 'terminal' | 'expect'
 
 interface ConnectionFormProps {
   connectionId?: string
@@ -138,6 +138,9 @@ function getFormTabs(method: Method): Array<{ id: FormTab; label: string }> {
   if (METHODS_WITH_HOOKS.includes(method)) {
     tabs.push({ id: 'hooks', label: 'HOOKS' })
   }
+  if (method === 'ssh') {
+    tabs.push({ id: 'expect', label: 'EXPECT' })
+  }
   if (METHODS_WITH_TERMINAL.includes(method)) {
     tabs.push({ id: 'terminal', label: 'TERMINAL' })
   }
@@ -150,6 +153,14 @@ interface ExecCommand {
   ask: boolean
   isDefault: boolean
   sortOrder: number
+}
+
+interface ExpectRuleForm {
+  pattern: string
+  sendText: string
+  timeoutSec: number
+  sendReturn: boolean
+  hideFromLog: boolean
 }
 
 export function ConnectionForm({ connectionId, initialData, onClose }: ConnectionFormProps): JSX.Element {
@@ -172,6 +183,8 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
   const [errors, setErrors] = useState<ValidationErrors>({})
   const [activeTab, setActiveTab] = useState<FormTab>('general')
   const [execCmds, setExecCmds] = useState<ExecCommand[]>([])
+  const [expectRules, setExpectRules] = useState<ExpectRuleForm[]>([])
+  const [expectReveal, setExpectReveal] = useState<Set<number>>(new Set())
   // What the vault actually held when the form loaded. Guards the
   // clear-on-empty save path: never clear before the async prefill resolved
   // (or when decryption failed), or a quick Save would wipe the stored value.
@@ -314,6 +327,16 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
       window.bifrost?.execCommands?.list(connectionId).then((cmds) => {
         if (cmds) setExecCmds(cmds.map((c) => ({ phase: c.phase as 'pre' | 'post', command: c.command, ask: c.ask, isDefault: c.isDefault, sortOrder: c.sortOrder })))
       }).catch(() => {})
+      // Load expect rules
+      window.bifrost?.expect?.listRules(connectionId).then((rows) => {
+        if (rows) setExpectRules(rows.map((r) => ({
+          pattern: r.pattern,
+          sendText: r.sendText,
+          timeoutSec: Math.round((r.timeoutMs ?? 10000) / 1000),
+          sendReturn: r.sendReturn ?? true,
+          hideFromLog: r.hideFromLog ?? false
+        })))
+      }).catch(() => {})
     })
   }, [connectionId])
 
@@ -421,6 +444,22 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
       // every hook in the editor would leave the old rows in the DB.
       if (savedId) {
         await window.bifrost.execCommands.save(savedId, execCmds)
+      }
+      // Save expect rules (SSH only) — delete + reinsert, so an empty list clears them.
+      if (savedId && form.method === 'ssh') {
+        await window.bifrost.expect.saveRules(
+          savedId,
+          expectRules
+            .filter((r) => r.pattern.trim())
+            .map((r, i) => ({
+              pattern: r.pattern,
+              sendText: r.sendText,
+              sendReturn: r.sendReturn,
+              hideFromLog: r.hideFromLog,
+              timeoutMs: Math.max(1, r.timeoutSec) * 1000,
+              sortOrder: i
+            }))
+        )
       }
       onClose()
     } finally { setSaving(false) }
@@ -872,6 +911,91 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
               onClick={() => setExecCmds([...execCmds, { phase: 'pre', command: '', ask: false, isDefault: true, sortOrder: execCmds.length }])}
             >
               + Add Hook
+            </Button>
+          </div>
+        )}
+
+        {/* ═══ EXPECT TAB ═══ */}
+        {activeTab === 'expect' && (
+          <div className="flex flex-col gap-4">
+            <p className="text-xs text-[var(--on-surface-variant)]">
+              Auto-respond to prompts on this SSH session. When output matches the regex, the response is
+              sent (variables like &lt;GV:name&gt; are resolved). Rules run automatically while connected.
+            </p>
+            {expectRules.length > 0 && (
+              <div className={cn(sectionCard, 'flex flex-col gap-2 p-3')}>
+                {expectRules.map((rule, idx) => {
+                  const set = (patch: Partial<ExpectRuleForm>): void => {
+                    const next = [...expectRules]
+                    next[idx] = { ...rule, ...patch }
+                    setExpectRules(next)
+                  }
+                  return (
+                    <div key={idx} className="flex items-center gap-2">
+                      <Input
+                        value={rule.pattern}
+                        onChange={(e) => set({ pattern: e.target.value })}
+                        placeholder="regex, e.g. (?i)password:"
+                        className="flex-1 h-7 text-xs font-[family-name:var(--font-mono)]"
+                      />
+                      <div className="relative w-32 shrink-0">
+                        <Input
+                          value={rule.sendText}
+                          onChange={(e) => set({ sendText: e.target.value })}
+                          placeholder="response"
+                          type={rule.hideFromLog && !expectReveal.has(idx) ? 'password' : 'text'}
+                          className="h-7 text-xs font-[family-name:var(--font-mono)] pr-6"
+                        />
+                        {rule.hideFromLog && (
+                          <button
+                            type="button"
+                            onClick={() => setExpectReveal((prev) => {
+                              const next = new Set(prev)
+                              next.has(idx) ? next.delete(idx) : next.add(idx)
+                              return next
+                            })}
+                            className="absolute right-1 top-1/2 -translate-y-1/2 text-[var(--on-surface-variant)] hover:text-[var(--on-surface)]"
+                            title={expectReveal.has(idx) ? 'Hide' : 'Reveal'}
+                          >
+                            {expectReveal.has(idx) ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                          </button>
+                        )}
+                      </div>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={rule.timeoutSec}
+                        onChange={(e) => set({ timeoutSec: Number(e.target.value) })}
+                        title="Timeout (seconds)"
+                        className="w-14 h-7 text-xs"
+                      />
+                      <label className="flex items-center gap-1 shrink-0 cursor-pointer" title="Send Enter after the response">
+                        <input type="checkbox" checked={rule.sendReturn} onChange={(e) => set({ sendReturn: e.target.checked })} className="w-3 h-3 accent-[#6bd5ff]" />
+                        <span className="text-[9px] text-[var(--on-surface-variant)]">↵</span>
+                      </label>
+                      <label className="flex items-center gap-1 shrink-0 cursor-pointer" title="Secret: mask the response here and hide it from logs">
+                        <input type="checkbox" checked={rule.hideFromLog} onChange={(e) => set({ hideFromLog: e.target.checked })} className="w-3 h-3 accent-[#6bd5ff]" />
+                        <span className="text-[9px] text-[var(--on-surface-variant)]">🔒</span>
+                      </label>
+                      <button
+                        onClick={() => setExpectRules(expectRules.filter((_, i) => i !== idx))}
+                        className="text-[var(--on-surface-variant)] hover:text-[var(--error)] p-0.5 shrink-0"
+                        title="Remove"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="self-start"
+              onClick={() => setExpectRules([...expectRules, { pattern: '', sendText: '', timeoutSec: 10, sendReturn: true, hideFromLog: false }])}
+            >
+              + Add Rule
             </Button>
           </div>
         )}

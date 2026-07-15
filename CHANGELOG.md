@@ -21,6 +21,21 @@ backends that shipped without any UI. (In progress — Phase 4 lands here too.)
 - **System tray connections**: the tray menu is now fed the connection list with
   favorites and recents (pushed from the renderer via a new `tray:update` IPC);
   clicking a connection shows the window and opens it.
+- **Global variables editor** (Keys view): a real editor over
+  `variables:listGlobal/setGlobal/deleteGlobal` with secret masking — the
+  `<GV:>` resolver now has a UI to define its values.
+- **Expect automation** (connection editor → EXPECT tab, SSH): define
+  regex→response rules per connection; they run automatically on the live SSH
+  session (matched output triggers the response, with send-Enter and
+  hide-from-log options). Wired in the main process so responses go straight to
+  the pty.
+- **Macros editor** (Automation view) with global and per-connection scopes,
+  persisted via a new `macros:save` handler; run a macro from the terminal's
+  right-click **Macros** submenu (remote macros type into the session with
+  variable resolution; local macros run and echo their output; honors the
+  confirm flag).
+- Preload namespaces for `cluster.*`, `macros.*`, `variables.*`, and the full
+  `expect.*` surface (foundation for the remaining automation editors).
 - `success` toast variant (green) for positive feedback.
 
 ## [0.3.3] - 2026-07-14

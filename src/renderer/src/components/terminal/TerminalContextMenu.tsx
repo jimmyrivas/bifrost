@@ -57,6 +57,7 @@ import type { ScriptContext } from '@renderer/lib/script-runner'
 import { hasParams, promptForParams } from '@renderer/lib/workflow-params'
 import { OSC7_CWD_SETUP } from '@renderer/lib/shell-integration'
 import { parseSessionId, writeToSession } from '@renderer/lib/session-id'
+import { showToast } from '@renderer/lib/protocol-dispatch'
 
 interface TerminalContextMenuProps {
   children: React.ReactNode
@@ -456,6 +457,50 @@ export function TerminalContextMenu({
     writeToSession(termId, payload)
   }, [paneId, connectionId])
 
+  // Macros (#4.5) — global + per-connection, run from the terminal
+  type MacroRow = Awaited<ReturnType<typeof window.bifrost.macros.list>>[number]
+  const [macros, setMacros] = useState<MacroRow[]>([])
+
+  useEffect(() => {
+    const loads = connectionId
+      ? [window.bifrost.macros.list(connectionId), window.bifrost.macros.list()]
+      : [window.bifrost.macros.list()]
+    Promise.all(loads).then((lists) => setMacros(lists.flat())).catch(() => {})
+  }, [connectionId, openTick])
+
+  const handleRunMacro = useCallback(async (m: MacroRow) => {
+    if (m.confirmBeforeExec && !window.confirm(`Execute macro "${m.name}": ${m.command}?`)) return
+    const paneEl = document.querySelector(`[data-pane-id="${paneId}"]`)
+    const termId = paneEl?.getAttribute('data-terminal-id') ?? ''
+    if (m.type === 'local') {
+      try {
+        // Already confirmed above — don't double-prompt in the main process.
+        const out = await window.bifrost.macros.execute(
+          { ...m, confirmBeforeExec: false },
+          { connectionId: connectionId ?? undefined }
+        )
+        if (out && termId) writeToSession(termId, `\r\n\x1b[36m[macro ${m.name}]\x1b[0m\r\n${out}`)
+      } catch (err) {
+        showToast({ variant: 'error', message: err instanceof Error ? err.message : String(err) })
+      }
+      return
+    }
+    // Remote: resolve variables and type the command into the session.
+    if (!termId) return
+    let resolved = m.command
+    if (resolved.includes('<') && connectionId) {
+      try {
+        resolved = await window.bifrost.connections.resolveTabTitle(resolved, connectionId)
+      } catch { /* use raw command */ }
+    }
+    if (hasParams(resolved)) {
+      const p = promptForParams(resolved)
+      if (!p) return
+      resolved = p
+    }
+    writeToSession(termId, resolved + '\n')
+  }, [paneId, connectionId])
+
   // #98 Explain Command
   const [explanation, setExplanation] = useState<string | null>(null)
   const handleExplainCommand = useCallback(async () => {
@@ -672,6 +717,32 @@ export function TerminalContextMenu({
                         {script.description}
                       </span>
                     )}
+                  </ContextMenuItem>
+                ))}
+              </ContextMenuSubContent>
+            </ContextMenuSub>
+
+            <ContextMenuSub>
+              <ContextMenuSubTrigger className="gap-2">
+                <Zap size={14} strokeWidth={1.5} />
+                Macros
+              </ContextMenuSubTrigger>
+              <ContextMenuSubContent className="w-56">
+                {macros.length === 0 && (
+                  <ContextMenuItem disabled className="gap-2 text-xs">
+                    No macros defined — add them in Scripts
+                  </ContextMenuItem>
+                )}
+                {macros.map((m) => (
+                  <ContextMenuItem
+                    key={m.id}
+                    onClick={() => handleRunMacro(m)}
+                    className="gap-2 flex-col items-start"
+                  >
+                    <span className="text-xs truncate w-full">{m.name || m.command}</span>
+                    <span className="text-[10px] text-[var(--on-surface-variant)]">
+                      {m.type}{m.confirmBeforeExec ? ' · confirm' : ''}
+                    </span>
                   </ContextMenuItem>
                 ))}
               </ContextMenuSubContent>

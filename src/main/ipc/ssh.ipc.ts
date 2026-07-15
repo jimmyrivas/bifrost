@@ -19,6 +19,7 @@ import { resolveJumpChainForJson } from '../services/jump-host/runtime'
 import { parseSshOptions } from '../services/ssh-options'
 import { macroExecutor } from '../services/macro-executor'
 import type { VariableContext } from '../services/variable-engine'
+import { ensureExpectEngine, feedExpect, destroyExpect } from './expect.ipc'
 
 export function registerSshIpc(mainWindow: BrowserWindow): void {
   // === Pre/Post-connection hooks (#55) ===
@@ -216,12 +217,23 @@ export function registerSshIpc(mainWindow: BrowserWindow): void {
         } catch { /* ok */ }
       }
 
+      // Auto-run the expect engine for this connection's rules (#4.2). No-ops
+      // when the connection has no rules (and no enabled global patterns).
+      if (connectionId) {
+        try {
+          ensureExpectEngine(sessionId, connectionId, mainWindow)
+        } catch { /* expect is best-effort; never block the shell */ }
+      }
+
       let totpBuffer = ''
 
       stream.on('data', (data: Buffer) => {
         const str = data.toString()
         bufferOutput(sessionId, str)
         sendToOwner(sessionId, 'ssh:data', sessionId, str)
+        // Feed the live shell output into the session's expect engine (no-op if
+        // none). Matched rules write their response straight back to the SSH pty.
+        feedExpect(sessionId, str)
         // Feed the live shell output into an active asciicast recording (#93).
         // No-ops when no recording is active for this session.
         feedRecording(sessionId, str, 'output')
@@ -250,6 +262,7 @@ export function registerSshIpc(mainWindow: BrowserWindow): void {
         removeOwner(sessionId)
         totpSecrets.delete(sessionId)
         sessionConnections.delete(sessionId)
+        destroyExpect(sessionId)
         // Finalize any active capture so files aren't left open and the
         // renderer's capture indicators can settle. Both are no-ops when
         // nothing is active for this session.

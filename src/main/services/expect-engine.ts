@@ -28,9 +28,20 @@ export class ExpectEngine extends EventEmitter {
   private debug = false
   private debugLog: string[] = []
   private writeFn: ((data: string) => void) | null = null
+  private watchMode = false
 
   constructor() {
     super()
+  }
+
+  /**
+   * Watch mode: rules are independent, always-active triggers (any rule fires
+   * whenever its pattern appears), with no per-rule timeout and no completion.
+   * This is what the per-connection auto-responder wants. The default (false)
+   * keeps the classic sequential expect-script behavior.
+   */
+  setWatchMode(enabled: boolean): void {
+    this.watchMode = enabled
   }
 
   setRules(rules: ExpectRule[]): void {
@@ -76,7 +87,7 @@ export class ExpectEngine extends EventEmitter {
     this.running = true
     this.currentRuleIndex = 0
     this.buffer = ''
-    this.startTimeout()
+    if (!this.watchMode) this.startTimeout()
   }
 
   stop(): void {
@@ -106,7 +117,33 @@ export class ExpectEngine extends EventEmitter {
       } as ExpectEvent)
     }
 
-    this.tryMatch()
+    if (this.watchMode) this.tryMatchWatch()
+    else this.tryMatch()
+  }
+
+  /**
+   * Watch-mode matching: scan every rule and fire the first whose pattern
+   * appears in the buffer, then consume the buffer. No sequential index, no
+   * timeout, no completion — the engine keeps watching for the whole session.
+   */
+  private tryMatchWatch(): void {
+    for (const rule of this.rules) {
+      const match = rule.pattern.exec(this.buffer)
+      if (!match) continue
+      this.log(`WATCH MATCH rule[${rule.id}] /${rule.pattern.source}/ → "${match[0].slice(0, 40)}"`)
+      this.emit('expect-event', { type: 'match', ruleId: rule.id, matched: match[0] } as ExpectEvent)
+      this.emit('expect-event', {
+        type: 'send',
+        ruleId: rule.id,
+        text: rule.hideFromLog ? '***' : rule.sendText,
+        hidden: rule.hideFromLog
+      } as ExpectEvent)
+      if (this.writeFn) this.writeFn(rule.sendReturn ? rule.sendText + '\r' : rule.sendText)
+      this.buffer = '' // consume matched output
+      return
+    }
+    // No match: keep the buffer bounded so a quiet session doesn't grow it.
+    if (this.buffer.length > 4096) this.buffer = this.buffer.slice(-2048)
   }
 
   private tryMatch(): void {

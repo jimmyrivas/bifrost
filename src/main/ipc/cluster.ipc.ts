@@ -21,6 +21,17 @@ export function registerClusterIpc(): void {
     return id
   })
 
+  // Update a cluster's name and membership in place (keeps the id, so anything
+  // referencing the cluster stays valid). Members are replaced wholesale.
+  ipcMain.handle('cluster:update', (_event, id: string, name: string, connectionIds: string[]) => {
+    const db = getDatabase()
+    db.update(schema.clusters).set({ name }).where(eq(schema.clusters.id, id)).run()
+    db.delete(schema.clusterMembers).where(eq(schema.clusterMembers.clusterId, id)).run()
+    for (const connId of connectionIds) {
+      db.insert(schema.clusterMembers).values({ clusterId: id, connectionId: connId }).run()
+    }
+  })
+
   ipcMain.handle('cluster:delete', (_event, id: string) => {
     const db = getDatabase()
     db.delete(schema.clusters).where(eq(schema.clusters.id, id)).run()

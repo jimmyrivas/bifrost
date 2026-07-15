@@ -26,12 +26,12 @@
 
 ## 4. Phase 4 — Automation surfaces (expect, clusters, variables, macros)
 
-- [ ] 4.1 Preload: expose `cluster.*`, `macros.*`, `variables.*`, and `expect.create/start/stop/feed` namespaces (additive, mirroring existing IPC names).
-- [ ] 4.2 Expect: per-connection rules editor (new tab or panel backed by `expectRules` table), feed live SSH output through `expect:feed`, wire debug mode; remove the dead `ExpectEditor` mockup props.
-- [ ] 4.3 Clusters: connect `ClusterManagerUI` to the real backend — persistent CRUD, member picker, "open cluster" opens all member sessions, cluster broadcast via `cluster:broadcastInput`.
-- [ ] 4.4 Global variables: make `VariableManager` a real editor over `variables:listGlobal/setGlobal/deleteGlobal` (with `isPassword` masking); document `<GV:>` usage in the panel.
-- [ ] 4.5 Macros: render `MacroEditor` (Automation view), CRUD via `macros:*`, run from the terminal context menu with confirm flag.
-- [ ] 4.6 Tests + README: move expect/clusters/variables/macros out of pending.
+- [x] 4.1 Preload: exposed `cluster.*` (list/create/update/delete/getMembers/startSession/broadcastInput/setSyncInput/destroySession/getActiveSessions/pccBroadcast), `macros.*` (list/save/execute), `variables.*` (resolve/listGlobal/setGlobal/deleteGlobal), and completed `expect.*` (create/start/stop/feed/destroy/setDebug/getStatus/listRules/saveRules + onEvent/onBufferUpdate listeners). Added missing main handlers: `macros:save` (delete-scope + reinsert), `expect:listRules`/`expect:saveRules`, `cluster:update` (in-place name+members). Row/input types added to preload.
+- [x] 4.2 Expect: per-connection rules editor + auto-run (user chose "per-connection tab + auto-run"). New **EXPECT** tab in the connection form (SSH only) — rules CRUD persisted via `expect:listRules`/`expect:saveRules` (pattern/response/timeout/send-return/hide-from-log). Auto-run wired in MAIN (`ssh.ipc` openShell): `ensureExpectEngine` (extracted, idempotent, sets `setWriteFunction`→`sshManager.write`, forwards events) created on shell open when the connection has rules, `feedExpect` on stream data, `destroyExpect` on close — no renderer round-trip. Dead mock `ExpectEditor` removed from the Scripts view (rules moved to the form). Global patterns stay detection-only (send empty). Debug live-panel deferred (not required for auto-run).
+- [ ] 4.3 Clusters: connect `ClusterManagerUI` to the real backend — persistent CRUD, member picker, "open cluster" opens all member sessions, cluster broadcast via `cluster:broadcastInput`. (Backend + preload ready via 4.1; UI wiring pending.)
+- [x] 4.4 Global variables: `GlobalVariablesPanel` container over the pure `VariableManager` — loads `variables:listGlobal` on mount, persists via `setGlobal`/`deleteGlobal` by diffing against previous state (skips unnamed placeholders; resyncs from DB on error). `isPassword` masking already in the component. Mounted in the `keys` view (replaces the dead `variables={[]}` mock).
+- [x] 4.5 Macros: `MacrosPanel` container over the pure `MacroEditor` (global + per-connection tabs), debounced `macros:save` (no reload mid-edit → inputs keep focus), mounted in the Automation/Scripts view. Run from the terminal context menu (new "Macros" submenu): remote macros resolve `<…>` vars and type into the session; local macros run via `macros:execute` and echo output; honors `confirmBeforeExec`.
+- [ ] 4.6 Tests + README: move variables/macros out of pending (done for those); expect/clusters after 4.2/4.3.
 
 ## 5. Phase 5 — Secrets integrations
 

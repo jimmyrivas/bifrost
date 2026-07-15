@@ -179,4 +179,44 @@ describe('ExpectEngine', () => {
       expect.objectContaining({ type: 'match', ruleId: 'r1' })
     )
   })
+
+  describe('watch mode', () => {
+    it('fires any rule regardless of order (not sequential)', () => {
+      engine.setRules([
+        makeRule({ id: 'r1', pattern: /never-appears/, sendText: 'a' }),
+        makeRule({ id: 'r2', pattern: /MARCO/, sendText: 'echo POLO' })
+      ])
+      engine.setWatchMode(true)
+      engine.start()
+      engine.feed('user typed: echo MARCO')
+
+      // Sequential mode would be stuck waiting on r1; watch mode fires r2.
+      expect(events).toContainEqual(expect.objectContaining({ type: 'match', ruleId: 'r2' }))
+      expect(writtenData).toContain('echo POLO\r')
+    })
+
+    it('re-fires the same rule on repeated matches', () => {
+      engine.setRules([makeRule({ id: 'r1', pattern: /MARCO/, sendText: 'POLO' })])
+      engine.setWatchMode(true)
+      engine.start()
+      engine.feed('MARCO')
+      engine.feed('MARCO')
+
+      expect(events.filter((e) => e.type === 'send')).toHaveLength(2)
+      expect(writtenData).toEqual(['POLO\r', 'POLO\r'])
+    })
+
+    it('never times out and never completes', async () => {
+      engine.setRules([makeRule({ id: 'r1', pattern: /impossible/, sendText: 'x', timeout: 50 })])
+      engine.setWatchMode(true)
+      engine.start()
+      engine.feed('idle output with no match')
+
+      await new Promise((r) => setTimeout(r, 120))
+
+      expect(events.some((e) => e.type === 'timeout')).toBe(false)
+      expect(events.some((e) => e.type === 'complete')).toBe(false)
+      expect(engine.isRunning()).toBe(true)
+    })
+  })
 })
