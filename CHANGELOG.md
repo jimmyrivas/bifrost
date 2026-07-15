@@ -5,6 +5,24 @@ All notable changes to Bifrost will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.4] - Unreleased
+
+Phase 3 of the post-audit wiring plan: reach the import, discovery, and tray
+backends that shipped without any UI. (In progress — Phase 4 lands here too.)
+
+### Added
+- **Import / Export** (Settings → Import / Export): import `~/.ssh/config`,
+  Ansible inventories, and Terraform state as connections with a preview →
+  select → import flow, plus JSON backup export/restore. Wires the existing
+  `import.*` handlers and `discovery.terraform`.
+- **Cloud discovery** (Settings → Discovery): a provider grid (AWS, GCP, Azure,
+  Docker, Podman, Kubernetes) gated by the local CLI's availability, per-provider
+  scan, and multi-select import of running instances as SSH connections.
+- **System tray connections**: the tray menu is now fed the connection list with
+  favorites and recents (pushed from the renderer via a new `tray:update` IPC);
+  clicking a connection shows the window and opens it.
+- `success` toast variant (green) for positive feedback.
+
 ## [0.3.3] - 2026-07-14
 
 Follow-up to Phase 2: close the session-id prefix debt so the new protocols

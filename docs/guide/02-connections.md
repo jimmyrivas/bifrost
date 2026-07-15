@@ -90,12 +90,33 @@ Settings → **Git Config Sync** lets you keep your connection inventory in a gi
 
 Connections are exported **without passwords or private keys** — credentials stay in your local vault.
 
+## Import from existing sources
+
+Settings → **Import / Export** turns configuration you already have into connections:
+
+- **SSH config** — scan `~/.ssh/config`, preview the hosts, tick the ones you want, and import them (identity files become key-based auth).
+- **Ansible inventory** — choose an INI or YAML inventory file; hosts are previewed and imported with their user/port.
+- **Terraform state** — choose a `.tfstate` file; IP-bearing resources are listed and imported as SSH connections (public IP preferred).
+- **JSON backup** — **Export all** writes every connection and group to a JSON file (no secrets); **Import from JSON** restores from one.
+
+Each source shows a preview table with per-row and select-all checkboxes before anything is written.
+
+## Cloud discovery
+
+Settings → **Discovery** scans your infrastructure using the provider CLIs already installed on your machine:
+
+- **AWS EC2** (`aws`), **GCP** (`gcloud`), **Azure** (`az`), **Docker** (`docker`), **Podman** (`podman`), **Kubernetes** (`kubectl`).
+- A provider whose CLI is missing is marked *not found* and its **Scan** button is disabled.
+- Only **running** instances/containers/pods are returned. Select the ones you want and **Import as connections**.
+
+## System tray
+
+The tray icon's menu lists your **favorites** and **recent connections** — click one to bring the window forward and open it.
+
 ## Not available yet
 
-- **Import** from `~/.ssh/config`, Ansible inventories, Terraform state, or JSON files (the parsers exist in the backend; no UI reaches them).
-- **Cloud discovery** (AWS EC2, GCP, Azure, Docker, Podman, Kubernetes) — scanners are built, but there is no panel.
 - **External password managers** (1Password, Bitwarden, HashiCorp Vault, AWS Secrets Manager, Azure Key Vault, KeePassXC).
-- **Advanced per-connection SSH options** (X11 forwarding, agent forwarding, cipher/KEX/MAC selection, HTTP proxy): the form saves them, but the connect path does not apply them yet.
+- **Agent forwarding and HTTP proxy** per-connection SSH options: the form saves them, but the connect path does not apply them yet. (Cipher/KEX/MAC/host-key selection and X11 forwarding *are* applied.)
 - **Global variables editor** — see the note under Variables above.
 
 > Source specs: `openspec/specs/connection-management/spec.md`, `openspec/specs/variable-expansion/spec.md` — documentation reflects the implementation as of v0.3.x.

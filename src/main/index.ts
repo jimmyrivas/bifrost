@@ -375,7 +375,15 @@ app.whenReady().then(() => {
   registerMultiplexerIpc()
 
   try {
-    trayManager.create()
+    // Clicking a connection in the tray opens it in the main window. The
+    // connection list itself is pushed by the renderer via `tray:update`
+    // (system.ipc) because favorites/recents live in renderer localStorage.
+    trayManager.create((connectionId) => {
+      if (!mainWindow.isDestroyed()) {
+        mainWindow.show()
+        mainWindow.webContents.send('tray:open-connection', connectionId)
+      }
+    })
   } catch (err) {
     console.warn('Tray initialization failed (non-critical):', err)
   }

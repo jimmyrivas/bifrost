@@ -431,6 +431,19 @@ export interface BifrostApi {
       callback: (ctx: { connectionId?: string | null; terminalId?: string | null }) => void
     ) => () => void
   }
+  tray: {
+    update: (
+      entries: Array<{
+        id: string
+        name: string
+        protocol: string
+        host: string
+        isFavorite?: boolean
+        lastUsed?: number
+      }>
+    ) => void
+    onOpenConnection: (callback: (connectionId: string) => void) => () => void
+  }
 }
 
 const api: BifrostApi = {
@@ -823,6 +836,14 @@ const api: BifrostApi = {
       ): void => callback(ctx)
       ipcRenderer.on('window:aiActiveContextChanged', handler)
       return () => ipcRenderer.removeListener('window:aiActiveContextChanged', handler)
+    }
+  },
+  tray: {
+    update: (entries) => ipcRenderer.send('tray:update', entries),
+    onOpenConnection: (callback: (connectionId: string) => void) => {
+      const handler = (_e: IpcRendererEvent, connectionId: string): void => callback(connectionId)
+      ipcRenderer.on('tray:open-connection', handler)
+      return () => ipcRenderer.removeListener('tray:open-connection', handler)
     }
   }
 }

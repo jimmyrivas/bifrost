@@ -104,7 +104,9 @@ código (también [in English](docs/guide/README.md)).
 - Paleta de comandos (Ctrl+K) sobre conexiones y comandos; conjunto fijo de atajos globales
 - Sistema de plugins: instala/activa/desactiva plugins npm desde Ajustes, contra un API de hooks documentado ([`docs/PLUGIN_API.md`](docs/PLUGIN_API.md))
 - Sincronización de configuración vía git: exporta/importa/sincroniza tu configuración a un repositorio que tú indicas
-- Persistencia del estado de ventana, bandeja del sistema, sistema de diseño "Spectral Command" ([`docs/reference/DESIGN.md`](docs/reference/DESIGN.md))
+- **Importación / Exportación** (Ajustes): analiza `~/.ssh/config`, inventarios Ansible y estado de Terraform para crear conexiones (previsualizar → seleccionar → importar), más copia de seguridad JSON (exportar/restaurar)
+- **Descubrimiento en la nube** (Ajustes): escanea AWS EC2, GCP, Azure, Docker, Podman y Kubernetes mediante sus CLIs locales e importa las instancias en ejecución como conexiones
+- Persistencia del estado de ventana, **bandeja del sistema con tus favoritos y conexiones recientes** (clic para abrir), sistema de diseño "Spectral Command" ([`docs/reference/DESIGN.md`](docs/reference/DESIGN.md))
 - UI en inglés; traducción al español iniciada (~30 cadenas — se agradece ayuda)
 
 ## Construido en el backend, UI pendiente
@@ -114,8 +116,6 @@ pero **ninguna UI llega ahí todavía** — seleccionarlo no hace nada (o cae a 
 Es lo primero de la hoja de ruta, y cada punto es una contribución bien acotada:
 
 - **Lanzadores de protocolos** sin entrada en el menú: FTP (lftp), TN3270, WebDAV, sesiones AWS SSM — el backend existe pero el formulario solo ofrece SSH/Mosh/RDP/VNC/Telnet/Custom
-- **Importación**: parser de `~/.ssh/config`, inventarios Ansible, estado de Terraform, exportar/importar JSON
-- **Descubrimiento en la nube**: AWS EC2, GCP, Azure VMs, Docker, Podman, Kubernetes — escáneres por CLI listos, sin panel
 - **Gestores de contraseñas externos**: 1Password, Bitwarden, HashiCorp Vault, AWS Secrets Manager, Azure Key Vault, puente KeePassXC
 - **SSH CA**: firma de certificados vía HashiCorp Vault o CA local
 - **Motor Expect** (automatización patrón → respuesta con reglas de salto) y **macros**
@@ -130,7 +130,7 @@ Es lo primero de la hoja de ruta, y cada punto es una contribución bien acotada
 - Los atajos de **redimensionado de paneles por teclado** no están conectados aún (redimensiona con splits/maximizar)
 - **Zmodem** sz/rz se detecta y te redirige a SFTP — no hay transferencia en el terminal
 - La pestaña **FIDO2** existe pero ssh2 aún no usa llaves sk directamente (solo funciona a través de ssh-agent)
-- El **editor de atajos** todavía no reemplaza los atajos integrados; los menús de conexiones de la bandeja están vacíos
+- El **editor de atajos** todavía no reemplaza los atajos integrados
 - La **grabación de sesiones** cubre solo sesiones SSH (en paneles locales/mosh la opción aparece deshabilitada)
 
 ## Hoja de ruta

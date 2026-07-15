@@ -5,8 +5,16 @@ import { getRecordingsDir } from '../services/session-recorder'
 import { keepassBridge, type KeePassConfig } from '../services/keepass-bridge'
 import { connectionHealthMonitor } from '../services/connection-health'
 import { auditLogger } from '../services/audit-log'
+import { trayManager, type TrayConnectionEntry } from '../services/tray-manager'
 
 export function registerSystemIpc(): void {
+  // Tray: the renderer owns favorites/recents (localStorage), so it pushes the
+  // connection list here whenever it changes; the main process just forwards it
+  // to the tray menu.
+  ipcMain.on('tray:update', (_event, entries: TrayConnectionEntry[]) => {
+    trayManager.updateConnections(entries)
+  })
+
   // Wake On LAN
   ipcMain.handle('system:wol', (_event, macAddress: string, broadcastAddr?: string) => {
     return new Promise<void>((resolve, reject) => {

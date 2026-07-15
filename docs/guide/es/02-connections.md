@@ -90,12 +90,33 @@ Ajustes → **Git Config Sync** te permite mantener tu inventario de conexiones 
 
 Las conexiones se exportan **sin contraseñas ni claves privadas** — las credenciales se quedan en tu vault local.
 
+## Importar desde fuentes existentes
+
+Ajustes → **Import / Export** convierte configuración que ya tienes en conexiones:
+
+- **SSH config** — escanea `~/.ssh/config`, previsualiza los hosts, marca los que quieras e impórtalos (los archivos de identidad pasan a autenticación por clave).
+- **Inventario Ansible** — elige un archivo INI o YAML; los hosts se previsualizan y se importan con su usuario/puerto.
+- **Estado de Terraform** — elige un archivo `.tfstate`; los recursos con IP se listan y se importan como conexiones SSH (se prefiere la IP pública).
+- **Copia JSON** — **Export all** escribe cada conexión y grupo a un archivo JSON (sin secretos); **Import from JSON** restaura desde uno.
+
+Cada fuente muestra una tabla de previsualización con casillas por fila y "seleccionar todo" antes de escribir nada.
+
+## Descubrimiento en la nube
+
+Ajustes → **Discovery** escanea tu infraestructura usando las CLIs de proveedor ya instaladas en tu equipo:
+
+- **AWS EC2** (`aws`), **GCP** (`gcloud`), **Azure** (`az`), **Docker** (`docker`), **Podman** (`podman`), **Kubernetes** (`kubectl`).
+- Un proveedor cuya CLI falta se marca como *not found* y su botón **Scan** queda deshabilitado.
+- Solo se devuelven instancias/contenedores/pods **en ejecución**. Selecciona los que quieras e **Import as connections**.
+
+## Bandeja del sistema
+
+El menú del icono de la bandeja lista tus **favoritos** y **conexiones recientes** — haz clic en una para traer la ventana al frente y abrirla.
+
 ## Aún no disponible
 
-- **Importación** desde `~/.ssh/config`, inventarios de Ansible, estado de Terraform o archivos JSON (los parsers existen en el backend; ninguna UI llega a ellos).
-- **Descubrimiento en la nube** (AWS EC2, GCP, Azure, Docker, Podman, Kubernetes) — los escáneres están construidos, pero no hay panel.
 - **Gestores de contraseñas externos** (1Password, Bitwarden, HashiCorp Vault, AWS Secrets Manager, Azure Key Vault, KeePassXC).
-- **Opciones SSH avanzadas por conexión** (reenvío X11, reenvío de agente, selección de cifrados/KEX/MACs, proxy HTTP): el formulario las guarda, pero el camino de conexión todavía no las aplica.
+- **Reenvío de agente y proxy HTTP** por conexión: el formulario los guarda, pero el camino de conexión todavía no los aplica. (La selección de cifrados/KEX/MACs/claves de host y el reenvío X11 *sí* se aplican.)
 - **Editor de variables globales** — ver la nota bajo Variables más arriba.
 
 > Specs de origen: `openspec/specs/connection-management/spec.md`, `openspec/specs/variable-expansion/spec.md` — la documentación refleja la implementación a fecha de v0.3.x.

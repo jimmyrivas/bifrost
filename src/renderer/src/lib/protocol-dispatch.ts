@@ -147,7 +147,7 @@ export function parseSsmRegion(sshConfig: string | null | undefined): string | n
 export interface AppToastDetail {
   message: string
   hint?: string
-  variant?: 'error' | 'info'
+  variant?: 'error' | 'info' | 'success'
 }
 
 /** Fire a global toast (rendered by ToastHost in App.tsx). */

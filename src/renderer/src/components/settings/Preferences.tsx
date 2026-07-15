@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Monitor, Globe, Network, KeyRound, GitBranch, Puzzle, Shield, Lock, Bot, Keyboard, Cpu } from 'lucide-react'
+import { Monitor, Globe, Network, KeyRound, GitBranch, Puzzle, Shield, Lock, Bot, Keyboard, Cpu, FolderInput, Radar } from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { Switch } from '@renderer/components/ui/switch'
@@ -13,8 +13,10 @@ import { KeyBindings } from './KeyBindings'
 import { KnownHostsPanel } from './KnownHostsPanel'
 import { MultiplexerPanel } from '@renderer/components/connections/MultiplexerPanel'
 import { CaptureFilesBrowser, type CaptureTab } from '@renderer/components/terminal/CaptureFilesBrowser'
+import { ImportExportPanel } from './ImportExportPanel'
+import { DiscoveryPanel } from './DiscoveryPanel'
 
-type PrefsTab = 'terminal' | 'ai' | 'ssh' | 'security' | 'keybindings' | 'language' | 'network' | 'keepass' | 'sync' | 'plugins' | 'mcp'
+type PrefsTab = 'terminal' | 'ai' | 'ssh' | 'security' | 'keybindings' | 'language' | 'network' | 'keepass' | 'sync' | 'plugins' | 'mcp' | 'import' | 'discovery'
 
 const tabConfig: Array<{ id: PrefsTab; icon: typeof Monitor; labelKey: string; fallback: string }> = [
   { id: 'terminal', icon: Monitor, labelKey: 'prefs.terminal', fallback: 'Terminal' },
@@ -25,6 +27,8 @@ const tabConfig: Array<{ id: PrefsTab; icon: typeof Monitor; labelKey: string; f
   { id: 'keybindings', icon: Keyboard, labelKey: 'prefs.keybindings', fallback: 'Key Bindings' },
   { id: 'language', icon: Globe, labelKey: 'prefs.language', fallback: 'Language' },
   { id: 'network', icon: Network, labelKey: 'prefs.network', fallback: 'Network' },
+  { id: 'import', icon: FolderInput, labelKey: 'prefs.import', fallback: 'Import / Export' },
+  { id: 'discovery', icon: Radar, labelKey: 'prefs.discovery', fallback: 'Discovery' },
   { id: 'keepass', icon: KeyRound, labelKey: 'prefs.keepass', fallback: 'KeePass' },
   { id: 'sync', icon: GitBranch, labelKey: 'prefs.sync', fallback: 'Sync' },
   { id: 'plugins', icon: Puzzle, labelKey: 'prefs.plugins', fallback: 'Plugins' },
@@ -384,6 +388,14 @@ export function Preferences(): JSX.Element {
               </div>
             </div>
           </div>
+        )}
+
+        {activeTab === 'import' && (
+          <ImportExportPanel />
+        )}
+
+        {activeTab === 'discovery' && (
+          <DiscoveryPanel />
         )}
 
         {activeTab === 'sync' && (

@@ -104,7 +104,9 @@ derived from the project's OpenSpec capability specs and verified against the co
 - Command palette (Ctrl+K) over connections and commands; a fixed set of global shortcuts
 - Plugin system: install/enable/disable npm-packaged plugins from Settings, against a documented hooks API ([`docs/PLUGIN_API.md`](docs/PLUGIN_API.md))
 - Config sync via git: export/import/sync your configuration to a repository you point it at
-- Window-state persistence, system tray, "Spectral Command" design system ([`docs/reference/DESIGN.md`](docs/reference/DESIGN.md))
+- **Import / Export** (Settings): parse `~/.ssh/config`, Ansible inventories, and Terraform state into connections (preview → select → import), plus JSON backup export/restore
+- **Cloud discovery** (Settings): scan AWS EC2, GCP, Azure, Docker, Podman, and Kubernetes via their local CLIs and import running instances as connections
+- Window-state persistence, **system tray with your favorites and recent connections** (click to open), "Spectral Command" design system ([`docs/reference/DESIGN.md`](docs/reference/DESIGN.md))
 - UI in English; Spanish translation started (~30 strings so far — help welcome)
 
 ## Built in the backend, UI pending
@@ -114,8 +116,6 @@ These exist as real, tested main-process implementations with IPC in place, but
 They are the top of the roadmap, and each is a well-scoped contribution:
 
 - **Protocol launchers** without a menu entry: FTP (lftp), TN3270, WebDAV, AWS SSM sessions — the backend exists but the connection form only offers SSH/Mosh/RDP/VNC/Telnet/Custom
-- **Import**: `~/.ssh/config` parser, Ansible inventories, Terraform state, JSON export/import
-- **Cloud discovery**: AWS EC2, GCP, Azure VMs, Docker, Podman, Kubernetes — CLI-based scanners ready, no panel
 - **External password managers**: 1Password, Bitwarden, HashiCorp Vault, AWS Secrets Manager, Azure Key Vault, KeePassXC bridge
 - **SSH CA**: certificate signing via HashiCorp Vault or a local CA
 - **Expect engine** (pattern → response automation with jump rules) and **macros**
@@ -130,7 +130,7 @@ They are the top of the roadmap, and each is a well-scoped contribution:
 - **Keyboard pane-resize** shortcuts are not wired yet (resize via splits/maximize)
 - **Zmodem** sz/rz is detected and redirects you to SFTP — no in-terminal transfer
 - **FIDO2** tab exists but ssh2 cannot yet use sk-keys directly (works only through ssh-agent)
-- Custom **keybindings editor** doesn't yet override the built-in shortcuts; tray connection menus are empty
+- Custom **keybindings editor** doesn't yet override the built-in shortcuts
 - **Session recording** covers SSH sessions only (local/mosh panes show the option disabled)
 
 ## Roadmap

@@ -52,7 +52,15 @@ export function ToastHost(): React.JSX.Element | null {
           aria-live="polite"
         >
           <div className="flex items-start gap-2">
-            <p className={toast.variant === 'error' ? 'text-[#ff6b6b] flex-1' : 'flex-1'}>
+            <p
+              className={
+                toast.variant === 'error'
+                  ? 'text-[#ff6b6b] flex-1'
+                  : toast.variant === 'success'
+                    ? 'text-[#6bff6b] flex-1'
+                    : 'flex-1'
+              }
+            >
               {toast.message}
             </p>
             <button

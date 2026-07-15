@@ -19,10 +19,10 @@
 
 ## 3. Phase 3 — Import/export & discovery UI
 
-- [ ] 3.1 Add an Import/Export section (app menu + Settings): ssh-config import (preview → apply), Ansible inventory, Terraform state, JSON export/import — all handlers already exist in `import.ipc.ts`/`discovery.ipc.ts`.
-- [ ] 3.2 Discovery panel: provider grid (AWS/GCP/Azure/Docker/Podman/K8s) using `discovery.available`, scan results table, multi-select "Import as connections".
-- [ ] 3.3 Feed the tray: call `trayManager.updateConnections` + `setConnectCallback` from the main lifecycle so tray menus stop being empty.
-- [ ] 3.4 Tests + README: move import/discovery out of pending.
+- [x] 3.1 Add an Import/Export section (Settings → Import / Export): ssh-config import (preview → apply), Ansible inventory (preview → apply), Terraform state (file-pick → build connections), JSON export/import. New `ImportExportPanel.tsx` wires the existing `import.*` handlers + `discovery.terraform`; a shared `SelectTable` + `usePreview` hook drive the preview/select/apply flow; store refresh + success/error toasts. (Surface is Settings, not a native app menu — kept scoped.)
+- [x] 3.2 Discovery panel (Settings → Discovery): provider grid (AWS/GCP/Azure/Docker/Podman/K8s) gated by `discovery.available` (CLI-name → provider mapping), per-provider scan, accumulated results table with multi-select, "Import as connections" via `connections:create`. New `DiscoveryPanel.tsx`.
+- [x] 3.3 Feed the tray: renderer pushes the connection list (with favorites/recents, which live in localStorage) via a new `tray:update` IPC (system.ipc → `trayManager.updateConnections`), pushed from `AppShell` on every store change through `useConnectionsStore.subscribe`; `trayManager.create(cb)` now receives a connect callback that shows the window + sends `tray:open-connection`, which `AppShell` opens via `handleConnectSSH`. New preload `tray` namespace.
+- [x] 3.4 Tests + README: pure mappers extracted to `lib/discovery-import.ts` (discovered/terraform host → connection, connections → tray entries) with `discovery-import.test.ts` (7 cases, 349 total). README EN/ES: import/export + discovery + tray moved to Features. `success` toast variant added.
 
 ## 4. Phase 4 — Automation surfaces (expect, clusters, variables, macros)
 

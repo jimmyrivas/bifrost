@@ -26,6 +26,8 @@ import { KeyBindings } from '@renderer/components/settings/KeyBindings'
 import { ConnectionForm } from '@renderer/components/connections/ConnectionForm'
 import { ActivityCenter } from '@renderer/components/activity/ActivityCenter'
 import { useSessionsStore } from '@renderer/stores/sessions.store'
+import { useConnectionsStore } from '@renderer/stores/connections.store'
+import { connectionsToTrayEntries } from '@renderer/lib/discovery-import'
 import { usePreferencesStore, clampAiPanelWidth } from '@renderer/stores/preferences.store'
 
 export type ViewSection =
@@ -201,6 +203,28 @@ export function AppShell(): JSX.Element {
     },
     [createTab]
   )
+
+  // Tray feed (#3.3): push the connection list to the system tray whenever
+  // connections / favorites / recents change, and open a connection when one is
+  // picked from the tray menu. Renderer-driven because favorites and recents
+  // live in localStorage. `subscribe` (not a selector) avoids the array-selector
+  // render-loop trap. AppShell only mounts in the main window.
+  useEffect(() => {
+    const push = (s: ReturnType<typeof useConnectionsStore.getState>): void => {
+      window.bifrost?.tray?.update(
+        connectionsToTrayEntries(s.connections, s.favorites, s.recentConnections)
+      )
+    }
+    push(useConnectionsStore.getState())
+    const unsub = useConnectionsStore.subscribe(push)
+    const off = window.bifrost?.tray?.onOpenConnection((connectionId) => {
+      handleConnectSSH(connectionId)
+    })
+    return () => {
+      unsub()
+      off?.()
+    }
+  }, [handleConnectSSH])
 
   const handleQuickConnect = useCallback(
     (host: string, _port: number, username: string) => {
