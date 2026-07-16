@@ -40,6 +40,14 @@ variables, macros, expect, and cluster backends that shipped without any UI.
   turns on all-tabs broadcast.
 - Preload namespaces for `cluster.*`, `macros.*`, `variables.*`, and the full
   `expect.*` surface.
+- **1Password references** for connection passwords (`op://…`, resolved via the
+  `op` CLI at connect time, never stored) plus a **Secret Managers** panel that
+  detects 1Password/Bitwarden/KeePassXC/Vault/AWS SM/Azure KV.
+- **SSH certificate authority** panel: sign a public key via a local CA
+  (`ssh-keygen`) or a Vault SSH role.
+- **Vault re-encryption** button (Settings → Security) and a **key-file vault
+  fallback** — keep an encrypted copy of a private key so a connection still
+  authenticates if the file moves.
 - **Database encryption at rest** (Settings → Security): encrypt the whole
   database file with a passphrase (AES-256-GCM). Bifrost decrypts it on startup
   (a passphrase prompt) and re-encrypts on quit. Enabling shows a hard warning —

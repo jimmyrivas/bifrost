@@ -335,6 +335,8 @@ export interface BifrostApi {
   // #78, #79, #80: Extended password managers
   passwordManagers: {
     detect: () => Promise<Record<string, unknown>>
+    // 1Password
+    opReadSecret: (reference: string) => Promise<string>
     // Vault SSH Engine
     vaultSignSSHKey: (pubKeyPath: string, role: string, addr: string, token: string) => Promise<string>
     vaultListRoles: (addr: string, token: string) => Promise<string[]>
@@ -811,6 +813,7 @@ const api: BifrostApi = {
   },
   passwordManagers: {
     detect: () => ipcRenderer.invoke('pm:detect'),
+    opReadSecret: (reference) => ipcRenderer.invoke('pm:op:readSecret', reference),
     vaultSignSSHKey: (pubKeyPath, role, addr, token) =>
       ipcRenderer.invoke('pm:vault:signSSHKey', pubKeyPath, role, addr, token),
     vaultListRoles: (addr, token) => ipcRenderer.invoke('pm:vault:listRoles', addr, token),

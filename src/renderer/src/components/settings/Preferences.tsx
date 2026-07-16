@@ -16,9 +16,11 @@ import { CaptureFilesBrowser, type CaptureTab } from '@renderer/components/termi
 import { ImportExportPanel } from './ImportExportPanel'
 import { DiscoveryPanel } from './DiscoveryPanel'
 import { DbEncryptionSection } from './DbEncryptionSection'
+import { SecretsManagersPanel } from './SecretsManagersPanel'
+import { SshCaPanel } from './SshCaPanel'
 import { showToast } from '@renderer/lib/protocol-dispatch'
 
-type PrefsTab = 'terminal' | 'ai' | 'ssh' | 'security' | 'keybindings' | 'language' | 'network' | 'keepass' | 'sync' | 'plugins' | 'mcp' | 'import' | 'discovery'
+type PrefsTab = 'terminal' | 'ai' | 'ssh' | 'security' | 'secrets' | 'keybindings' | 'language' | 'network' | 'keepass' | 'sync' | 'plugins' | 'mcp' | 'import' | 'discovery'
 
 const tabConfig: Array<{ id: PrefsTab; icon: typeof Monitor; labelKey: string; fallback: string }> = [
   { id: 'terminal', icon: Monitor, labelKey: 'prefs.terminal', fallback: 'Terminal' },
@@ -26,6 +28,7 @@ const tabConfig: Array<{ id: PrefsTab; icon: typeof Monitor; labelKey: string; f
   { id: 'mcp', icon: Cpu, labelKey: 'prefs.mcp', fallback: 'MCP Server' },
   { id: 'ssh', icon: Shield, labelKey: 'prefs.ssh', fallback: 'SSH' },
   { id: 'security', icon: Lock, labelKey: 'prefs.security', fallback: 'Security' },
+  { id: 'secrets', icon: KeyRound, labelKey: 'prefs.secrets', fallback: 'Secret Managers' },
   { id: 'keybindings', icon: Keyboard, labelKey: 'prefs.keybindings', fallback: 'Key Bindings' },
   { id: 'language', icon: Globe, labelKey: 'prefs.language', fallback: 'Language' },
   { id: 'network', icon: Network, labelKey: 'prefs.network', fallback: 'Network' },
@@ -397,6 +400,13 @@ export function Preferences(): JSX.Element {
                 <Button variant="outline" className="self-start">{t('prefs.testConnection', 'Test Connection')}</Button>
               </div>
             </div>
+          </div>
+        )}
+
+        {activeTab === 'secrets' && (
+          <div className="flex flex-col gap-8">
+            <SecretsManagersPanel />
+            <SshCaPanel />
           </div>
         )}
 

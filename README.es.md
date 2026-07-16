@@ -96,7 +96,11 @@ código (también [in English](docs/guide/README.md)).
 - Log de auditoría de solo anexado (JSON Lines) de conexiones, eventos de credenciales, inicio/fin de capturas y ejecución de hooks — también alimenta las estadísticas por conexión
 - **Vista Activity** (barra lateral): el log de auditoría como línea de tiempo agrupada por día con filtros por categoría, búsqueda, rangos 24h/7d/30d, refresco en vivo, drill-down por conexión, contadores de insights, rotación del log y export CSV/JSONL de los eventos filtrados — más una pestaña Captures sobre grabaciones y logs de sesión
 - Filtro de redacción de secretos en la salida del terminal (interruptor en Ajustes, persistente entre reinicios; desactivado por defecto)
-- Almacenamiento cifrado de credenciales en todo el producto: conexiones, túneles y saltos
+- Almacenamiento cifrado de credenciales en todo el producto: conexiones, túneles y saltos; **recifrado del vault** con un clic (Ajustes → Security)
+- **Cifrado de la base de datos en reposo**: cifra todo el archivo de la DB con una passphrase (AES-256-GCM) — se descifra al arrancar y se recifra al salir
+- **Referencias 1Password**: apunta la contraseña de una conexión a `op://…` y se resuelve vía el CLI `op` al conectar, sin guardarse nunca; un panel **Secret Managers** detecta 1Password/Bitwarden/KeePassXC/Vault/AWS SM/Azure KV
+- **Autoridad de certificados SSH**: firma una clave pública vía CA local (`ssh-keygen`) o un rol SSH de Vault
+- **Respaldo de clave**: guarda una copia cifrada de la clave privada en el vault para que la conexión siga autenticando si el archivo de clave se mueve
 - Detección de inactividad con resúmenes IA; notificaciones de escritorio al terminar comandos largos
 
 ### IA y MCP
@@ -120,11 +124,8 @@ pero **ninguna UI llega ahí todavía** — seleccionarlo no hace nada (o cae a 
 Es lo primero de la hoja de ruta, y cada punto es una contribución bien acotada:
 
 - **Lanzadores de protocolos** sin entrada en el menú: FTP (lftp), TN3270, WebDAV, sesiones AWS SSM — el backend existe pero el formulario solo ofrece SSH/Mosh/RDP/VNC/Telnet/Custom
-- **Gestores de contraseñas externos**: 1Password, Bitwarden, HashiCorp Vault, AWS Secrets Manager, Azure Key Vault, puente KeePassXC
-- **SSH CA**: firma de certificados vía HashiCorp Vault o CA local
+- **Referencias de gestores más allá de 1Password**: Bitwarden, Vault, AWS Secrets Manager y Azure Key Vault se detectan y están accesibles en el backend, pero solo 1Password (`op://`) está conectado al connect path
 - **Opciones SSH avanzadas — parcial**: la selección de cifrados/KEX/MACs/algoritmos de host-key y el reenvío X11 ya los consume el connect; **reenvío de agente y proxy HTTP** los guarda el formulario pero aún no se aplican
-- **Recifrado del vault** (cambiar la contraseña del vault sobre los secretos existentes)
-- Cifrado de la base de datos en reposo (AES-256-GCM; falta la mitad de descifrado al arranque + UI)
 
 ## Limitaciones conocidas (alpha)
 

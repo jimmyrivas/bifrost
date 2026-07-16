@@ -96,7 +96,11 @@ derived from the project's OpenSpec capability specs and verified against the co
 - Append-only audit log (JSON Lines) of connections, credential events, capture start/stop, and hook executions — it also powers the per-connection statistics
 - **Activity view** (sidebar): the audit log as a day-grouped timeline with category filters, search, 24h/7d/30d ranges, live refresh, per-connection drill-down, insights counters, log rotation, and CSV/JSONL export of the filtered events — plus a Captures tab over recordings and session logs
 - Secret redaction filter for terminal output (Settings toggle, persisted across restarts; off by default)
-- Encrypted credential storage throughout: connections, tunnels, and jump hops
+- Encrypted credential storage throughout: connections, tunnels, and jump hops; one-click **vault re-encryption** (Settings → Security)
+- **Database encryption at rest**: encrypt the whole DB file with a passphrase (AES-256-GCM) — decrypted on startup, re-encrypted on quit
+- **1Password references**: point a connection's password at `op://…` and it's resolved via the `op` CLI at connect time, never stored; a **Secret Managers** panel detects 1Password/Bitwarden/KeePassXC/Vault/AWS SM/Azure KV
+- **SSH certificate authority**: sign a public key via a local CA (`ssh-keygen`) or a Vault SSH role
+- **Key-file fallback**: keep an encrypted copy of a private key in the vault so a connection still authenticates if the key file moves
 - Session idle detection with AI summaries; desktop notifications when long-running commands finish
 
 ### AI & MCP
@@ -120,11 +124,8 @@ These exist as real, tested main-process implementations with IPC in place, but
 They are the top of the roadmap, and each is a well-scoped contribution:
 
 - **Protocol launchers** without a menu entry: FTP (lftp), TN3270, WebDAV, AWS SSM sessions — the backend exists but the connection form only offers SSH/Mosh/RDP/VNC/Telnet/Custom
-- **External password managers**: 1Password, Bitwarden, HashiCorp Vault, AWS Secrets Manager, Azure Key Vault, KeePassXC bridge
-- **SSH CA**: certificate signing via HashiCorp Vault or a local CA
+- **Password-manager references beyond 1Password**: Bitwarden, Vault, AWS Secrets Manager, and Azure Key Vault are detected and reachable in the backend, but only 1Password (`op://`) is wired to the connect path
 - **Advanced SSH options — partial**: cipher/KEX/MAC/host-key algorithm selection and X11 forwarding are now consumed by the connect path; **agent forwarding and HTTP proxy** are saved by the form but not yet applied
-- **Vault re-encryption** (change the vault password over existing secrets)
-- Database encryption at rest (AES-256-GCM, needs the decrypt-on-startup half + UI)
 
 ## Known limitations (alpha)
 

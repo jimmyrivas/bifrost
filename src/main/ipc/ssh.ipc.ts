@@ -2,6 +2,7 @@ import { ipcMain, BrowserWindow } from 'electron'
 import { sendToOwner, bufferOutput, setOwner, removeOwner } from '../services/window-router'
 import { sshManager, expandHome, type SshConnectionConfig, type SshAlgorithms, type HttpProxyConfig } from '../services/ssh-manager'
 import { credentialStore } from '../services/credential-store'
+import { onePassword } from '../services/password-manager'
 import { existsSync, readFileSync } from 'fs'
 import { generateTOTP } from '../services/totp'
 import { getDatabase, schema } from '../db'
@@ -176,6 +177,18 @@ export function registerSshIpc(mainWindow: BrowserWindow): void {
         jumpChain: jumpChain.length > 0 ? jumpChain : undefined,
         algorithms: sshOptions.algorithms,
         x11Forward: sshOptions.x11Forward
+      }
+
+      // #78 Password-manager reference: resolve an `op://…` 1Password reference
+      // to the real password at connect time (never stored in the DB).
+      if ((conn.authType === 'userpass' || conn.authType === 'manual') && !config.encryptedPassword) {
+        try {
+          const cfg = conn.sshConfig ? (JSON.parse(conn.sshConfig) as { passwordRef?: string }) : {}
+          if (cfg.passwordRef?.startsWith('op://')) {
+            const secret = onePassword.readSecret(cfg.passwordRef)
+            if (secret) config.encryptedPassword = credentialStore.encrypt(secret)
+          }
+        } catch { /* fall through to normal auth */ }
       }
 
       // #27 File secret storage: keep an encrypted copy of the private key in the

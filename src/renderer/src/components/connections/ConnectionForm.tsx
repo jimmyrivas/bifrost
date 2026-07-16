@@ -59,6 +59,7 @@ interface FormState {
   rdpFullscreen: boolean
   rdpResolution: string
   customCommand: string
+  passwordRef: string
   tags: string
   sshOptions: Record<string, string>
   multiplexer: MultiplexerConfig
@@ -89,6 +90,7 @@ const defaultForm: FormState = {
   rdpClipboard: true, rdpDriveRedirect: false, rdpPrinterRedirect: false,
   rdpAudioPlayback: false, rdpColorDepth: 24, rdpFullscreen: false, rdpResolution: '1280x800',
   customCommand: '',
+  passwordRef: '',
   tags: '',
   sshOptions: {},
   multiplexer: { ...defaultMultiplexer },
@@ -191,6 +193,9 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
   // clear-on-empty save path: never clear before the async prefill resolved
   // (or when decryption failed), or a quick Save would wipe the stored value.
   const loadedCreds = useRef({ password: '', passphrase: '' })
+  // The connection's sshConfig JSON as loaded, so a Save preserves keys the form
+  // does not manage (e.g. the vault-stored encryptedKeyContent from #27).
+  const preservedSshConfig = useRef<Record<string, unknown>>({})
   const [templates, setTemplates] = useState<Array<{ id: string; name: string; config: string }>>([])
 
   // Load templates
@@ -329,6 +334,13 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
       window.bifrost?.execCommands?.list(connectionId).then((cmds) => {
         if (cmds) setExecCmds(cmds.map((c) => ({ phase: c.phase as 'pre' | 'post', command: c.command, ask: c.ask, isDefault: c.isDefault, sortOrder: c.sortOrder })))
       }).catch(() => {})
+      // Stash the raw sshConfig so a later Save preserves keys the form does not
+      // manage (e.g. encryptedKeyContent). Also seed the password-reference field.
+      try {
+        preservedSshConfig.current = conn.sshConfig ? JSON.parse(conn.sshConfig) : {}
+      } catch { preservedSshConfig.current = {} }
+      const pref = preservedSshConfig.current.passwordRef
+      if (typeof pref === 'string') set('passwordRef', pref)
       // Does a vault copy of the key already exist for this connection?
       window.bifrost?.credentials?.getKeyFile(connectionId).then((k) => setHasVaultKey(!!k)).catch(() => {})
       // Load expect rules
@@ -375,18 +387,24 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
     if (!validate()) return
     setSaving(true)
     try {
-      const sshConfigObj: Record<string, unknown> = {}
-      if (form.tags.trim()) sshConfigObj.tags = form.tags.trim()
-      if (form.totpSecret.trim()) sshConfigObj.totpSecret = form.totpSecret.trim()
-      if (Object.keys(form.sshOptions).length > 0) sshConfigObj.options = form.sshOptions
-      if (form.multiplexer.preferred !== 'none') sshConfigObj.multiplexer = form.multiplexer
-      // Custom-command / RDP methods persist their settings in the same JSON
-      // blob (no dedicated DB columns) — read at connect time by useTerminal.
-      if (form.method === 'custom' && form.customCommand.trim()) {
-        sshConfigObj.customCommand = form.customCommand.trim()
+      // Start from the loaded sshConfig so keys the form doesn't manage
+      // (e.g. the vault-stored encryptedKeyContent, #27) survive a Save. Managed
+      // keys are set below, or deleted when their field is empty.
+      const sshConfigObj: Record<string, unknown> = { ...preservedSshConfig.current }
+      const setOrDelete = (key: string, value: unknown, keep: boolean): void => {
+        if (keep) sshConfigObj[key] = value
+        else delete sshConfigObj[key]
       }
-      if (form.method === 'rdp') {
-        sshConfigObj.rdp = {
+      setOrDelete('tags', form.tags.trim(), !!form.tags.trim())
+      setOrDelete('totpSecret', form.totpSecret.trim(), !!form.totpSecret.trim())
+      setOrDelete('options', form.sshOptions, Object.keys(form.sshOptions).length > 0)
+      setOrDelete('multiplexer', form.multiplexer, form.multiplexer.preferred !== 'none')
+      setOrDelete('passwordRef', form.passwordRef.trim(), !!form.passwordRef.trim())
+      // Custom-command / RDP methods persist their settings in the same JSON blob.
+      setOrDelete('customCommand', form.customCommand.trim(), form.method === 'custom' && !!form.customCommand.trim())
+      setOrDelete(
+        'rdp',
+        {
           clipboard: form.rdpClipboard,
           driveRedirect: form.rdpDriveRedirect,
           printerRedirect: form.rdpPrinterRedirect,
@@ -394,8 +412,9 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
           colorDepth: form.rdpColorDepth,
           fullscreen: form.rdpFullscreen,
           resolution: form.rdpResolution
-        }
-      }
+        },
+        form.method === 'rdp'
+      )
       const sshConfig = Object.keys(sshConfigObj).length > 0 ? JSON.stringify(sshConfigObj) : undefined
 
       const jumpServerConfig =
@@ -633,6 +652,32 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
                                 <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--on-surface-variant)] hover:text-[var(--on-surface)]" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Hide' : 'Show'}>
                                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                                 </button>
+                              </div>
+                              <div className="mt-2">
+                                <label className={fieldLabel} htmlFor="conn-passref">1PASSWORD REFERENCE (OPTIONAL)</label>
+                                <div className="flex gap-2">
+                                  <Input id="conn-passref" value={form.passwordRef} onChange={(e) => set('passwordRef', e.target.value)} placeholder="op://vault/item/password" className="flex-1 font-[family-name:var(--font-mono)]" />
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={!form.passwordRef.trim()}
+                                    onClick={async () => {
+                                      try {
+                                        const secret = await window.bifrost.passwordManagers.opReadSecret(form.passwordRef.trim())
+                                        showToast(secret
+                                          ? { variant: 'success', message: 'Reference resolved ✓ (1Password signed in)' }
+                                          : { variant: 'error', message: 'Empty result — check the reference' })
+                                      } catch (err) {
+                                        showToast({ variant: 'error', message: err instanceof Error ? err.message : String(err) })
+                                      }
+                                    }}
+                                  >
+                                    Test
+                                  </Button>
+                                </div>
+                                <p className="text-[10px] text-[var(--on-surface-variant)] mt-1">
+                                  If set, the password is read from 1Password (the <code>op</code> CLI) at connect time and never stored. Leave the password blank to use it.
+                                </p>
                               </div>
                             </div>
                           )}
