@@ -39,8 +39,8 @@
 - [ ] 5.2 SSH CA: minimal panel — pick Vault role or local CA key, sign the connection's public key, store cert path.
 - [ ] 5.3 Vault re-encryption: Settings button calling `credentials:changeVaultPassword` with progress/result feedback.
 - [ ] 5.4 File secret storage: use stored `encryptedKeyContent` in the connect path when the key file is absent; UI affordance to store a key into the vault.
-- [ ] 5.5 DB encryption: decide — implement decrypt-on-startup (passphrase prompt) or remove the Settings switch and the orphaned handlers.
-- [ ] 5.6 Tests + README updates.
+- [x] 5.5 DB encryption: IMPLEMENTED decrypt-on-startup (user chose this). App-level AES-256-GCM over the whole `bifrost.db` file (`services/db-encryption-crypto.ts` pure crypto + `services/db-encryption.ts` lifecycle + `ipc/db-encryption.ipc.ts`). Startup gate (`index.ts ensureDatabaseUnlocked` → small `#unlock` window → `db:unlock` decrypts before migrations); re-encrypt + delete plaintext on quit (`finalizeOnQuit`, WAL-checkpointed). Settings → Security has enable/disable with a hard no-recovery WARNING + confirm passphrase. Removed the old orphaned `credentials:encryptDatabase/decryptDatabase` handlers + preload bindings. 5 crypto round-trip/tamper tests. NOTE: protects at rest only (plaintext on disk while running — better-sqlite3, not SQLCipher); MCP server (sql.js) can't read the DB while encrypted-at-rest/app-closed.
+- [ ] 5.6 Tests + README updates. (5.5 tests done; README/guide note for DB encryption pending; 5.1-5.4 still pending.)
 
 ## 6. Phase 6 — Polish & honesty debt
 

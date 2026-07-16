@@ -36,7 +36,8 @@ import { auditLogger } from './services/audit-log'
 import { sessionLogger } from './services/session-logger'
 import { stopAllRecordings } from './services/session-recorder'
 import { runMigrations } from './db/migrate'
-import { closeDatabase } from './db'
+import { registerDbEncryptionIpc, setOnUnlocked } from './ipc/db-encryption.ipc'
+import { isLockedAtRest, finalizeOnQuit } from './services/db-encryption'
 import { sshManager } from './services/ssh-manager'
 import { sftpManager } from './services/sftp-manager'
 import { externalProtocolManager } from './services/external-protocol'
@@ -132,8 +133,64 @@ function createWindow(): BrowserWindow {
   return mainWindow
 }
 
-app.whenReady().then(() => {
+let unlockWindow: BrowserWindow | null = null
+
+/**
+ * If the DB is encrypted at rest, show a small unlock window and block startup
+ * until the passphrase is accepted (which decrypts the file). The `db:unlock`
+ * IPC handler calls back on success. Closing the window without unlocking quits.
+ */
+function ensureDatabaseUnlocked(): Promise<void> {
+  if (!isLockedAtRest()) return Promise.resolve()
+
+  return new Promise<void>((resolve) => {
+    let unlocked = false
+    setOnUnlocked(() => {
+      unlocked = true
+      setOnUnlocked(null)
+      unlockWindow?.close()
+      unlockWindow = null
+      resolve()
+    })
+
+    const win = new BrowserWindow({
+      width: 420,
+      height: 320,
+      resizable: false,
+      show: false,
+      title: 'Unlock Bifrost',
+      backgroundColor: '#131316',
+      autoHideMenuBar: true,
+      webPreferences: {
+        preload: join(__dirname, '../preload/index.mjs'),
+        sandbox: false,
+        contextIsolation: true,
+        nodeIntegration: false
+      }
+    })
+    unlockWindow = win
+    win.on('ready-to-show', () => win.show())
+    win.on('closed', () => {
+      // Cancelled without unlocking → nothing can proceed, so quit.
+      if (!unlocked) app.exit(0)
+    })
+
+    if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+      win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#unlock`)
+    } else {
+      win.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'unlock' })
+    }
+  })
+}
+
+app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.bifrost.app')
+
+  // Register db-encryption IPC once (db:unlock/enable/disable/status).
+  registerDbEncryptionIpc()
+  // Gate: if the DB is encrypted at rest, prompt for the passphrase and decrypt
+  // before anything touches the database.
+  await ensureDatabaseUnlocked()
 
   try {
     runMigrations()
@@ -425,5 +482,7 @@ app.on('before-quit', (event) => {
   sessionLogger.stopAll()
   connectionHealthMonitor.stopAll()
   trayManager.destroy()
-  closeDatabase()
+  // Re-encrypt the DB to disk (if enabled) and close it. finalizeOnQuit handles
+  // the close itself; falls back to a plain close when encryption is off.
+  finalizeOnQuit()
 })

@@ -116,9 +116,6 @@ export interface BifrostApi {
     // #27: Key file storage
     storeKeyFile: (connectionId: string, keyContent: string) => Promise<void>
     getKeyFile: (connectionId: string) => Promise<string | null>
-    // #28: Config encryption
-    encryptDatabase: (password: string) => Promise<string>
-    decryptDatabase: (encryptedPath: string, password: string) => Promise<string>
     // #92: FIDO2
     detectFido2Key: (keyPath: string) => Promise<{ isFido2: boolean; keyType: string }>
     generateFido2Key: (
@@ -529,6 +526,12 @@ export interface BifrostApi {
     ) => void
     onOpenConnection: (callback: (connectionId: string) => void) => () => void
   }
+  dbEncryption: {
+    unlock: (passphrase: string) => Promise<{ ok: boolean }>
+    enable: (passphrase: string) => Promise<void>
+    disable: () => Promise<void>
+    status: () => Promise<{ enabled: boolean }>
+  }
 }
 
 const api: BifrostApi = {
@@ -581,9 +584,6 @@ const api: BifrostApi = {
     changeVaultPassword: () => ipcRenderer.invoke('credentials:changeVaultPassword'),
     storeKeyFile: (id, keyContent) => ipcRenderer.invoke('credentials:storeKeyFile', id, keyContent),
     getKeyFile: (id) => ipcRenderer.invoke('credentials:getKeyFile', id),
-    encryptDatabase: (password) => ipcRenderer.invoke('credentials:encryptDatabase', password),
-    decryptDatabase: (encryptedPath, password) =>
-      ipcRenderer.invoke('credentials:decryptDatabase', encryptedPath, password),
     detectFido2Key: (keyPath) => ipcRenderer.invoke('credentials:detectFido2Key', keyPath),
     generateFido2Key: (keyPath, keyType, resident) =>
       ipcRenderer.invoke('credentials:generateFido2Key', keyPath, keyType, resident)
@@ -973,6 +973,12 @@ const api: BifrostApi = {
       ipcRenderer.on('tray:open-connection', handler)
       return () => ipcRenderer.removeListener('tray:open-connection', handler)
     }
+  },
+  dbEncryption: {
+    unlock: (passphrase) => ipcRenderer.invoke('db:unlock', passphrase),
+    enable: (passphrase) => ipcRenderer.invoke('db:enable', passphrase),
+    disable: () => ipcRenderer.invoke('db:disable'),
+    status: () => ipcRenderer.invoke('db:status')
   }
 }
 

@@ -1,11 +1,8 @@
 import { ipcMain } from 'electron'
 import { credentialStore } from '../services/credential-store'
-import { getDatabase, getSqlite, schema } from '../db'
+import { getDatabase, schema } from '../db'
 import { eq } from 'drizzle-orm'
-import { readFileSync, writeFileSync, existsSync } from 'fs'
-import { join } from 'path'
-import { app } from 'electron'
-import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypto'
+import { readFileSync } from 'fs'
 import { auditLogger } from '../services/audit-log'
 
 export function registerCredentialsIpc(): void {
@@ -198,69 +195,8 @@ export function registerCredentialsIpc(): void {
     }
   )
 
-  // === #28: Config Encryption ===
-  // Encrypt/decrypt the SQLite database file at rest.
-  // Uses AES-256-GCM with a password-derived key.
-  ipcMain.handle(
-    'credentials:encryptDatabase',
-    async (_event, password: string) => {
-      const dbPath = join(app.getPath('userData'), 'bifrost.db')
-      if (!existsSync(dbPath)) {
-        throw new Error('Database file not found')
-      }
-
-      const dbContent = readFileSync(dbPath)
-      const salt = randomBytes(32)
-      const key = scryptSync(password, salt, 32)
-      const iv = randomBytes(16)
-      const cipher = createCipheriv('aes-256-gcm', key, iv)
-
-      const encrypted = Buffer.concat([cipher.update(dbContent), cipher.final()])
-      const authTag = cipher.getAuthTag()
-
-      // Write encrypted file with header: BIFROST_ENC | salt(32) | iv(16) | authTag(16) | data
-      const header = Buffer.from('BIFROST_ENC\0')
-      const output = Buffer.concat([header, salt, iv, authTag, encrypted])
-
-      const encPath = dbPath + '.enc'
-      writeFileSync(encPath, output)
-
-      return encPath
-    }
-  )
-
-  ipcMain.handle(
-    'credentials:decryptDatabase',
-    async (_event, encryptedPath: string, password: string) => {
-      if (!existsSync(encryptedPath)) {
-        throw new Error('Encrypted database file not found')
-      }
-
-      const content = readFileSync(encryptedPath)
-      const headerStr = content.subarray(0, 12).toString()
-      if (!headerStr.startsWith('BIFROST_ENC')) {
-        throw new Error('Not a valid encrypted Bifrost database')
-      }
-
-      const salt = content.subarray(12, 44)
-      const iv = content.subarray(44, 60)
-      const authTag = content.subarray(60, 76)
-      const encrypted = content.subarray(76)
-
-      const key = scryptSync(password, salt, 32)
-      const decipher = createDecipheriv('aes-256-gcm', key, iv)
-      decipher.setAuthTag(authTag)
-
-      try {
-        const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()])
-        const dbPath = join(app.getPath('userData'), 'bifrost.db')
-        writeFileSync(dbPath, decrypted)
-        return dbPath
-      } catch {
-        throw new Error('Decryption failed: invalid password or corrupted file')
-      }
-    }
-  )
+  // DB at-rest encryption moved to services/db-encryption.ts + db-encryption.ipc.ts
+  // (Phase 5.5): decrypt-on-startup with a passphrase and re-encrypt on quit.
 
   // === #92: FIDO2/WebAuthn Key Detection ===
   ipcMain.handle(

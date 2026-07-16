@@ -40,6 +40,11 @@ variables, macros, expect, and cluster backends that shipped without any UI.
   turns on all-tabs broadcast.
 - Preload namespaces for `cluster.*`, `macros.*`, `variables.*`, and the full
   `expect.*` surface.
+- **Database encryption at rest** (Settings → Security): encrypt the whole
+  database file with a passphrase (AES-256-GCM). Bifrost decrypts it on startup
+  (a passphrase prompt) and re-encrypts on quit. Enabling shows a hard warning —
+  a lost passphrase means unrecoverable data. Protects the file when the app is
+  closed (not SQLCipher; the DB is plaintext on disk while running).
 - `success` toast variant (green) for positive feedback.
 
 ## [0.3.3] - 2026-07-14

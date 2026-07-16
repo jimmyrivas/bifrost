@@ -15,6 +15,7 @@ import { MultiplexerPanel } from '@renderer/components/connections/MultiplexerPa
 import { CaptureFilesBrowser, type CaptureTab } from '@renderer/components/terminal/CaptureFilesBrowser'
 import { ImportExportPanel } from './ImportExportPanel'
 import { DiscoveryPanel } from './DiscoveryPanel'
+import { DbEncryptionSection } from './DbEncryptionSection'
 
 type PrefsTab = 'terminal' | 'ai' | 'ssh' | 'security' | 'keybindings' | 'language' | 'network' | 'keepass' | 'sync' | 'plugins' | 'mcp' | 'import' | 'discovery'
 
@@ -301,16 +302,7 @@ export function Preferences(): JSX.Element {
                   </Button>
                 </div>
                 <div className="h-[1px] bg-[var(--surface-container-highest)]" />
-                <div>
-                  <label className={fieldLabel}>CONFIGURATION ENCRYPTION</label>
-                  <p className="text-xs text-[var(--on-surface-variant)] mb-3">
-                    Database stores connection passwords and passphrases encrypted. SSH keys are referenced by path (not stored in DB).
-                  </p>
-                  <label className="flex items-center justify-between cursor-pointer">
-                    <span className="text-xs text-[var(--on-surface-variant)]">Encrypt exported configurations</span>
-                    <Switch checked={false} onCheckedChange={() => window.alert('Feature in development')} />
-                  </label>
-                </div>
+                <DbEncryptionSection />
                 <div className="h-[1px] bg-[var(--surface-container-highest)]" />
                 <div>
                   <label className={fieldLabel}>SECRET REDACTION</label>
