@@ -5,6 +5,7 @@ import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { Switch } from '@renderer/components/ui/switch'
 import { cn } from '@renderer/lib/utils'
+import { showToast } from '@renderer/lib/protocol-dispatch'
 import { useConnectionsStore } from '@renderer/stores/connections.store'
 import { SshOptionsPanel } from './SshOptionsPanel'
 import {
@@ -185,6 +186,7 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
   const [execCmds, setExecCmds] = useState<ExecCommand[]>([])
   const [expectRules, setExpectRules] = useState<ExpectRuleForm[]>([])
   const [expectReveal, setExpectReveal] = useState<Set<number>>(new Set())
+  const [hasVaultKey, setHasVaultKey] = useState(false)
   // What the vault actually held when the form loaded. Guards the
   // clear-on-empty save path: never clear before the async prefill resolved
   // (or when decryption failed), or a quick Save would wipe the stored value.
@@ -327,6 +329,8 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
       window.bifrost?.execCommands?.list(connectionId).then((cmds) => {
         if (cmds) setExecCmds(cmds.map((c) => ({ phase: c.phase as 'pre' | 'post', command: c.command, ask: c.ask, isDefault: c.isDefault, sortOrder: c.sortOrder })))
       }).catch(() => {})
+      // Does a vault copy of the key already exist for this connection?
+      window.bifrost?.credentials?.getKeyFile(connectionId).then((k) => setHasVaultKey(!!k)).catch(() => {})
       // Load expect rules
       window.bifrost?.expect?.listRules(connectionId).then((rows) => {
         if (rows) setExpectRules(rows.map((r) => ({
@@ -460,6 +464,15 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
               sortOrder: i
             }))
         )
+      }
+      // File-secret fallback (#27): while the key file exists, keep an encrypted
+      // copy in the vault so the connection still authenticates if the file later
+      // moves. Best-effort — silently no-ops if the file is absent. Only refreshes
+      // an existing copy or captures a new one; never removes (that's explicit).
+      if (savedId && (form.authType === 'key' || form.authType === 'key_pass') && form.privateKeyPath) {
+        try {
+          await window.bifrost.credentials.storeKeyFromPath(savedId, form.privateKeyPath)
+        } catch { /* ignore */ }
       }
       onClose()
     } finally { setSaving(false) }
@@ -649,6 +662,32 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
                                   <FolderOpen className="h-4 w-4" /> BROWSE
                                 </Button>
                               </div>
+                              {connectionId && (form.authType === 'key' || form.authType === 'key_pass') && (
+                                <div className="mt-1.5 text-[10px] text-[var(--on-surface-variant)]">
+                                  {hasVaultKey ? (
+                                    <span>
+                                      ✓ A vault copy of this key is kept — used automatically if the file goes missing.{' '}
+                                      <button
+                                        type="button"
+                                        className="underline hover:text-[var(--on-surface)]"
+                                        onClick={async () => {
+                                          try {
+                                            await window.bifrost.credentials.removeStoredKey(connectionId)
+                                            setHasVaultKey(false)
+                                            showToast({ variant: 'info', message: 'Vault copy removed' })
+                                          } catch (err) {
+                                            showToast({ variant: 'error', message: err instanceof Error ? err.message : String(err) })
+                                          }
+                                        }}
+                                      >
+                                        Remove copy
+                                      </button>
+                                    </span>
+                                  ) : form.privateKeyPath ? (
+                                    <span>A copy is saved to the vault the next time you save or connect while the file exists, so the key keeps working if the file later moves.</span>
+                                  ) : null}
+                                </div>
+                              )}
                             </div>
                             {form.authType === 'key_pass' && (
                               <div>

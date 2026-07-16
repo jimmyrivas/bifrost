@@ -16,6 +16,7 @@ import { CaptureFilesBrowser, type CaptureTab } from '@renderer/components/termi
 import { ImportExportPanel } from './ImportExportPanel'
 import { DiscoveryPanel } from './DiscoveryPanel'
 import { DbEncryptionSection } from './DbEncryptionSection'
+import { showToast } from '@renderer/lib/protocol-dispatch'
 
 type PrefsTab = 'terminal' | 'ai' | 'ssh' | 'security' | 'keybindings' | 'language' | 'network' | 'keepass' | 'sync' | 'plugins' | 'mcp' | 'import' | 'discovery'
 
@@ -286,20 +287,37 @@ export function Preferences(): JSX.Element {
                   <p className="text-xs text-[var(--on-surface-variant)] mb-3">
                     Passwords and passphrases are encrypted using the system keychain (gnome-keyring/kwallet).
                   </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={async () => {
-                      const available = await window.bifrost?.credentials?.isAvailable()
-                      if (available) {
-                        window.alert('Credential vault is available and using system keychain encryption.')
-                      } else {
-                        window.alert('System keychain not available. Credentials are stored with base64 encoding (less secure).')
-                      }
-                    }}
-                  >
-                    Check Vault Status
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        const available = await window.bifrost?.credentials?.isAvailable()
+                        if (available) {
+                          window.alert('Credential vault is available and using system keychain encryption.')
+                        } else {
+                          window.alert('System keychain not available. Credentials are stored with base64 encoding (less secure).')
+                        }
+                      }}
+                    >
+                      Check Vault Status
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        if (!window.confirm('Re-encrypt every stored credential with the current keychain key?')) return
+                        try {
+                          const { reEncrypted } = await window.bifrost.credentials.changeVaultPassword()
+                          showToast({ variant: 'success', message: `Re-encrypted ${reEncrypted} secret${reEncrypted === 1 ? '' : 's'}` })
+                        } catch (err) {
+                          showToast({ variant: 'error', message: err instanceof Error ? err.message : String(err) })
+                        }
+                      }}
+                    >
+                      Re-encrypt vault
+                    </Button>
+                  </div>
                 </div>
                 <div className="h-[1px] bg-[var(--surface-container-highest)]" />
                 <DbEncryptionSection />

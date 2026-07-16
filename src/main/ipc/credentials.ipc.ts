@@ -2,7 +2,8 @@ import { ipcMain } from 'electron'
 import { credentialStore } from '../services/credential-store'
 import { getDatabase, schema } from '../db'
 import { eq } from 'drizzle-orm'
-import { readFileSync } from 'fs'
+import { readFileSync, existsSync } from 'fs'
+import { expandHome } from '../services/ssh-manager'
 import { auditLogger } from '../services/audit-log'
 
 export function registerCredentialsIpc(): void {
@@ -171,6 +172,57 @@ export function registerCredentialsIpc(): void {
       })
     }
   )
+
+  // Read a key file from disk and store its content encrypted in the vault, so
+  // the connection can still authenticate if the file later moves/disappears.
+  ipcMain.handle(
+    'credentials:storeKeyFromPath',
+    (_event, connectionId: string, keyPath: string): { stored: boolean } => {
+      const resolved = expandHome(keyPath)
+      // Best-effort: if the file is gone/unreadable, report it instead of
+      // throwing (auto-store on save calls this whether or not the file exists).
+      if (!keyPath || !existsSync(resolved)) return { stored: false }
+      const content = readFileSync(resolved, 'utf-8')
+      const encrypted = credentialStore.encrypt(content)
+      const db = getDatabase()
+      const conn = db.select({ sshConfig: schema.connections.sshConfig })
+        .from(schema.connections)
+        .where(eq(schema.connections.id, connectionId))
+        .get()
+      const config = conn?.sshConfig ? JSON.parse(conn.sshConfig) : {}
+      config.encryptedKeyContent = encrypted.toString('base64')
+      db.update(schema.connections)
+        .set({ sshConfig: JSON.stringify(config) })
+        .where(eq(schema.connections.id, connectionId))
+        .run()
+      auditLogger.log({
+        connectionId,
+        connectionName: connectionId,
+        host: '',
+        event: 'key_file_stored',
+        details: { method: 'from_path' }
+      })
+      return { stored: true }
+    }
+  )
+
+  // Remove a stored key copy from the vault (user opts out of the fallback).
+  ipcMain.handle('credentials:removeStoredKey', (_event, connectionId: string) => {
+    const db = getDatabase()
+    const conn = db.select({ sshConfig: schema.connections.sshConfig })
+      .from(schema.connections)
+      .where(eq(schema.connections.id, connectionId))
+      .get()
+    if (!conn?.sshConfig) return
+    try {
+      const config = JSON.parse(conn.sshConfig)
+      delete config.encryptedKeyContent
+      db.update(schema.connections)
+        .set({ sshConfig: JSON.stringify(config) })
+        .where(eq(schema.connections.id, connectionId))
+        .run()
+    } catch { /* ignore */ }
+  })
 
   ipcMain.handle(
     'credentials:getKeyFile',

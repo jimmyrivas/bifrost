@@ -115,6 +115,8 @@ export interface BifrostApi {
     changeVaultPassword: () => Promise<{ reEncrypted: number }>
     // #27: Key file storage
     storeKeyFile: (connectionId: string, keyContent: string) => Promise<void>
+    storeKeyFromPath: (connectionId: string, keyPath: string) => Promise<{ stored: boolean }>
+    removeStoredKey: (connectionId: string) => Promise<void>
     getKeyFile: (connectionId: string) => Promise<string | null>
     // #92: FIDO2
     detectFido2Key: (keyPath: string) => Promise<{ isFido2: boolean; keyType: string }>
@@ -583,6 +585,8 @@ const api: BifrostApi = {
     hasPassword: (id) => ipcRenderer.invoke('credentials:hasPassword', id),
     changeVaultPassword: () => ipcRenderer.invoke('credentials:changeVaultPassword'),
     storeKeyFile: (id, keyContent) => ipcRenderer.invoke('credentials:storeKeyFile', id, keyContent),
+    storeKeyFromPath: (id, keyPath) => ipcRenderer.invoke('credentials:storeKeyFromPath', id, keyPath),
+    removeStoredKey: (id) => ipcRenderer.invoke('credentials:removeStoredKey', id),
     getKeyFile: (id) => ipcRenderer.invoke('credentials:getKeyFile', id),
     detectFido2Key: (keyPath) => ipcRenderer.invoke('credentials:detectFido2Key', keyPath),
     generateFido2Key: (keyPath, keyType, resident) =>

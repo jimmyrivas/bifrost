@@ -1,6 +1,8 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { sendToOwner, bufferOutput, setOwner, removeOwner } from '../services/window-router'
-import { sshManager, type SshConnectionConfig, type SshAlgorithms, type HttpProxyConfig } from '../services/ssh-manager'
+import { sshManager, expandHome, type SshConnectionConfig, type SshAlgorithms, type HttpProxyConfig } from '../services/ssh-manager'
+import { credentialStore } from '../services/credential-store'
+import { existsSync, readFileSync } from 'fs'
 import { generateTOTP } from '../services/totp'
 import { getDatabase, schema } from '../db'
 import { eq, and } from 'drizzle-orm'
@@ -174,6 +176,30 @@ export function registerSshIpc(mainWindow: BrowserWindow): void {
         jumpChain: jumpChain.length > 0 ? jumpChain : undefined,
         algorithms: sshOptions.algorithms,
         x11Forward: sshOptions.x11Forward
+      }
+
+      // #27 File secret storage: keep an encrypted copy of the private key in the
+      // vault so the connection still authenticates if the key file later moves.
+      // While the file is present we capture it once; when it is absent we connect
+      // with the stored copy (ssh-manager prefers privateKeyContent over a path).
+      if (conn.authType === 'key' || conn.authType === 'key_pass') {
+        try {
+          const cfg = conn.sshConfig ? (JSON.parse(conn.sshConfig) as { encryptedKeyContent?: string }) : {}
+          const resolved = conn.privateKeyPath ? expandHome(conn.privateKeyPath) : ''
+          const fileExists = !!resolved && existsSync(resolved)
+          if (fileExists && !cfg.encryptedKeyContent) {
+            // Capture once, for future fallback.
+            cfg.encryptedKeyContent = credentialStore.encrypt(readFileSync(resolved, 'utf-8')).toString('base64')
+            getDatabase()
+              .update(schema.connections)
+              .set({ sshConfig: JSON.stringify(cfg) })
+              .where(eq(schema.connections.id, connectionId))
+              .run()
+          } else if (!fileExists && cfg.encryptedKeyContent) {
+            const key = credentialStore.decrypt(Buffer.from(cfg.encryptedKeyContent, 'base64'))
+            if (key) config.privateKeyContent = Buffer.from(key)
+          }
+        } catch { /* ignore malformed sshConfig / read errors */ }
       }
 
       const sessionId = await sshManager.connect(config)

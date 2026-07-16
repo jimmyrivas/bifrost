@@ -5,7 +5,7 @@ import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
 
-function expandHome(p: string): string {
+export function expandHome(p: string): string {
   if (p === '~') return homedir()
   if (p.startsWith('~/')) return join(homedir(), p.slice(2))
   return p
