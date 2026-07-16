@@ -244,7 +244,7 @@ export function registerSshIpc(mainWindow: BrowserWindow): void {
       const senderWin = BrowserWindow.fromWebContents(_event.sender)
       if (senderWin) setOwner(sessionId, senderWin)
 
-      // Load TOTP secret if configured for this connection
+      // Load TOTP secret + honor auto-save logging for this connection.
       if (connectionId) {
         try {
           const db = getDatabase()
@@ -252,6 +252,24 @@ export function registerSshIpc(mainWindow: BrowserWindow): void {
           if (conn?.sshConfig) {
             const cfg = JSON.parse(conn.sshConfig)
             if (cfg.totpSecret) totpSecrets.set(sessionId, cfg.totpSecret)
+          }
+          // #6.4 Auto session logging: start a transcript on connect when the
+          // connection has autoSaveLog enabled (uses the same logger as the
+          // manual Capture menu; stopLogging on close already fires below).
+          if (conn?.autoSaveLog) {
+            const pattern = conn.logPattern || '%N_%Y%M%D_%H%m%s'
+            const filePath = sessionLogger.startLogging(sessionId, pattern, {
+              name: conn.name,
+              host: conn.host ?? '',
+              user: conn.username ?? ''
+            })
+            auditLogger.log({
+              connectionId,
+              connectionName: conn.name,
+              host: conn.host ?? '',
+              event: 'session_log_start',
+              details: { sessionId, filePath, reason: 'auto_save' }
+            })
           }
         } catch { /* ok */ }
       }

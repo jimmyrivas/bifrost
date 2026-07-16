@@ -53,7 +53,17 @@ variables, macros, expect, and cluster backends that shipped without any UI.
   (a passphrase prompt) and re-encrypts on quit. Enabling shows a hard warning —
   a lost passphrase means unrecoverable data. Protects the file when the app is
   closed (not SQLCipher; the DB is plaintext on disk while running).
+- **Auto-save session logs**: connections with the option enabled now start a
+  transcript automatically on connect.
+- **SFTP Rename** in the file panel.
+- **FIDO2** connection editor can generate/detect an sk-key (with honest copy
+  that sk-keys authenticate via ssh-agent).
+- Combining tabs now preserves each pane's connection identity.
 - `success` toast variant (green) for positive feedback.
+
+### Removed
+- Dead `quake-terminal` class and the dead keyboard pane-resize dispatch
+  (react-resizable-panels handles keyboard resize natively).
 
 ## [0.3.3] - 2026-07-14
 

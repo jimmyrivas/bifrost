@@ -683,10 +683,49 @@ export function ConnectionForm({ connectionId, initialData, onClose }: Connectio
                           )}
                         </div>
                         {form.authType === 'fido2' && (
-                          <div className="col-span-2 rounded-[var(--radius)] bg-[#6bd5ff]/5 p-2">
+                          <div className="col-span-2 rounded-[var(--radius)] bg-[#6bd5ff]/5 p-2 flex flex-col gap-2">
                             <span className="text-[10px] text-[#6bd5ff]">
-                              FIDO2/WebAuthn: Use an ed25519-sk or ecdsa-sk key. Requires physical touch on the security key during connection.
+                              FIDO2/WebAuthn sk-keys authenticate through your <strong>ssh-agent</strong> — Bifrost&apos;s
+                              built-in SSH client can&apos;t use sk-keys directly yet. Generate one, add it with{' '}
+                              <code>ssh-add</code>, then connect (the agent handles the touch prompt).
                             </span>
+                            <div className="flex gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={async () => {
+                                  const path = form.privateKeyPath.trim() || '~/.ssh/id_ed25519_sk'
+                                  try {
+                                    const res = await window.bifrost.credentials.generateFido2Key(path, 'ed25519-sk', false)
+                                    if (res.success) {
+                                      set('privateKeyPath', res.keyPath)
+                                      showToast({ variant: 'success', message: `FIDO2 key generated: ${res.keyPath} (touch your key)` })
+                                    }
+                                  } catch (err) {
+                                    showToast({ variant: 'error', message: err instanceof Error ? err.message : String(err) })
+                                  }
+                                }}
+                              >
+                                Generate sk-key
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={!form.privateKeyPath.trim()}
+                                onClick={async () => {
+                                  try {
+                                    const res = await window.bifrost.credentials.detectFido2Key(form.privateKeyPath.trim())
+                                    showToast(res.isFido2
+                                      ? { variant: 'success', message: `Detected ${res.keyType} (FIDO2)` }
+                                      : { variant: 'info', message: `Not a FIDO2 key (${res.keyType})` })
+                                  } catch (err) {
+                                    showToast({ variant: 'error', message: err instanceof Error ? err.message : String(err) })
+                                  }
+                                }}
+                              >
+                                Detect type
+                              </Button>
+                            </div>
                           </div>
                         )}
                         {(form.authType === 'key' || form.authType === 'key_pass' || form.authType === 'fido2') && (

@@ -75,7 +75,7 @@ derived from the project's OpenSpec capability specs and verified against the co
 - **Advanced SSH options**: per-connection cipher / KEX / MAC / host-key algorithm selection and X11 forwarding are applied on connect
 
 ### SFTP & files
-- SFTP panel per SSH tab: browse, upload (multi-file), download, delete, mkdir
+- SFTP panel per SSH tab: browse, upload (multi-file), download, rename, delete, mkdir
 - Clipboard-image upload (see Terminal above)
 
 ### Automation
@@ -92,7 +92,7 @@ derived from the project's OpenSpec capability specs and verified against the co
 
 ### Observability & security
 - **Session recording** (asciicast v2 `.cast`, input + output) from the terminal's Capture menu: pulsing red dot on the tab, a blinking REC indicator in the status bar, stop-toast with the file path, and a Recordings manager (play command, reveal, delete) — replay with `asciinema play`
-- **Session logs**: plain-text transcripts per session (pattern-based file names), start/stop from the Capture menu, folders exposed in Preferences → Session Capture
+- **Session logs**: plain-text transcripts per session (pattern-based file names), start/stop from the Capture menu, or **auto-started on connect** for connections with "Auto-save session logs" enabled; folders exposed in Preferences → Session Capture
 - Append-only audit log (JSON Lines) of connections, credential events, capture start/stop, and hook executions — it also powers the per-connection statistics
 - **Activity view** (sidebar): the audit log as a day-grouped timeline with category filters, search, 24h/7d/30d ranges, live refresh, per-connection drill-down, insights counters, log rotation, and CSV/JSONL export of the filtered events — plus a Captures tab over recordings and session logs
 - Secret redaction filter for terminal output (Settings toggle, persisted across restarts; off by default)
@@ -129,10 +129,9 @@ They are the top of the roadmap, and each is a well-scoped contribution:
 
 ## Known limitations (alpha)
 
-- **Keyboard pane-resize** shortcuts are not wired yet (resize via splits/maximize)
 - **Zmodem** sz/rz is detected and redirects you to SFTP — no in-terminal transfer
-- **FIDO2** tab exists but ssh2 cannot yet use sk-keys directly (works only through ssh-agent)
-- Custom **keybindings editor** doesn't yet override the built-in shortcuts
+- **FIDO2** sk-keys authenticate only through ssh-agent (Bifrost's SSH client can't use them directly yet); the connection editor can generate/detect an sk-key
+- Custom **keybindings editor** is a reference of the built-in shortcuts — remapping is saved but not applied yet
 - **Session recording** covers SSH sessions only (local/mosh panes show the option disabled)
 
 ## Roadmap

@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
-import { Folder, File, ArrowUp, Download, Upload, RefreshCw, Trash2, X, FolderPlus } from 'lucide-react'
+import { Folder, File, ArrowUp, Download, Upload, RefreshCw, Trash2, X, FolderPlus, Pencil } from 'lucide-react'
 import { Input } from '@renderer/components/ui/input'
 import { cn } from '@renderer/lib/utils'
 
@@ -145,6 +145,20 @@ export function SftpPanel({ sshSessionId, onClose }: SftpPanelProps): JSX.Elemen
     }
   }, [sftpId, currentPath, loadDirectory])
 
+  const handleRename = useCallback(async (name: string) => {
+    if (!sftpId) return
+    const newName = window.prompt(`Rename "${name}" to:`, name)
+    if (!newName || newName === name) return
+    const dir = currentPath === '.' ? '' : currentPath
+    const join = (n: string): string => (dir ? `${dir}/${n}` : n).replace(/\/\//g, '/')
+    try {
+      await window.bifrost.sftp.rename(sftpId, join(name), join(newName))
+      await loadDirectory(currentPath)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Rename failed')
+    }
+  }, [sftpId, currentPath, loadDirectory])
+
   const handleMkdir = useCallback(async () => {
     if (!sftpId) return
     const name = window.prompt('New directory name:')
@@ -279,6 +293,14 @@ export function SftpPanel({ sshSessionId, onClose }: SftpPanelProps): JSX.Elemen
                       <Download className="w-3 h-3" />
                     </button>
                   )}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleRename(entry.name) }}
+                    className="text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] p-0.5"
+                    aria-label={`Rename ${entry.name}`}
+                    title="Rename"
+                  >
+                    <Pencil className="w-3 h-3" />
+                  </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); handleDelete(entry.name) }}
                     className="text-[var(--on-surface-variant)] hover:text-[var(--error)] p-0.5"

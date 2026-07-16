@@ -135,6 +135,12 @@ export function KeyBindings({ bindings: externalBindings, onChange }: KeyBinding
 
   return (
     <div className="flex flex-col gap-4 p-4">
+      <div className="rounded-[var(--radius)] bg-[var(--warning)]/10 p-2.5">
+        <p className="text-[11px] text-[var(--warning)]">
+          Heads up: custom remapping isn&apos;t applied yet — the app still uses the built-in shortcuts
+          below. This is a reference of the current bindings; saving a new combo does not change behavior.
+        </p>
+      </div>
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-[var(--on-surface)] flex items-center gap-2">
           <Keyboard className="h-4 w-4" />

@@ -6,6 +6,9 @@ export interface TerminalPane {
   id: string
   terminalId: string | null
   title: string
+  // The connection this pane belongs to (null = local). Carried so combining
+  // tabs into split panes preserves each pane's connection identity (#6.6).
+  connectionId?: string | null
   // One-shot: a still-live backend session id (e.g. `ssh:<id>` or a local PTY id)
   // that this pane should ADOPT on mount instead of opening a fresh connection.
   // Set only when recreating a tab on reattach; consumed once by useTerminal.
@@ -194,7 +197,7 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
     const tab: Tab = {
       id: tabId,
       title: label,
-      rootPane: createPane(label, adoptSessionId),
+      rootPane: { ...createPane(label, adoptSessionId), connectionId: connectionId ?? null },
       isActive: true,
       connectionId: connectionId ?? null,
       lockTitle: false,
@@ -401,9 +404,13 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
     const { tabs } = get()
     if (tabs.length <= 1) return
 
+    // Collect leaves with their connection identity (from the pane, else the
+    // owning tab), so combining preserves each pane's connectionId (#6.6).
     const allLeaves: TerminalPane[] = []
     for (const tab of tabs) {
-      allLeaves.push(...collectLeafPanes(tab.rootPane))
+      for (const leaf of collectLeafPanes(tab.rootPane)) {
+        allLeaves.push({ ...leaf, connectionId: leaf.connectionId ?? tab.connectionId })
+      }
     }
 
     if (allLeaves.length === 0) return
@@ -412,7 +419,8 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
     let rootPane: TerminalPane = {
       id: allLeaves[0].id,
       terminalId: allLeaves[0].terminalId,
-      title: allLeaves[0].title
+      title: allLeaves[0].title,
+      connectionId: allLeaves[0].connectionId
     }
 
     for (let i = 1; i < allLeaves.length; i++) {
@@ -428,20 +436,23 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
             {
               id: allLeaves[i].id,
               terminalId: allLeaves[i].terminalId,
-              title: allLeaves[i].title
+              title: allLeaves[i].title,
+              connectionId: allLeaves[i].connectionId
             }
           ]
         }
       }
     }
 
+    // The combined tab keeps a single connectionId only when every pane shares it.
+    const uniqueConns = new Set(allLeaves.map((l) => l.connectionId ?? null))
     const combinedId = newTabId()
     const combinedTab: Tab = {
       id: combinedId,
       title: 'Combined',
       rootPane,
       isActive: true,
-      connectionId: null,
+      connectionId: uniqueConns.size === 1 ? (allLeaves[0].connectionId ?? null) : null,
       lockTitle: false
     }
 

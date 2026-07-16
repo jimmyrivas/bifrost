@@ -323,11 +323,9 @@ export function App(): JSX.Element {
         const tab = state.tabs.find((t) => t.id === state.activeTabId)
         if (tab) toggleMaximizePane(tab.rootPane.id)
       }
-      // Ctrl+Shift+Arrow: Pane resize (#5)
-      if (e.ctrlKey && e.shiftKey && ['ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
-        e.preventDefault()
-        document.dispatchEvent(new CustomEvent('terminal:pane-resize', { detail: e.key }))
-      }
+      // (Pane resize by keyboard is handled natively by react-resizable-panels'
+      // resize handles — Tab to a handle, then arrow keys. The old dead
+      // `terminal:pane-resize` dispatch with no listener was removed. #6.7)
       // F11: Fullscreen (#73)
       if (e.key === 'F11') {
         e.preventDefault()

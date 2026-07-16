@@ -75,7 +75,7 @@ código (también [in English](docs/guide/README.md)).
 - **Opciones SSH avanzadas**: selección por conexión de cifrados / KEX / MACs / algoritmos de host-key y reenvío X11 se aplican al conectar
 
 ### SFTP y archivos
-- Panel SFTP por pestaña SSH: navegar, subir (multi-archivo), descargar, borrar, mkdir
+- Panel SFTP por pestaña SSH: navegar, subir (multi-archivo), descargar, renombrar, borrar, mkdir
 - Subida de imágenes del portapapeles (ver Terminal arriba)
 
 ### Automatización
@@ -92,7 +92,7 @@ código (también [in English](docs/guide/README.md)).
 
 ### Observabilidad y seguridad
 - **Grabación de sesiones** (asciicast v2 `.cast`, entrada + salida) desde el menú Capture del terminal: punto rojo pulsante en la pestaña, indicador REC parpadeante en la barra de estado, aviso con la ruta al detener y un gestor de grabaciones (comando de reproducción, revelar, borrar) — reproduce con `asciinema play`
-- **Logs de sesión**: transcripciones en texto plano por sesión (nombres de archivo con patrones), iniciar/detener desde el menú Capture, carpetas expuestas en Preferencias → Session Capture
+- **Logs de sesión**: transcripciones en texto plano por sesión (nombres de archivo con patrones), iniciar/detener desde el menú Capture, o **auto-iniciados al conectar** para conexiones con "Auto-save session logs" activado; carpetas expuestas en Preferencias → Session Capture
 - Log de auditoría de solo anexado (JSON Lines) de conexiones, eventos de credenciales, inicio/fin de capturas y ejecución de hooks — también alimenta las estadísticas por conexión
 - **Vista Activity** (barra lateral): el log de auditoría como línea de tiempo agrupada por día con filtros por categoría, búsqueda, rangos 24h/7d/30d, refresco en vivo, drill-down por conexión, contadores de insights, rotación del log y export CSV/JSONL de los eventos filtrados — más una pestaña Captures sobre grabaciones y logs de sesión
 - Filtro de redacción de secretos en la salida del terminal (interruptor en Ajustes, persistente entre reinicios; desactivado por defecto)
@@ -129,10 +129,9 @@ Es lo primero de la hoja de ruta, y cada punto es una contribución bien acotada
 
 ## Limitaciones conocidas (alpha)
 
-- Los atajos de **redimensionado de paneles por teclado** no están conectados aún (redimensiona con splits/maximizar)
 - **Zmodem** sz/rz se detecta y te redirige a SFTP — no hay transferencia en el terminal
-- La pestaña **FIDO2** existe pero ssh2 aún no usa llaves sk directamente (solo funciona a través de ssh-agent)
-- El **editor de atajos** todavía no reemplaza los atajos integrados
+- Las llaves **FIDO2** sk solo autentican vía ssh-agent (el cliente SSH de Bifrost aún no las usa directamente); el editor de conexión puede generar/detectar una llave sk
+- El **editor de atajos** es una referencia de los atajos integrados — el remapeo se guarda pero aún no se aplica
 - La **grabación de sesiones** cubre solo sesiones SSH (en paneles locales/mosh la opción aparece deshabilitada)
 
 ## Hoja de ruta

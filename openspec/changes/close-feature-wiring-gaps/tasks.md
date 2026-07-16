@@ -44,11 +44,11 @@
 
 ## 6. Phase 6 — Polish & honesty debt
 
-- [ ] 6.1 FIDO2: honest UI copy (works via ssh-agent resident keys only) and wire `detectFido2Key`/`generateFido2Key` buttons, or drop the tab until sk-key auth lands.
-- [ ] 6.2 Keybindings: apply user overrides from the editor to the real shortcut handling, or remove the editor.
-- [ ] 6.3 Quake terminal: register `QuakeTerminal` + a real `#/quake` route with a preference toggle, or delete the dead class.
-- [ ] 6.4 Auto session logging: honor per-connection `autoSaveLog`/`logPattern` on connect (uses 1.5 wiring).
-- [ ] 6.5 SFTP: add Rename to the panel (backend exists); file issue for chmod/dual-pane.
-- [ ] 6.6 Combine-tabs: preserve each pane's `connectionId` when merging.
-- [ ] 6.7 Keyboard pane-resize: implement the `terminal:pane-resize` listener over `react-resizable-panels` or remove the hotkeys.
-- [ ] 6.8 Full suite + lint green; final README/README.es sweep — delete emptied "pending/limitations" entries; openspec validate --strict.
+- [x] 6.1 FIDO2: honest UI copy — the FIDO2 auth panel now states sk-keys authenticate via ssh-agent (Bifrost's client can't use them directly yet) and wires **Generate sk-key** (`generateFido2Key`) + **Detect type** (`detectFido2Key`) buttons.
+- [x] 6.2 Keybindings: honest notice added — the editor shows a banner that custom remapping isn't applied yet and the listed bindings are the active built-ins (the record UI stays as a reference; full remap is future work, kept honest in README).
+- [x] 6.3 Quake terminal: deleted the dead `quake-terminal.ts` class + its test (never instantiated/routed; a real Quake terminal is a future feature change).
+- [x] 6.4 Auto session logging: `ssh.ipc` openShell now honors `autoSaveLog`/`logPattern` — starts a transcript on connect via `sessionLogger.startLogging` with a `session_log_start` audit event (stopLogging on close already wired).
+- [x] 6.5 SFTP: Rename action added to `SftpPanel` (Pencil button per row → `sftp:rename`); chmod/dual-pane remain out of scope.
+- [x] 6.6 Combine-tabs: `TerminalPane` gained a `connectionId`; `combineTabs` now carries each pane's connectionId (pane, else owning tab), and the combined tab keeps a single connectionId when all panes share one. `createTab` stamps the rootPane.
+- [x] 6.7 Keyboard pane-resize: removed the dead `terminal:pane-resize` dispatch (no listener existed). react-resizable-panels' resize handles already support keyboard resize natively (focus a handle, arrow keys).
+- [x] 6.8 Full suite + lint green (typecheck 0, eslint(src) 0 errors, 353 tests); README/README.es + guide + CHANGELOG swept for Phase 6; `openspec validate close-feature-wiring-gaps --strict` passes.
