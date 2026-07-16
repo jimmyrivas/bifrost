@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect, useRef } from 'react'
+import { useCallback, useState, useEffect, useRef, type PointerEvent as ReactPointerEvent } from 'react'
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import { Search } from 'lucide-react'
 import { cn } from '@renderer/lib/utils'
@@ -81,6 +81,29 @@ export function AppShell(): JSX.Element {
   const broadcastMode = useSessionsStore((s) => s.broadcastMode)
   const cycleBroadcastMode = useSessionsStore((s) => s.cycleBroadcastMode)
   const setBroadcastMode = useSessionsStore((s) => s.setBroadcastMode)
+
+  // SFTP panel width — draggable + persisted (#sftp-panel-usability).
+  const [sftpWidth, setSftpWidth] = useState(() => {
+    const v = Number(localStorage.getItem('bifrost:sftpWidth'))
+    return v >= 240 && v <= 1600 ? v : 340
+  })
+  const startSftpResize = useCallback((e: ReactPointerEvent) => {
+    e.preventDefault()
+    const startX = e.clientX
+    let latest = sftpWidth
+    const maxW = Math.round(window.innerWidth * 0.7)
+    const onMove = (ev: PointerEvent): void => {
+      latest = Math.max(240, Math.min(maxW, sftpWidth + (startX - ev.clientX)))
+      setSftpWidth(latest)
+    }
+    const onUp = (): void => {
+      document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointerup', onUp)
+      localStorage.setItem('bifrost:sftpWidth', String(latest))
+    }
+    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointerup', onUp)
+  }, [sftpWidth])
 
   // Global Ctrl+K shortcut for command palette
   useEffect(() => {
@@ -504,11 +527,16 @@ export function AppShell(): JSX.Element {
                           />
                         </div>
                         {sftpOpen && tab.connectionId && (
-                          <div
-                            className="shrink-0 h-full border-l border-[#1b1b1e] overflow-hidden"
-                            style={{ width: 320, resize: 'horizontal', direction: 'rtl', minWidth: 200, maxWidth: 600 }}
-                          >
-                            <div style={{ direction: 'ltr' }} className="h-full">
+                          <div className="shrink-0 h-full flex" style={{ width: sftpWidth }}>
+                            {/* Drag handle to resize the SFTP panel */}
+                            <div
+                              onPointerDown={startSftpResize}
+                              className="w-1 h-full shrink-0 cursor-col-resize bg-[#1b1b1e] hover:bg-[#39393c]"
+                              title="Drag to resize"
+                              role="separator"
+                              aria-orientation="vertical"
+                            />
+                            <div className="flex-1 min-w-0 h-full overflow-hidden">
                               <SftpPanel
                                 sshSessionId={sshSessionId}
                                 onClose={() => useSessionsStore.getState().toggleSftp(tab.id)}

@@ -1,5 +1,6 @@
-import { useState, useCallback, useEffect } from 'react'
-import { Folder, File, ArrowUp, Download, Upload, RefreshCw, Trash2, X, FolderPlus, Pencil } from 'lucide-react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
+import { Folder, File, ArrowUp, Download, Upload, RefreshCw, Trash2, X, FolderPlus, Pencil, FolderTree } from 'lucide-react'
 import { Input } from '@renderer/components/ui/input'
 import { cn } from '@renderer/lib/utils'
 
@@ -15,18 +16,63 @@ interface SftpEntry {
   group: number
 }
 
+type SortKey = 'name' | 'size' | 'date'
+
 interface SftpPanelProps {
   sshSessionId: string | null
   onClose: () => void
 }
 
+/**
+ * Uniform compact timestamp. English → "YYYY-MM-DD HH:mm:ss", Spanish →
+ * "DD-MM-YYYY HH:mm:ss" (day-first). Same width for every row so the column
+ * lines up and reads at a glance.
+ */
+function formatDate(ms: number, lang: string): string {
+  if (!ms) return ''
+  const d = new Date(ms)
+  const p = (n: number): string => String(n).padStart(2, '0')
+  const y = d.getFullYear()
+  const mo = p(d.getMonth() + 1)
+  const da = p(d.getDate())
+  const time = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+  const date = lang.startsWith('es') ? `${da}-${mo}-${y}` : `${y}-${mo}-${da}`
+  return `${date} ${time}`
+}
+
 export function SftpPanel({ sshSessionId, onClose }: SftpPanelProps): JSX.Element {
+  const { i18n } = useTranslation()
+  const lang = i18n.language
   const [sftpId, setSftpId] = useState<string | null>(null)
   const [currentPath, setCurrentPath] = useState('~')
   const [pathInput, setPathInput] = useState('~')
   const [entries, setEntries] = useState<SftpEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc'; foldersFirst: boolean }>({
+    key: 'name',
+    dir: 'asc',
+    foldersFirst: true
+  })
+
+  const toggleSort = useCallback((key: SortKey) => {
+    setSort((s) => (s.key === key ? { ...s, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { ...s, key, dir: 'asc' }))
+  }, [])
+
+  const displayEntries = useMemo(() => {
+    const cmp = (a: SftpEntry, b: SftpEntry): number => {
+      let r = 0
+      if (sort.key === 'name') r = a.name.localeCompare(b.name)
+      else if (sort.key === 'size') r = (a.size ?? 0) - (b.size ?? 0)
+      else r = (a.modifiedDate ?? 0) - (b.modifiedDate ?? 0)
+      return sort.dir === 'asc' ? r : -r
+    }
+    const arr = [...entries]
+    if (sort.foldersFirst) {
+      return [...arr.filter((e) => e.isDirectory).sort(cmp), ...arr.filter((e) => !e.isDirectory).sort(cmp)]
+    }
+    return arr.sort(cmp)
+  }, [entries, sort])
 
   // Open SFTP session on mount
   useEffect(() => {
@@ -236,6 +282,30 @@ export function SftpPanel({ sshSessionId, onClose }: SftpPanelProps): JSX.Elemen
         </div>
       )}
 
+      {/* Column headers (sortable) */}
+      <div className="flex items-center gap-1 px-2 py-1 surface-1 shrink-0 text-[9px] uppercase tracking-wider text-[var(--on-surface-variant)] select-none">
+        <span className="w-3.5 shrink-0" />
+        <button onClick={() => toggleSort('name')} className="flex-1 min-w-0 text-left hover:text-[var(--on-surface)]">
+          Name{sort.key === 'name' ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}
+        </button>
+        <button onClick={() => toggleSort('date')} className="w-28 text-right shrink-0 hover:text-[var(--on-surface)]">
+          Modified{sort.key === 'date' ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}
+        </button>
+        <button onClick={() => toggleSort('size')} className="w-12 text-right shrink-0 hover:text-[var(--on-surface)]">
+          Size{sort.key === 'size' ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}
+        </button>
+        <div className="w-16 flex justify-end shrink-0">
+          <button
+            onClick={() => setSort((s) => ({ ...s, foldersFirst: !s.foldersFirst }))}
+            className={cn('p-0.5', sort.foldersFirst ? 'text-[#6bd5ff]' : 'hover:text-[var(--on-surface)]')}
+            title={sort.foldersFirst ? 'Folders first: on' : 'Folders first: off'}
+            aria-label="Toggle folders first"
+          >
+            <FolderTree className="w-3 h-3" />
+          </button>
+        </div>
+      </div>
+
       {/* File list */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
         {loading ? (
@@ -245,7 +315,7 @@ export function SftpPanel({ sshSessionId, onClose }: SftpPanelProps): JSX.Elemen
             {sftpId ? 'Empty directory' : 'Opening SFTP...'}
           </div>
         ) : (
-          entries.map((entry, idx) => {
+          displayEntries.map((entry, idx) => {
             const dir = entry.isDirectory ?? false
             return (
               <div
@@ -272,8 +342,19 @@ export function SftpPanel({ sshSessionId, onClose }: SftpPanelProps): JSX.Elemen
                 )}
 
                 {/* Name */}
-                <span className="flex-1 text-[11px] text-[var(--on-surface)] font-[family-name:var(--font-mono)] truncate min-w-0">
+                <span
+                  className="flex-1 text-[11px] text-[var(--on-surface)] font-[family-name:var(--font-mono)] truncate min-w-0"
+                  title={entry.name}
+                >
                   {entry.name}
+                </span>
+
+                {/* Modified */}
+                <span
+                  className="text-[9px] text-[var(--on-surface-variant)] shrink-0 w-28 text-right font-[family-name:var(--font-mono)]"
+                  title={entry.modifiedDate ? new Date(entry.modifiedDate).toLocaleString() : ''}
+                >
+                  {formatDate(entry.modifiedDate ?? 0, lang)}
                 </span>
 
                 {/* Size */}
@@ -282,7 +363,7 @@ export function SftpPanel({ sshSessionId, onClose }: SftpPanelProps): JSX.Elemen
                 </span>
 
                 {/* Actions */}
-                <div className="flex shrink-0">
+                <div className="flex shrink-0 w-16 justify-end">
                   {!dir && (
                     <button
                       onClick={(e) => { e.stopPropagation(); handleDownload(entry.name) }}

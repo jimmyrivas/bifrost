@@ -17,7 +17,8 @@ El panel arranca en el directorio home remoto y ofrece:
 - Una **barra de ruta** — escribe cualquier ruta absoluta (o `~`) y pulsa Enter para saltar ahí.
 - **Subir** (botón ↑) para ir al directorio padre, y **Refrescar** para recargar el listado.
 - **Doble clic** en una carpeta para entrar.
-- Tamaños de archivo en unidades legibles junto a cada archivo.
+- Columnas **Name**, **Modified** (fecha) y **Size**. Haz clic en una cabecera para ordenar por ella; otro clic invierte. El toggle **folders-first** (icono de árbol de carpetas) mantiene los directorios agrupados arriba.
+- **Redimensiona** el panel arrastrando su borde izquierdo — el ancho se recuerda mientras la app está abierta, para que los nombres largos se lean bien.
 
 ## Operaciones con archivos
 
@@ -25,10 +26,11 @@ El panel arranca en el directorio home remoto y ofrece:
 |---|---|---|
 | Subir | Botón **Upload file** de la barra | Selector de archivos nativo, multi-selección; los archivos aterrizan en el directorio remoto actual |
 | Descargar | Icono **Download** en la fila del archivo | Abre un diálogo "Guardar como" para el destino local |
+| Renombrar | Icono de **lápiz** en la fila | Pide el nuevo nombre; funciona con archivos y directorios |
 | Borrar | Icono de **papelera** en la fila | Pide confirmación primero; funciona con archivos y directorios |
 | Nueva carpeta | Botón **New folder** de la barra | Pide un nombre y la crea en el directorio actual |
 
-Ese es el conjunto completo. Todavía no hay rename, ni edición de permisos (chmod), ni vista de panel dual local/remoto — ver el final de este capítulo.
+Todavía no hay edición de permisos (chmod) ni vista de panel dual local/remoto — ver el final de este capítulo.
 
 ## Pegar una imagen del portapapeles al servidor
 
@@ -57,7 +59,7 @@ Nota de honestidad: Bifrost **no** implementa transferencias Zmodem en el termin
 
 ## Aún no disponible
 
-- **Rename** y **chmod** en el panel SFTP.
+- Edición de permisos (**chmod**) en el panel SFTP.
 - Navegador de archivos de **panel dual** local/remoto.
 - Transferencias **Zmodem** en el terminal (solo detección + redirección a SFTP).
 

@@ -17,7 +17,8 @@ The panel starts in the remote home directory and gives you:
 - A **path bar** — type any absolute path (or `~`) and press Enter to jump there.
 - **Up** (↑ button) to go to the parent directory, and **Refresh** to reload the listing.
 - **Double-click** a folder to enter it.
-- File sizes shown in human-readable units next to each file.
+- **Name**, **Modified** date, and **Size** columns. Click a column header to sort by it; click again to reverse. The **folders-first** toggle (folder-tree icon) keeps directories grouped at the top.
+- **Resize** the panel by dragging its left edge — the width is remembered while the app is open, so long filenames stay readable.
 
 ## File operations
 
@@ -25,10 +26,11 @@ The panel starts in the remote home directory and gives you:
 |---|---|---|
 | Upload | Toolbar **Upload file** button | Native file picker, multi-select; files land in the current remote directory |
 | Download | **Download** icon on a file row | Opens a Save As dialog for the local destination |
+| Rename | **Pencil** icon on a row | Prompts for the new name; works on files and directories |
 | Delete | **Trash** icon on a row | Asks for confirmation first; works on files and directories |
 | New folder | Toolbar **New folder** button | Prompts for a name, creates it in the current directory |
 
-That's the full set. There is no rename, no permission (chmod) editing, and no dual-pane local/remote view yet — see the end of this chapter.
+Permission (chmod) editing and a dual-pane local/remote view are not available yet — see the end of this chapter.
 
 ## Paste a clipboard image to the server
 
@@ -57,7 +59,7 @@ Honesty note: Bifrost does **not** implement in-terminal Zmodem transfers. If a 
 
 ## Not available yet
 
-- **Rename** and **chmod** in the SFTP panel.
+- **chmod** (permission) editing in the SFTP panel.
 - **Dual-pane** local/remote file browser.
 - **Zmodem** in-terminal transfers (detection + SFTP redirect only).
 
