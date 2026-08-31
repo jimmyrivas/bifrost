@@ -5,7 +5,32 @@ All notable changes to Bifrost will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.3.4] - Unreleased
+## [0.3.5] - 2026-08-31
+
+Fixes found during a hands-on GUI verification pass of the v0.3.4 features (all
+10 beta items in `TODO.md` were checked). Every item verified; these bugs were
+fixed along the way.
+
+### Fixed
+- **System tray invisible on KDE/Wayland**: the tray icon was a buildResources
+  file and never packaged into the app, so it fell back to an empty image. It is
+  now shipped via `extraResources` and passed to `Tray` as a real file path (Linux
+  SNI/AppIndicator reads the icon from disk).
+- **PCC broadcast bar**: typed text was invisible (an opaque textarea background
+  covered the syntax-highlight overlay), and Send didn't execute the command
+  (no trailing newline; it also only routed `ssh:` sessions). Both fixed.
+- **Combine / Explode tabs lost SSH servers**: rebuilding tabs remounted every
+  pane and the unmount cleanup disconnected the sessions, so panes reopened as
+  local shells. Panes now adopt their live session (with a detaching guard so
+  unmount doesn't disconnect) and keep their own connectionId.
+- **Split panes didn't close on process exit** — a pane that ran `exit` stayed
+  open and the layout didn't reflow. It now closes that pane (or the whole tab
+  for a standalone terminal).
+- **Escape-sequence garbage after adoption**: replaying a session's buffer
+  re-triggered terminal color/DSR/DA query replies that leaked onto the prompt
+  (`10;rgb:…`, `1R…`). The replay now strips those queries.
+
+## [0.3.4] - 2026-07-16
 
 Phases 3 and 4 of the post-audit wiring plan: reach the import, discovery, tray,
 variables, macros, expect, and cluster backends that shipped without any UI.

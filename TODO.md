@@ -2,12 +2,10 @@
 
 Running list of work that still needs attention. Keep it honest.
 
-## GUI verification pending (shipped in v0.3.4, not yet hands-on verified)
+## GUI verification — DONE (all items verified 2026-08-30/31, fixes in v0.3.5)
 
-These features are implemented, type-checked, linted, and unit-tested, and their
-UI → IPC → main paths exist — but they have **not** had a dedicated manual GUI
-pass. Treat them as beta until checked on a real setup. (Phases 1, 2, and 5.3/
-5.4/5.5, plus the SFTP panel polish, WERE GUI-verified.)
+All items below were verified hands-on. Several uncovered real bugs that were
+fixed and shipped in v0.3.5 (see CHANGELOG). Kept here as a record.
 
 - [x] **Import / Export panel** (Settings → Import/Export): ssh-config, Ansible,
       Terraform, JSON round-trips. — GUI-verified 2026-07-16.
