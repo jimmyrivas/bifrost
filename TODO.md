@@ -9,10 +9,13 @@ UI → IPC → main paths exist — but they have **not** had a dedicated manual
 pass. Treat them as beta until checked on a real setup. (Phases 1, 2, and 5.3/
 5.4/5.5, plus the SFTP panel polish, WERE GUI-verified.)
 
-- [ ] **Import / Export panel** (Settings → Import/Export): ssh-config, Ansible,
-      Terraform, JSON round-trips.
-- [ ] **Cloud discovery panel** (Settings → Discovery): provider scans + import.
-- [ ] **System tray** connections list + click-to-open.
+- [x] **Import / Export panel** (Settings → Import/Export): ssh-config, Ansible,
+      Terraform, JSON round-trips. — GUI-verified 2026-07-16.
+- [x] **Cloud discovery panel** (Settings → Discovery): provider scans + import. — GUI-verified 2026-07-16.
+- [x] **System tray** connections list + click-to-open. — GUI-verified 2026-08-30;
+      fixed a real packaging bug: the tray icon (buildResources, not shipped) never
+      reached runtime, so the tray was invisible on KDE/Wayland — now shipped via
+      extraResources + passed as a real file path to Tray.
 - [ ] **Clusters** (Clusters view): create/auto-cluster, "Open cluster" opens
       member tabs + enables all-tabs broadcast.
 - [ ] **Expect automation** (connection editor → EXPECT tab): rules auto-firing

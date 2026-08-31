@@ -18,6 +18,13 @@ asarUnpack:
   - node_modules/better-sqlite3/**
   - node_modules/node-pty/**
   - resources/**
+# Ship the tray icon as a real file at <resourcesPath>/icon.png. buildResources
+# (resources/) is NOT packaged into the app by default, and Linux SNI/
+# AppIndicator must read the tray icon from a real filesystem path (not inside
+# app.asar), so the tray was invisible on KDE/Wayland without this.
+extraResources:
+  - from: resources/icon.png
+    to: icon.png
 linux:
   target:
     - AppImage

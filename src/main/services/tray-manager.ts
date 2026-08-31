@@ -1,5 +1,6 @@
 import { Tray, Menu, nativeImage, app, BrowserWindow, type MenuItemConstructorOptions } from 'electron'
 import { join } from 'path'
+import { existsSync } from 'fs'
 
 export interface TrayConnectionEntry {
   id: string
@@ -80,20 +81,22 @@ function buildContextMenu(): Menu {
   return Menu.buildFromTemplate(template)
 }
 
-function createTrayIcon(): Electron.NativeImage {
-  // Attempt to load icon from resources; fall back to an empty 16x16 image
-  try {
-    const iconPath = join(__dirname, '../../resources/icon.png')
-    const icon = nativeImage.createFromPath(iconPath)
-    if (!icon.isEmpty()) {
-      return icon.resize({ width: 16, height: 16 })
-    }
-  } catch {
-    // Fall through to fallback
+/**
+ * Resolve the tray icon to a REAL filesystem path. Linux SNI/AppIndicator reads
+ * the tray icon from disk by path and cannot read inside app.asar, so we ship it
+ * via extraResources at <resourcesPath>/icon.png. Returns a path string (best
+ * for Linux) or null if none exists. Dev path resolves from the repo.
+ */
+function resolveTrayIconPath(): string | null {
+  const candidates = [
+    join(process.resourcesPath ?? '', 'icon.png'), // packaged: extraResources
+    join(__dirname, '../../resources/icon.png') // dev: repo resources/
+  ]
+  for (const p of candidates) {
+    if (p && existsSync(p)) return p
   }
-
-  // Fallback: create a simple 16x16 icon
-  return nativeImage.createEmpty()
+  console.warn('[tray] no tray icon file found; tray may be invisible on KDE/Wayland:', candidates)
+  return null
 }
 
 export class TrayManager {
@@ -104,10 +107,16 @@ export class TrayManager {
       connectCallback = onConnect
     }
 
-    const icon = createTrayIcon()
-    tray = new Tray(icon)
+    // Pass a real file PATH (not a nativeImage) on Linux so AppIndicator/SNI can
+    // read the icon from disk; fall back to a resized nativeImage otherwise.
+    const iconPath = resolveTrayIconPath()
+    const icon = iconPath
+      ? nativeImage.createFromPath(iconPath).resize({ width: 22, height: 22 })
+      : nativeImage.createEmpty()
+    tray = new Tray(iconPath && process.platform === 'linux' ? iconPath : icon)
     tray.setToolTip('Bifrost Connection Manager')
     tray.setContextMenu(buildContextMenu())
+    console.log(`[tray] Tray created (icon: ${iconPath ?? 'none'}). If nothing shows on KDE/Wayland, the SNI host may not have picked it up.`)
 
     tray.on('click', () => {
       const windows = BrowserWindow.getAllWindows()
