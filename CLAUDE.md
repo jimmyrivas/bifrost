@@ -28,7 +28,8 @@ pnpm lint             # ESLint with --fix
 pnpm typecheck        # tsc --noEmit
 pnpm test             # Vitest unit tests (run once)
 pnpm test:watch       # Vitest watch mode
-pnpm test:e2e         # Playwright E2E
+pnpm test:e2e         # Playwright E2E (drives the packaged app via _electron; needs dist/linux-unpacked/bifrost)
+pnpm test:e2e:headless # same, wrapped in xvfb-run (no display needed)
 pnpm package          # electron-builder (deb, rpm, AppImage)
 pnpm rebuild          # Rebuild native modules (better-sqlite3, node-pty) against Electron ABI
 
@@ -111,6 +112,19 @@ Manual MCP config:
 ## Critical Lessons Learned
 
 Non-obvious gotchas that have bitten this codebase. Read before changing the affected areas.
+
+### Self-verifying GUI changes (E2E harness)
+You can drive the real app yourself instead of always asking for manual GUI checks.
+`tests/e2e/` uses Playwright's `_electron` against the packaged binary
+(`dist/linux-unpacked/bifrost`), headless via `xvfb-run`, with an **isolated
+`XDG_CONFIG_HOME`** so real user data is never touched. Ad-hoc: `xvfb-run -a node
+tests/e2e/drive.mjs --view=clusters --shot=/tmp/x.png` (then Read the PNG — you can
+see the UI). Regression: `pnpm test:e2e:headless`. Screenshots catch visual bugs
+(invisible text, escape-sequence garbage, layout). **Limits** (still need the user's
+real desktop): KDE system-tray SNI rendering, external GUI clients (xfreerdp/
+vncviewer), physical FIDO2 keys, Wayland-only quirks. The electron npm binary isn't
+downloaded here (Docker build), so use `executablePath: dist/linux-unpacked/bifrost`,
+not `_electron.launch({args:['out/main']})`.
 
 ### Zustand selectors — NEVER subscribe to arrays/objects
 **Problem**: `useSessionsStore((s) => s.tabs)` creates a new array reference on every store update, causing infinite re-render loops (React error #185) in production builds.
