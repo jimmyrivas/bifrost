@@ -16,8 +16,11 @@ pass. Treat them as beta until checked on a real setup. (Phases 1, 2, and 5.3/
       fixed a real packaging bug: the tray icon (buildResources, not shipped) never
       reached runtime, so the tray was invisible on KDE/Wayland — now shipped via
       extraResources + passed as a real file path to Tray.
-- [ ] **Clusters** (Clusters view): create/auto-cluster, "Open cluster" opens
-      member tabs + enables all-tabs broadcast.
+- [x] **Clusters** (Clusters view): create/auto-cluster, "Open cluster" opens
+      member tabs + enables all-tabs broadcast. — GUI-verified 2026-08-30. Fixed 2
+      PCC-broadcast-bar bugs: invisible typed text (opaque textarea bg covered the
+      highlight overlay) and commands not executing (Send didn't append a newline;
+      also only routed ssh: — now uses writeToSession).
 - [ ] **Expect automation** (connection editor → EXPECT tab): rules auto-firing
       on a live SSH session (watch mode).
 - [ ] **Password managers** (Settings → Secret Managers): detection panel;

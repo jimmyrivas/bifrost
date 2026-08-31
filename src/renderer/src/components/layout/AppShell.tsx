@@ -28,6 +28,7 @@ import { ActivityCenter } from '@renderer/components/activity/ActivityCenter'
 import { useSessionsStore } from '@renderer/stores/sessions.store'
 import { useConnectionsStore } from '@renderer/stores/connections.store'
 import { connectionsToTrayEntries } from '@renderer/lib/discovery-import'
+import { writeToSession } from '@renderer/lib/session-id'
 import { usePreferencesStore, clampAiPanelWidth } from '@renderer/stores/preferences.store'
 
 export type ViewSection =
@@ -473,16 +474,15 @@ export function AppShell(): JSX.Element {
                     active={broadcastMode === 'panes' || broadcastMode === 'all-tabs'}
                     onToggle={() => cycleBroadcastMode()}
                     onSend={(text, mode) => {
-                      // Send text to all terminals based on mode
+                      // Broadcast the command to the target terminals and press
+                      // Enter (append \n) so it actually executes. Route by
+                      // protocol prefix via the canonical helper.
                       const ids = mode === 'all'
                         ? useSessionsStore.getState().getAllTerminalIds()
                         : useSessionsStore.getState().getActiveTabTerminalIds()
+                      const payload = text.endsWith('\n') ? text : text + '\n'
                       for (const id of ids) {
-                        if (id.startsWith('ssh:')) {
-                          window.bifrost?.ssh?.write(id.slice(4), text)
-                        } else {
-                          window.bifrost?.terminal?.write(id, text)
-                        }
+                        writeToSession(id, payload)
                       }
                     }}
                   />

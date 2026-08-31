@@ -102,11 +102,14 @@ export function PCCBar({ active, onToggle, onSend }: PCCBarProps): JSX.Element {
         </div>
       )}
 
-      {/* Command input with syntax highlighting (#69, #71) */}
-      <div className="relative flex-1 min-h-[4.5rem] max-h-24">
+      {/* Command input with syntax highlighting (#69, #71). The bg + border live
+          on the container; the textarea is transparent (text + bg) so the
+          highlighted overlay behind it shows through — an opaque textarea bg here
+          would cover the overlay and make typed text invisible. */}
+      <div className="relative flex-1 min-h-[4.5rem] max-h-24 rounded-[var(--radius)] bg-[var(--surface-container-highest)] ghost-border overflow-hidden">
         <div
           className={cn(
-            'absolute inset-0 rounded-[var(--radius)] px-3 py-2 overflow-hidden pointer-events-none',
+            'absolute inset-0 px-3 py-2 overflow-hidden pointer-events-none',
             'text-xs whitespace-pre-wrap break-words leading-relaxed',
             'font-[family-name:var(--font-mono)]',
             !active && 'opacity-40'
@@ -127,9 +130,9 @@ export function PCCBar({ active, onToggle, onSend }: PCCBarProps): JSX.Element {
           disabled={!active}
           rows={3}
           className={cn(
-            'relative w-full h-full min-h-[4.5rem] max-h-24 rounded-[var(--radius)] bg-[var(--surface-container-highest)] px-3 py-2',
+            'relative w-full h-full min-h-[4.5rem] max-h-24 bg-transparent px-3 py-2',
             'text-xs text-transparent caret-[var(--on-surface)] placeholder-[var(--on-surface-variant)]/40',
-            'ghost-border focus-visible:outline-none resize-none',
+            'focus-visible:outline-none resize-none',
             'font-[family-name:var(--font-mono)] leading-relaxed',
             !active && 'opacity-40 cursor-not-allowed'
           )}
