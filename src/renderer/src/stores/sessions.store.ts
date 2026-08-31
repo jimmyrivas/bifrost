@@ -58,6 +58,10 @@ interface SessionsState {
   setTerminalId: (tabId: string, paneId: string, terminalId: string) => void
   splitPane: (tabId: string, paneId: string, direction: SplitDirection) => void
   closeSplitPane: (tabId: string, paneId: string) => void
+  /** Close whichever surface owns a terminal id when its process exits: the
+   *  whole tab if it's a standalone terminal, or just its split pane (with
+   *  layout reflow) if it's one pane of a combined/split tab. */
+  closePaneByTerminalId: (terminalId: string) => void
   setBroadcastMode: (mode: BroadcastMode) => void
   cycleBroadcastMode: () => void
   setAiDetected: (tabId: string, tool: string) => void
@@ -271,6 +275,25 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
     }))
   },
 
+  closePaneByTerminalId: (terminalId: string) => {
+    const { tabs, closeTab, closeSplitPane } = get()
+    for (const tab of tabs) {
+      // Standalone terminal (no split): close the whole tab.
+      if (!tab.rootPane.split && tab.rootPane.terminalId === terminalId) {
+        closeTab(tab.id)
+        return
+      }
+      // One pane of a split/combined tab: close just that pane (reflows layout).
+      if (tab.rootPane.split) {
+        const leaf = collectLeafPanes(tab.rootPane).find((p) => p.terminalId === terminalId)
+        if (leaf) {
+          closeSplitPane(tab.id, leaf.id)
+          return
+        }
+      }
+    }
+  },
+
   setBroadcastMode: (mode: BroadcastMode) => {
     set({ broadcastMode: mode })
   },
@@ -376,20 +399,33 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
     const leaves = collectLeafPanes(tab.rootPane)
     if (leaves.length <= 1) return
 
+    // Each exploded tab adopts its pane's LIVE session (adoptSessionId) and keeps
+    // the pane's own connectionId, so exploding a combined tab preserves each
+    // server instead of remounting into fresh local shells (#6.6).
     const newTabs: Tab[] = leaves.map((leaf, idx) => {
       const newId = newTabId()
       return {
         id: newId,
         title: leaf.title || `${tab.title} (${idx + 1})`,
-        rootPane: { id: leaf.id, terminalId: leaf.terminalId, title: leaf.title },
+        rootPane: {
+          id: leaf.id,
+          terminalId: leaf.terminalId,
+          title: leaf.title,
+          connectionId: leaf.connectionId ?? tab.connectionId,
+          adoptSessionId: leaf.terminalId ?? undefined
+        },
         isActive: false,
-        connectionId: tab.connectionId,
+        connectionId: leaf.connectionId ?? tab.connectionId,
         lockTitle: false
       }
     })
 
     const firstNewId = newTabs[0].id
     newTabs[0].isActive = true
+
+    // Guard the source tab so unmount doesn't disconnect the sessions the new
+    // tabs are about to adopt; release it after the remount settles.
+    get()._detachingTabs.add(tabId)
 
     set((state) => ({
       tabs: state.tabs
@@ -398,6 +434,8 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
         .concat(newTabs),
       activeTabId: firstNewId
     }))
+
+    setTimeout(() => { get()._detachingTabs.delete(tabId) }, 2000)
   },
 
   combineTabs: () => {
@@ -405,23 +443,33 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
     if (tabs.length <= 1) return
 
     // Collect leaves with their connection identity (from the pane, else the
-    // owning tab), so combining preserves each pane's connectionId (#6.6).
+    // owning tab) and their LIVE session id as adoptSessionId, so each combined
+    // pane re-adopts its running session instead of reconnecting fresh (#6.6).
+    // Replacing the tabs remounts every pane; without adoption they would open
+    // new local shells and lose their SSH servers.
     const allLeaves: TerminalPane[] = []
     for (const tab of tabs) {
       for (const leaf of collectLeafPanes(tab.rootPane)) {
-        allLeaves.push({ ...leaf, connectionId: leaf.connectionId ?? tab.connectionId })
+        allLeaves.push({
+          ...leaf,
+          connectionId: leaf.connectionId ?? tab.connectionId,
+          adoptSessionId: leaf.terminalId ?? undefined
+        })
       }
     }
 
     if (allLeaves.length === 0) return
 
+    const leafPane = (l: TerminalPane): TerminalPane => ({
+      id: l.id,
+      terminalId: l.terminalId,
+      title: l.title,
+      connectionId: l.connectionId,
+      adoptSessionId: l.adoptSessionId
+    })
+
     // Build a vertical split tree from all leaf panes
-    let rootPane: TerminalPane = {
-      id: allLeaves[0].id,
-      terminalId: allLeaves[0].terminalId,
-      title: allLeaves[0].title,
-      connectionId: allLeaves[0].connectionId
-    }
+    let rootPane: TerminalPane = leafPane(allLeaves[0])
 
     for (let i = 1; i < allLeaves.length; i++) {
       const containerId = newPaneId()
@@ -431,15 +479,7 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
         title: '',
         split: {
           direction: 'vertical',
-          panes: [
-            rootPane,
-            {
-              id: allLeaves[i].id,
-              terminalId: allLeaves[i].terminalId,
-              title: allLeaves[i].title,
-              connectionId: allLeaves[i].connectionId
-            }
-          ]
+          panes: [rootPane, leafPane(allLeaves[i])]
         }
       }
     }
@@ -456,9 +496,21 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
       lockTitle: false
     }
 
+    // Mark the old tabs as detaching so the panes' unmount cleanup does NOT
+    // disconnect their sessions — the combined panes will adopt them instead.
+    const detaching = get()._detachingTabs
+    for (const t of tabs) detaching.add(t.id)
+
     set({
       tabs: [combinedTab],
       activeTabId: combinedId
     })
+
+    // Release the detaching guard after the remount + adoption settles, so later
+    // real closes disconnect normally.
+    setTimeout(() => {
+      const s = get()._detachingTabs
+      for (const t of tabs) s.delete(t.id)
+    }, 2000)
   }
 }))

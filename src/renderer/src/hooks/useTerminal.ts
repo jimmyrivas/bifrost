@@ -11,6 +11,7 @@ import { scanForErrors, type DetectedError } from '@renderer/lib/error-patterns'
 import { redactSecrets } from '@renderer/lib/secret-redactor'
 import { clearCaptureForSession } from '@renderer/stores/capture.store'
 import { detectZmodem, notifyZmodemDetected } from '@renderer/lib/zmodem-handler'
+import { stripReplayQueries } from '@renderer/lib/replay-sanitizer'
 import { findMarkdownPaths } from '@renderer/lib/markdown-link-matcher'
 import { resolveRemotePath, parseCwdFromPrompt } from '@renderer/lib/markdown-path-resolver'
 import {
@@ -919,7 +920,9 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
       // Replay whatever the session buffered while detached.
       try {
         const buf = await window.bifrost.terminal.getBuffer(rawId)
-        if (buf) terminal.write(buf)
+        // Strip terminal queries (color/DSR/DA) so replaying the buffer doesn't
+        // re-trigger the emulator's replies and leak them onto the prompt.
+        if (buf) terminal.write(stripReplayQueries(buf))
       } catch {
         /* no buffer available */
       }
@@ -1020,10 +1023,10 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
           if (id === terminalIdRef.current) {
             terminal.write(`\r\n\x1b[90m[Process exited with code ${exitCode}]\x1b[0m\r\n`)
             clearCaptureForSession(id)
+            // Close the tab (standalone terminal) or just this split pane
+            // (combined/split tab), reflowing the layout.
             setTimeout(() => {
-              const { tabs } = useSessionsStore.getState()
-              const tab = tabs.find((t) => t.rootPane?.terminalId === id)
-              if (tab) useSessionsStore.getState().closeTab(tab.id)
+              useSessionsStore.getState().closePaneByTerminalId(id)
             }, 1500)
           }
         })
@@ -1453,11 +1456,11 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
         if (id === terminalIdRef.current) {
           terminal.write(`\r\n\x1b[90m[Process exited with code ${exitCode}]\x1b[0m\r\n`)
           clearCaptureForSession(id)
-          // Auto-close tab after brief delay so user sees the exit message
+          // Auto-close after a brief delay so the exit message is seen. Closes
+          // the whole tab for a standalone terminal, or just this split pane
+          // (with layout reflow) when it's one pane of a combined/split tab.
           setTimeout(() => {
-            const { tabs } = useSessionsStore.getState()
-            const tab = tabs.find((t) => t.rootPane?.terminalId === id)
-            if (tab) useSessionsStore.getState().closeTab(tab.id)
+            useSessionsStore.getState().closePaneByTerminalId(id)
           }, 1500)
         }
       })

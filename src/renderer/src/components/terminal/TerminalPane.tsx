@@ -76,7 +76,10 @@ export function TerminalPane({ pane, tabId, connectionId, terminalStyle, shell, 
     <XTerminal
       paneId={pane.id}
       tabId={tabId}
-      connectionId={connectionId}
+      // A pane's own connectionId wins over the tab's, so a combined tab (whose
+      // panes come from different connections) reconnects each pane to the right
+      // server if adoption doesn't happen (#6.6).
+      connectionId={pane.connectionId ?? connectionId}
       terminalStyle={terminalStyle}
       shell={shell}
       shellArgs={shellArgs}

@@ -21,15 +21,28 @@ pass. Treat them as beta until checked on a real setup. (Phases 1, 2, and 5.3/
       PCC-broadcast-bar bugs: invisible typed text (opaque textarea bg covered the
       highlight overlay) and commands not executing (Send didn't append a newline;
       also only routed ssh: — now uses writeToSession).
-- [ ] **Expect automation** (connection editor → EXPECT tab): rules auto-firing
-      on a live SSH session (watch mode).
-- [ ] **Password managers** (Settings → Secret Managers): detection panel;
-      per-connection `op://` reference resolving at connect (needs `op` CLI).
-- [ ] **SSH CA** panel: local-CA (`ssh-keygen`) and Vault signing.
-- [ ] **FIDO2**: Generate sk-key / Detect type buttons in the connection editor.
-- [ ] **Auto-save session logs**: transcript auto-started on connect for
-      connections with the option enabled.
-- [ ] **Combine tabs**: per-pane `connectionId` preserved after merging.
+- [x] **Expect automation** (connection editor → EXPECT tab): rules auto-firing
+      on a live SSH session (watch mode). — GUI-verified 2026-08-30.
+- [x] **Password managers** (Settings → Secret Managers): detection panel
+      verified 2026-08-30 (KeePassXC detected). Per-connection `op://` reference
+      resolve-at-connect NOT tested (needs the 1Password `op` CLI) — see deferred:
+      it's 1Password-only for now.
+- [x] **SSH CA** panel: local-CA (`ssh-keygen`) signing verified 2026-08-30;
+      Vault signing not tested (needs the `vault` CLI + server).
+- [x] **FIDO2**: Generate sk-key / Detect type buttons — UI verified 2026-08-30
+      (honest ssh-agent copy shown, buttons respond); real sk-key generation NOT
+      tested (no physical security key available).
+- [x] **Auto-save session logs**: transcript auto-started on connect for
+      connections with the option enabled. — GUI-verified 2026-08-30 (log written
+      to ~/.config/bifrost/session-logs/ with the session transcript).
+- [x] **Combine tabs**: per-pane `connectionId` preserved after merging. —
+      GUI-verified 2026-08-30. Fixed 4 real bugs uncovered during verification:
+      (1) split panes didn't close/reflow when their process exited
+      (closePaneByTerminalId); (2) combine remounted panes as fresh local shells,
+      losing SSH servers (now adopt live sessions + detaching guard so unmount
+      doesn't disconnect); (3) explode had the same loss (same fix); (4) escape-
+      sequence garbage (OSC color / DSR / DA query replies) leaked onto the prompt
+      after adoption (stripReplayQueries on the replayed buffer).
 
 ## Known deferred / future work
 
