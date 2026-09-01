@@ -5,6 +5,28 @@ All notable changes to Bifrost will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.6] - 2026-08-31
+
+Three GUI-verified features land on top of v0.3.5.
+
+### Added
+- **Remote-persisted tab names** — renaming a tab now stores its alias on the
+  remote host, next to the multiplexer session it is attached to
+  (`~/.config/bifrost/session-aliases.json`). The name survives an app restart
+  and is restored on reattach **from any device**; the session picker shows each
+  session's alias with the raw session/socket name beneath it. Uniform across
+  dtach, tmux, zellij and rmux; stale entries are pruned on a successful probe.
+- **Clickable web links in the terminal** — Ctrl/Cmd+click opens an `http(s)://`
+  URL in your OS default handler (scheme-validated on both sides; a plain click
+  stays free for selection), and hovering a URL shows a copy chip that puts the
+  full URL on the clipboard. Toggle and gesture configurable under
+  **Settings ▸ Terminal**.
+- **SFTP power features** — the SFTP panel opens at the shell's current working
+  directory (with a sync affordance), adds breadcrumb navigation, multi-select
+  recursive download and upload of files *and* folders, a persistent download
+  history (reveal/open where files landed), and a Download/View action for
+  remote Markdown files.
+
 ## [0.3.5] - 2026-08-31
 
 Fixes found during a hands-on GUI verification pass of the v0.3.4 features (all
