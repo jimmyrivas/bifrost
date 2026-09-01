@@ -50,6 +50,11 @@ interface SessionsState {
   reconnectAttempts: Map<string, number>
   maxReconnectAttempts: number
   maximizedPaneId: string | null
+  // Live remote working directory per terminalId (e.g. `ssh:<id>` -> "/home/u").
+  // Published by useTerminal (OSC 7 + prompt parsing); read by the SFTP panel to
+  // open where the shell is. Keyed by terminalId; string values are stable refs.
+  terminalCwds: Record<string, string>
+  setTerminalCwd: (terminalId: string, cwd: string) => void
 
   createTab: (title?: string, connectionId?: string, terminalStyle?: TerminalStyle, shell?: string, shellArgs?: string[], adoptSessionId?: string) => string
   closeTab: (tabId: string) => void
@@ -192,6 +197,9 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
   reconnectAttempts: new Map(),
   maxReconnectAttempts: 50,
   maximizedPaneId: null,
+  terminalCwds: {},
+  setTerminalCwd: (terminalId, cwd) =>
+    set((s) => (s.terminalCwds[terminalId] === cwd ? s : { terminalCwds: { ...s.terminalCwds, [terminalId]: cwd } })),
   _detachingTabs: new Set<string>(),
   sftpOpenTabIds: [] as string[],
 

@@ -1,5 +1,19 @@
 import type { SFTPWrapper, FileEntry, Stats, InputAttributes } from 'ssh2'
+import { mkdirSync, statSync, readdirSync } from 'fs'
+import { join, basename } from 'path'
 import { sshManager } from './ssh-manager'
+
+/** One downloaded file, for history + reporting. */
+export interface DownloadedFile {
+  remotePath: string
+  localPath: string
+  size: number
+}
+export interface TransferResult {
+  files: DownloadedFile[]
+  totalBytes: number
+}
+export type TransferProgress = (done: number, total: number) => void
 
 export interface SftpFileEntry {
   name: string
@@ -190,6 +204,91 @@ export class SftpManager {
         resolve()
       })
     })
+  }
+
+  /**
+   * Download multiple remote entries (files and/or directories) into a local
+   * destination folder, recreating directory structure for directories. Returns
+   * every written file with its size for the download history.
+   */
+  async downloadEntries(
+    sftpId: string,
+    remotePaths: string[],
+    destDir: string,
+    onProgress?: TransferProgress
+  ): Promise<TransferResult> {
+    const files: DownloadedFile[] = []
+    let totalBytes = 0
+
+    // First pass: enumerate every file to transfer (walk directories) so we can
+    // report meaningful progress.
+    const jobs: Array<{ remote: string; local: string; size: number }> = []
+    const enumerate = async (remotePath: string, localBase: string): Promise<void> => {
+      const st = await this.stat(sftpId, remotePath)
+      const name = basename(remotePath)
+      if (st.isDirectory) {
+        const localDir = join(localBase, name)
+        mkdirSync(localDir, { recursive: true })
+        const entries = await this.listDirectory(sftpId, remotePath)
+        for (const e of entries) {
+          if (e.name === '.' || e.name === '..') continue
+          await enumerate(`${remotePath}/${e.name}`.replace(/\/\//g, '/'), localDir)
+        }
+      } else {
+        jobs.push({ remote: remotePath, local: join(localBase, name), size: st.size })
+      }
+    }
+    for (const rp of remotePaths) await enumerate(rp, destDir)
+
+    // Second pass: transfer, reporting progress by file count.
+    let done = 0
+    for (const job of jobs) {
+      await this.readFile(sftpId, job.remote, job.local)
+      files.push({ remotePath: job.remote, localPath: job.local, size: job.size })
+      totalBytes += job.size
+      done++
+      onProgress?.(done, jobs.length)
+    }
+    return { files, totalBytes }
+  }
+
+  /**
+   * Upload multiple local entries (files and/or directories) into a remote
+   * directory, recursing into directories (remote mkdir + recurse).
+   */
+  async uploadEntries(
+    sftpId: string,
+    localPaths: string[],
+    destRemoteDir: string,
+    onProgress?: TransferProgress
+  ): Promise<{ count: number }> {
+    // Enumerate local files first for progress; collect remote dirs to create.
+    const jobs: Array<{ local: string; remote: string }> = []
+    const dirs: string[] = []
+    const enumerate = (localPath: string, remoteBase: string): void => {
+      const name = basename(localPath)
+      const st = statSync(localPath)
+      if (st.isDirectory()) {
+        const remoteDir = `${remoteBase}/${name}`.replace(/\/\//g, '/')
+        dirs.push(remoteDir)
+        for (const child of readdirSync(localPath)) enumerate(join(localPath, child), remoteDir)
+      } else {
+        jobs.push({ local: localPath, remote: `${remoteBase}/${name}`.replace(/\/\//g, '/') })
+      }
+    }
+    for (const lp of localPaths) enumerate(lp, destRemoteDir)
+
+    // Create remote directories (ignore "already exists"), then upload files.
+    for (const dir of dirs) {
+      try { await this.mkdir(sftpId, dir) } catch { /* may already exist */ }
+    }
+    let done = 0
+    for (const job of jobs) {
+      await this.writeFile(sftpId, job.local, job.remote)
+      done++
+      onProgress?.(done, jobs.length)
+    }
+    return { count: jobs.length }
   }
 
   stat(sftpId: string, path: string): Promise<SftpFileStat> {

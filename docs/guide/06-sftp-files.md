@@ -12,23 +12,40 @@ The panel is only available on tabs backed by a saved SSH connection; local term
 
 ## Browsing remote directories
 
-The panel starts in the remote home directory and gives you:
+The panel opens at the **shell's current working directory** when it can detect
+it (falling back to the remote home). It gives you:
 
+- A **breadcrumb** of the current path — click any segment (or the leading `/`)
+  to jump to that ancestor.
 - A **path bar** — type any absolute path (or `~`) and press Enter to jump there.
-- **Up** (↑ button) to go to the parent directory, and **Refresh** to reload the listing.
+- **Up** (↑) to the parent, **Refresh** to reload, and **Sync to shell directory**
+  (the down-into-folder icon) to jump back to where your shell is.
 - **Double-click** a folder to enter it.
-- **Name**, **Modified** date, and **Size** columns. Click a column header to sort by it; click again to reverse. The **folders-first** toggle (folder-tree icon) keeps directories grouped at the top.
-- **Resize** the panel by dragging its left edge — the width is remembered while the app is open, so long filenames stay readable.
+- **Name**, **Modified** date, and **Size** columns. Click a header to sort; click
+  again to reverse. The **folders-first** toggle keeps directories on top.
+- **Resize** the panel by dragging its left edge — the width is remembered.
 
 ## File operations
 
 | Operation | How | Notes |
 |---|---|---|
-| Upload | Toolbar **Upload file** button | Native file picker, multi-select; files land in the current remote directory |
-| Download | **Download** icon on a file row | Opens a Save As dialog for the local destination |
-| Rename | **Pencil** icon on a row | Prompts for the new name; works on files and directories |
-| Delete | **Trash** icon on a row | Asks for confirmation first; works on files and directories |
-| New folder | Toolbar **New folder** button | Prompts for a name, creates it in the current directory |
+| Upload | Toolbar **Upload** button | Pick **files and/or folders**; folders upload recursively into the current directory |
+| Download (one) | **Download** icon on a file row | Save As dialog; recorded in the download history |
+| Download (many) | Tick the **checkboxes**, then **Download to folder…** | Select any mix of files and folders; pick a destination folder and everything transfers, folders recursively, preserving structure |
+| Rename | **Pencil** icon on a row | Prompts for the new name; files and directories |
+| Delete | **Trash** icon on a row | Confirms first; files and directories |
+| New folder | Toolbar **New folder** button | Prompts for a name in the current directory |
+
+## Download history
+
+Every download is remembered. Open it with the **history** (clock) icon in the
+SFTP panel header: each entry shows the file, where it was saved, its size, and
+when — with **Reveal** (open the file manager at it) and **Open** actions.
+
+## Download a Markdown file you're viewing
+
+When you open a remote `.md` in the Markdown viewer, use its **Download** button
+to save the file over SFTP (it's added to the history too).
 
 Permission (chmod) editing and a dual-pane local/remote view are not available yet — see the end of this chapter.
 

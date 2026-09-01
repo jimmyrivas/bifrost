@@ -586,6 +586,15 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
       }
     }
 
+    // Publish the live remote cwd to the store so the SFTP panel can open where
+    // the shell is. Covers both OSC 7 and prompt-parsed cwd; cheap + debounced.
+    const cwdPublishInterval = setInterval(() => {
+      const id = terminalIdRef.current
+      if (!id) return
+      const cwd = currentRemoteCwd()
+      if (cwd) useSessionsStore.getState().setTerminalCwd(id, cwd)
+    }, 1500)
+
     // ── Markdown file links ──
     // Turn `.md` paths in SSH output into links that open Bifrost's internal
     // Markdown viewer. Only active on SSH tabs (remote paths need an SSH/SFTP
@@ -1477,6 +1486,7 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
       paneEl?.removeEventListener('terminal:search-next', handleSearchNext)
       markdownLinkDisposable.dispose()
       osc7Disposable.dispose()
+      clearInterval(cwdPublishInterval)
       removeDataListener?.()
       removeExitListener?.()
       removeErrorListener?.()

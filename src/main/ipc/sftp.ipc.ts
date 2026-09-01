@@ -1,7 +1,27 @@
 import { ipcMain } from 'electron'
-import { sftpManager, type SftpFileEntry, type SftpFileStat } from '../services/sftp-manager'
+import { sftpManager, type SftpFileEntry, type SftpFileStat, type TransferResult } from '../services/sftp-manager'
 
 export function registerSftpIpc(): void {
+  // Recursive/batch download of files + directories into a local folder. Emits
+  // `sftp:progress` events (done/total by file count) to the requesting window.
+  ipcMain.handle(
+    'sftp:downloadEntries',
+    (_event, sftpId: string, remotePaths: string[], destDir: string): Promise<TransferResult> => {
+      return sftpManager.downloadEntries(sftpId, remotePaths, destDir, (done, total) => {
+        if (!_event.sender.isDestroyed()) _event.sender.send('sftp:progress', { kind: 'download', done, total })
+      })
+    }
+  )
+
+  ipcMain.handle(
+    'sftp:uploadEntries',
+    (_event, sftpId: string, localPaths: string[], destRemoteDir: string): Promise<{ count: number }> => {
+      return sftpManager.uploadEntries(sftpId, localPaths, destRemoteDir, (done, total) => {
+        if (!_event.sender.isDestroyed()) _event.sender.send('sftp:progress', { kind: 'upload', done, total })
+      })
+    }
+  )
+
   ipcMain.handle(
     'sftp:open',
     (_event, sshSessionId: string): Promise<string> => {

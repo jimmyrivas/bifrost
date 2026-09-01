@@ -82,6 +82,8 @@ export function AppShell(): JSX.Element {
   const broadcastMode = useSessionsStore((s) => s.broadcastMode)
   const cycleBroadcastMode = useSessionsStore((s) => s.cycleBroadcastMode)
   const setBroadcastMode = useSessionsStore((s) => s.setBroadcastMode)
+  const terminalCwds = useSessionsStore((s) => s.terminalCwds)
+  const connections = useConnectionsStore((s) => s.connections)
 
   // SFTP panel width — draggable + persisted (#sftp-panel-usability).
   const [sftpWidth, setSftpWidth] = useState(() => {
@@ -539,6 +541,8 @@ export function AppShell(): JSX.Element {
                             <div className="flex-1 min-w-0 h-full overflow-hidden">
                               <SftpPanel
                                 sshSessionId={sshSessionId}
+                                shellCwd={termId ? terminalCwds[termId] : undefined}
+                                host={connections.find((c) => c.id === tab.connectionId)?.host ?? ''}
                                 onClose={() => useSessionsStore.getState().toggleSftp(tab.id)}
                               />
                             </div>

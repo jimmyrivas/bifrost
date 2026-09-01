@@ -129,6 +129,24 @@ export function registerSystemIpc(): void {
     return result.canceled ? [] : result.filePaths
   })
 
+  // Pick a single directory (for SFTP download destination). Returns path|null.
+  ipcMain.handle('system:pickDirectory', async () => {
+    const win = BrowserWindow.getFocusedWindow()
+    const result = await dialog.showOpenDialog(win!, {
+      properties: ['openDirectory', 'createDirectory']
+    })
+    return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0]
+  })
+
+  // Pick files and/or directories (for SFTP upload). Returns paths[].
+  ipcMain.handle('system:showOpenFilesOrDirs', async () => {
+    const win = BrowserWindow.getFocusedWindow()
+    const result = await dialog.showOpenDialog(win!, {
+      properties: ['openFile', 'openDirectory', 'multiSelections']
+    })
+    return result.canceled ? [] : result.filePaths
+  })
+
   // Connection health
   ipcMain.handle('health:ping', async (_event, connectionId: string, host: string) => {
     const result = await connectionHealthMonitor.ping(host)

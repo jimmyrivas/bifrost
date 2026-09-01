@@ -217,6 +217,18 @@ export interface BifrostApi {
     stat: (sftpId: string, path: string) => Promise<SftpFileStat>
     close: (sftpId: string) => Promise<void>
     isOpen: (sftpId: string) => Promise<boolean>
+    /** Recursively download files/dirs into a local folder. */
+    downloadEntries: (
+      sftpId: string,
+      remotePaths: string[],
+      destDir: string
+    ) => Promise<{ files: Array<{ remotePath: string; localPath: string; size: number }>; totalBytes: number }>
+    /** Recursively upload local files/dirs into a remote directory. */
+    uploadEntries: (sftpId: string, localPaths: string[], destRemoteDir: string) => Promise<{ count: number }>
+    /** Transfer progress events (done/total by file count). */
+    onProgress: (
+      callback: (p: { kind: 'download' | 'upload'; done: number; total: number }) => void
+    ) => () => void
   }
   clipboard: {
     hasImage: () => Promise<boolean>
@@ -506,6 +518,8 @@ export interface BifrostApi {
     showConfirmDialog: (message: string) => Promise<boolean>
     showSaveDialog: (defaultName: string) => Promise<string | null>
     showOpenDialog: () => Promise<string[]>
+    pickDirectory: () => Promise<string | null>
+    showOpenFilesOrDirs: () => Promise<string[]>
     detachTab: (tabId: string, title: string, connectionId?: string, sessionId?: string) => Promise<void>
     reattachTab: (tabId: string) => Promise<void>
     onTabReattached: (callback: (tabId: string) => void) => () => void
@@ -699,7 +713,17 @@ const api: BifrostApi = {
     rename: (sftpId, oldPath, newPath) => ipcRenderer.invoke('sftp:rename', sftpId, oldPath, newPath),
     stat: (sftpId, path) => ipcRenderer.invoke('sftp:stat', sftpId, path),
     close: (sftpId) => ipcRenderer.invoke('sftp:close', sftpId),
-    isOpen: (sftpId) => ipcRenderer.invoke('sftp:isOpen', sftpId)
+    isOpen: (sftpId) => ipcRenderer.invoke('sftp:isOpen', sftpId),
+    downloadEntries: (sftpId, remotePaths, destDir) =>
+      ipcRenderer.invoke('sftp:downloadEntries', sftpId, remotePaths, destDir),
+    uploadEntries: (sftpId, localPaths, destRemoteDir) =>
+      ipcRenderer.invoke('sftp:uploadEntries', sftpId, localPaths, destRemoteDir),
+    onProgress: (callback) => {
+      const handler = (_e: IpcRendererEvent, p: { kind: 'download' | 'upload'; done: number; total: number }): void =>
+        callback(p)
+      ipcRenderer.on('sftp:progress', handler)
+      return () => ipcRenderer.removeListener('sftp:progress', handler)
+    }
   },
   clipboard: {
     hasImage: () => ipcRenderer.invoke('clipboard:hasImage'),
@@ -946,6 +970,8 @@ const api: BifrostApi = {
     showConfirmDialog: (message: string) => ipcRenderer.invoke('window:confirmDialog', message),
     showSaveDialog: (defaultName: string) => ipcRenderer.invoke('system:showSaveDialog', defaultName),
     showOpenDialog: () => ipcRenderer.invoke('system:showOpenDialog'),
+    pickDirectory: () => ipcRenderer.invoke('system:pickDirectory'),
+    showOpenFilesOrDirs: () => ipcRenderer.invoke('system:showOpenFilesOrDirs'),
     detachTab: (tabId: string, title: string, connectionId?: string, sessionId?: string) => ipcRenderer.invoke('window:detachTab', tabId, title, connectionId, sessionId),
     reattachTab: (tabId: string) => ipcRenderer.invoke('window:reattachTab', tabId),
     onTabReattached: (callback: (tabId: string) => void) => {

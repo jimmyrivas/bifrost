@@ -1,8 +1,13 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Folder, File, ArrowUp, Download, Upload, RefreshCw, Trash2, X, FolderPlus, Pencil, FolderTree } from 'lucide-react'
+import { Folder, File, ArrowUp, Download, Upload, RefreshCw, Trash2, X, FolderPlus, Pencil, FolderTree, FolderDown, Eye } from 'lucide-react'
+import { useMarkdownViewerStore } from '@renderer/stores/markdownViewer.store'
 import { Input } from '@renderer/components/ui/input'
 import { cn } from '@renderer/lib/utils'
+import { useDownloadsStore } from '@renderer/stores/downloads.store'
+import { showToast } from '@renderer/lib/protocol-dispatch'
+import { DownloadHistory } from './DownloadHistory'
+import { History } from 'lucide-react'
 
 interface SftpEntry {
   name: string
@@ -21,6 +26,16 @@ type SortKey = 'name' | 'size' | 'date'
 interface SftpPanelProps {
   sshSessionId: string | null
   onClose: () => void
+  /** The shell's live remote cwd, if known — the panel opens here. */
+  shellCwd?: string | null
+  /** Host label for the download history. */
+  host?: string
+}
+
+/** Join a directory + name into a remote path, collapsing double slashes. */
+function joinRemote(dir: string, name: string): string {
+  if (dir === '.' || dir === '') return name
+  return `${dir}/${name}`.replace(/\/\/+/g, '/')
 }
 
 /**
@@ -40,15 +55,19 @@ function formatDate(ms: number, lang: string): string {
   return `${date} ${time}`
 }
 
-export function SftpPanel({ sshSessionId, onClose }: SftpPanelProps): JSX.Element {
+export function SftpPanel({ sshSessionId, onClose, shellCwd, host }: SftpPanelProps): JSX.Element {
   const { i18n } = useTranslation()
   const lang = i18n.language
+  const addDownloads = useDownloadsStore((s) => s.addDownloads)
   const [sftpId, setSftpId] = useState<string | null>(null)
   const [currentPath, setCurrentPath] = useState('~')
   const [pathInput, setPathInput] = useState('~')
   const [entries, setEntries] = useState<SftpEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [busy, setBusy] = useState<string | null>(null)
+  const [showHistory, setShowHistory] = useState(false)
   const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc'; foldersFirst: boolean }>({
     key: 'name',
     dir: 'asc',
@@ -117,6 +136,7 @@ export function SftpPanel({ sshSessionId, onClose }: SftpPanelProps): JSX.Elemen
       }
       setCurrentPath(resolvedPath)
       setPathInput(resolvedPath)
+      setSelected(new Set()) // selection is per-directory
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to list directory')
       setEntries([])
@@ -125,9 +145,10 @@ export function SftpPanel({ sshSessionId, onClose }: SftpPanelProps): JSX.Elemen
     }
   }, [sftpId])
 
-  // Navigate to home on connect
+  // On connect, open at the shell's cwd if known, else home.
   useEffect(() => {
-    if (sftpId) loadDirectory('.')
+    if (sftpId) loadDirectory(shellCwd || '.')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sftpId, loadDirectory])
 
   const navigateTo = useCallback((path: string) => {
@@ -144,37 +165,64 @@ export function SftpPanel({ sshSessionId, onClose }: SftpPanelProps): JSX.Elemen
     navigateTo('/' + parts.join('/'))
   }
 
-  const handleDownload = useCallback(async (name: string) => {
+  // Single-file download → Save As, then record in history.
+  const handleDownload = useCallback(async (entry: SftpEntry) => {
     if (!sftpId) return
-    const remotePath = currentPath === '.'
-      ? name
-      : `${currentPath}/${name}`.replace(/\/\//g, '/')
+    const remotePath = joinRemote(currentPath, entry.name)
     try {
-      const localPath = await window.bifrost.window.showSaveDialog(name)
-      if (!localPath) return // cancelled
+      const localPath = await window.bifrost.window.showSaveDialog(entry.name)
+      if (!localPath) return
       await window.bifrost.sftp.readFile(sftpId, remotePath, localPath)
+      addDownloads([{ name: entry.name, remotePath, localPath, size: entry.size ?? 0, host: host ?? '' }])
+      showToast({ variant: 'success', message: `Downloaded ${entry.name}` })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Download failed')
     }
-  }, [sftpId, currentPath])
+  }, [sftpId, currentPath, addDownloads, host])
 
+  // Batch download selected files + directories into a chosen folder (recursive).
+  const handleDownloadSelected = useCallback(async () => {
+    if (!sftpId || selected.size === 0) return
+    const destDir = await window.bifrost.window.pickDirectory()
+    if (!destDir) return
+    const remotePaths = [...selected].map((n) => joinRemote(currentPath, n))
+    setBusy('download')
+    try {
+      const res = await window.bifrost.sftp.downloadEntries(sftpId, remotePaths, destDir)
+      addDownloads(res.files.map((f) => ({ name: f.localPath.split('/').pop() ?? '', remotePath: f.remotePath, localPath: f.localPath, size: f.size, host: host ?? '' })))
+      showToast({ variant: 'success', message: `Downloaded ${res.files.length} file${res.files.length === 1 ? '' : 's'} to ${destDir}` })
+      setSelected(new Set())
+    } catch (err) {
+      showToast({ variant: 'error', message: err instanceof Error ? err.message : 'Download failed' })
+    } finally {
+      setBusy(null)
+    }
+  }, [sftpId, selected, currentPath, addDownloads, host])
+
+  // Upload files and/or directories (recursive) into the current remote dir.
   const handleUpload = useCallback(async () => {
     if (!sftpId) return
+    const localPaths = await window.bifrost.window.showOpenFilesOrDirs()
+    if (!localPaths || localPaths.length === 0) return
+    setBusy('upload')
     try {
-      const localPaths = await window.bifrost.window.showOpenDialog()
-      if (!localPaths || localPaths.length === 0) return
-      for (const localPath of localPaths) {
-        const fileName = localPath.split('/').pop() ?? 'file'
-        const remotePath = currentPath === '.'
-          ? fileName
-          : `${currentPath}/${fileName}`.replace(/\/\//g, '/')
-        await window.bifrost.sftp.writeFile(sftpId, localPath, remotePath)
-      }
+      const res = await window.bifrost.sftp.uploadEntries(sftpId, localPaths, currentPath === '.' ? '.' : currentPath)
       await loadDirectory(currentPath)
+      showToast({ variant: 'success', message: `Uploaded ${res.count} file${res.count === 1 ? '' : 's'}` })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed')
+      showToast({ variant: 'error', message: err instanceof Error ? err.message : 'Upload failed' })
+    } finally {
+      setBusy(null)
     }
   }, [sftpId, currentPath, loadDirectory])
+
+  const toggleSelect = useCallback((name: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      next.has(name) ? next.delete(name) : next.add(name)
+      return next
+    })
+  }, [])
 
   const handleDelete = useCallback(async (name: string) => {
     if (!sftpId) return
@@ -246,14 +294,35 @@ export function SftpPanel({ sshSessionId, onClose }: SftpPanelProps): JSX.Elemen
       {/* Header */}
       <div className="flex items-center justify-between px-2 py-1.5 surface-2 shrink-0">
         <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--on-surface-variant)]">SFTP</span>
-        <button onClick={onClose} className="text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] p-0.5"><X className="w-3.5 h-3.5" /></button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setShowHistory((v) => !v)}
+            className={cn('p-0.5', showHistory ? 'text-[#6bd5ff]' : 'text-[var(--on-surface-variant)] hover:text-[var(--on-surface)]')}
+            title="Download history"
+            aria-label="Download history"
+          >
+            <History className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={onClose} className="text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] p-0.5"><X className="w-3.5 h-3.5" /></button>
+        </div>
       </div>
+
+      {showHistory && (
+        <div className="shrink-0 border-b border-[#1b1b1e]">
+          <DownloadHistory />
+        </div>
+      )}
 
       {/* Toolbar */}
       <div className="flex items-center gap-1 px-1.5 py-1 surface-1 shrink-0">
         <button onClick={goUp} className="p-1 rounded-[var(--radius)] text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] hover:bg-[var(--surface-container-highest)]/50 shrink-0" aria-label="Go up" title="Go up">
           <ArrowUp className="w-3.5 h-3.5" />
         </button>
+        {shellCwd && (
+          <button onClick={() => navigateTo(shellCwd)} className="p-1 rounded-[var(--radius)] text-[var(--on-surface-variant)] hover:text-[#6bd5ff] hover:bg-[var(--surface-container-highest)]/50 shrink-0" aria-label="Sync to shell directory" title={`Go to shell directory (${shellCwd})`}>
+            <FolderDown className="w-3.5 h-3.5" />
+          </button>
+        )}
         <div className="flex-1 min-w-0">
           <Input
             value={pathInput}
@@ -269,10 +338,41 @@ export function SftpPanel({ sshSessionId, onClose }: SftpPanelProps): JSX.Elemen
         <button onClick={handleMkdir} className="p-1 rounded-[var(--radius)] text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] hover:bg-[var(--surface-container-highest)]/50 shrink-0" aria-label="New folder" title="New folder">
           <FolderPlus className="w-3.5 h-3.5" />
         </button>
-        <button onClick={handleUpload} className="p-1 rounded-[var(--radius)] text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] hover:bg-[var(--surface-container-highest)]/50 shrink-0" aria-label="Upload file" title="Upload file">
+        <button onClick={handleUpload} disabled={busy === 'upload'} className="p-1 rounded-[var(--radius)] text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] hover:bg-[var(--surface-container-highest)]/50 shrink-0 disabled:opacity-40" aria-label="Upload files or folder" title="Upload files or folder">
           <Upload className="w-3.5 h-3.5" />
         </button>
       </div>
+
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-0.5 px-2 py-0.5 surface-1 shrink-0 text-[10px] text-[var(--on-surface-variant)] overflow-x-auto whitespace-nowrap font-[family-name:var(--font-mono)]">
+        {currentPath.startsWith('/') ? (
+          <>
+            <button onClick={() => navigateTo('/')} className="hover:text-[var(--on-surface)]" title="Root">/</button>
+            {currentPath.split('/').filter(Boolean).map((seg, i, arr) => {
+              const p = '/' + arr.slice(0, i + 1).join('/')
+              return (
+                <span key={p} className="flex items-center gap-0.5">
+                  <button onClick={() => navigateTo(p)} className="hover:text-[var(--on-surface)]">{seg}</button>
+                  {i < arr.length - 1 && <span className="text-[var(--on-surface-variant)]/40">/</span>}
+                </span>
+              )
+            })}
+          </>
+        ) : (
+          <span className="text-[var(--on-surface)]">{currentPath}</span>
+        )}
+      </div>
+
+      {/* Selection action bar */}
+      {selected.size > 0 && (
+        <div className="flex items-center gap-2 px-2 py-1 bg-[#6bd5ff]/10 shrink-0">
+          <span className="text-[10px] text-[#6bd5ff]">{selected.size} selected</span>
+          <button onClick={handleDownloadSelected} disabled={busy === 'download'} className="text-[10px] text-[var(--on-surface)] underline hover:text-[#6bd5ff] disabled:opacity-40">
+            {busy === 'download' ? 'Downloading…' : 'Download to folder…'}
+          </button>
+          <button onClick={() => setSelected(new Set())} className="text-[10px] text-[var(--on-surface-variant)] underline hover:text-[var(--on-surface)]">Clear</button>
+        </div>
+      )}
 
       {/* Error banner */}
       {error && (
@@ -284,7 +384,13 @@ export function SftpPanel({ sshSessionId, onClose }: SftpPanelProps): JSX.Elemen
 
       {/* Column headers (sortable) */}
       <div className="flex items-center gap-1 px-2 py-1 surface-1 shrink-0 text-[9px] uppercase tracking-wider text-[var(--on-surface-variant)] select-none">
-        <span className="w-3.5 shrink-0" />
+        <input
+          type="checkbox"
+          className="w-3 h-3 shrink-0 accent-[#6bd5ff]"
+          aria-label="Select all"
+          checked={displayEntries.length > 0 && selected.size === displayEntries.length}
+          onChange={() => setSelected((prev) => (prev.size === displayEntries.length ? new Set() : new Set(displayEntries.map((e) => e.name))))}
+        />
         <button onClick={() => toggleSort('name')} className="flex-1 min-w-0 text-left hover:text-[var(--on-surface)]">
           Name{sort.key === 'name' ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}
         </button>
@@ -294,7 +400,7 @@ export function SftpPanel({ sshSessionId, onClose }: SftpPanelProps): JSX.Elemen
         <button onClick={() => toggleSort('size')} className="w-12 text-right shrink-0 hover:text-[var(--on-surface)]">
           Size{sort.key === 'size' ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}
         </button>
-        <div className="w-16 flex justify-end shrink-0">
+        <div className="w-20 flex justify-end shrink-0">
           <button
             onClick={() => setSort((s) => ({ ...s, foldersFirst: !s.foldersFirst }))}
             className={cn('p-0.5', sort.foldersFirst ? 'text-[#6bd5ff]' : 'hover:text-[var(--on-surface)]')}
@@ -326,14 +432,19 @@ export function SftpPanel({ sshSessionId, onClose }: SftpPanelProps): JSX.Elemen
                   'hover:bg-[var(--surface-container-high)]/50'
                 )}
                 onDoubleClick={() => {
-                  if (dir) {
-                    const next = currentPath === '.'
-                      ? entry.name
-                      : `${currentPath}/${entry.name}`.replace(/\/\//g, '/')
-                    navigateTo(next)
-                  }
+                  if (dir) navigateTo(joinRemote(currentPath, entry.name))
                 }}
               >
+                {/* Select checkbox */}
+                <input
+                  type="checkbox"
+                  className="w-3 h-3 shrink-0 accent-[#6bd5ff]"
+                  checked={selected.has(entry.name)}
+                  onChange={(e) => { e.stopPropagation(); toggleSelect(entry.name) }}
+                  onClick={(e) => e.stopPropagation()}
+                  aria-label={`Select ${entry.name}`}
+                />
+
                 {/* Icon */}
                 {dir ? (
                   <Folder className="w-3.5 h-3.5 text-[#6bd5ff] shrink-0" />
@@ -363,10 +474,23 @@ export function SftpPanel({ sshSessionId, onClose }: SftpPanelProps): JSX.Elemen
                 </span>
 
                 {/* Actions */}
-                <div className="flex shrink-0 w-16 justify-end">
+                <div className="flex shrink-0 w-20 justify-end">
+                  {!dir && /\.(md|markdown)$/i.test(entry.name) && sshSessionId && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        useMarkdownViewerStore.getState().openFor(sshSessionId, joinRemote(currentPath, entry.name), host)
+                      }}
+                      className="text-[var(--on-surface-variant)] hover:text-[#6bd5ff] p-0.5"
+                      aria-label={`View ${entry.name}`}
+                      title="View Markdown"
+                    >
+                      <Eye className="w-3 h-3" />
+                    </button>
+                  )}
                   {!dir && (
                     <button
-                      onClick={(e) => { e.stopPropagation(); handleDownload(entry.name) }}
+                      onClick={(e) => { e.stopPropagation(); handleDownload(entry) }}
                       className="text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] p-0.5"
                       aria-label={`Download ${entry.name}`}
                       title="Download"

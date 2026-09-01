@@ -8,8 +8,11 @@ import {
   FileText,
   ClipboardCopy,
   Sheet,
-  ChevronDown
+  ChevronDown,
+  Download
 } from 'lucide-react'
+import { useDownloadsStore } from '@renderer/stores/downloads.store'
+import { showToast } from '@renderer/lib/protocol-dispatch'
 import {
   Dialog,
   DialogContent,
@@ -51,6 +54,7 @@ function basename(p: string): string {
 export function MarkdownViewer(): JSX.Element {
   // Field selectors only (Zustand lesson: no object selectors).
   const open = useMarkdownViewerStore((s) => s.open)
+  const sessionId = useMarkdownViewerStore((s) => s.sessionId)
   const path = useMarkdownViewerStore((s) => s.path)
   const host = useMarkdownViewerStore((s) => s.host)
   const content = useMarkdownViewerStore((s) => s.content)
@@ -60,6 +64,28 @@ export function MarkdownViewer(): JSX.Element {
   const close = useMarkdownViewerStore((s) => s.close)
 
   const [flash, setFlash] = useState<string | null>(null)
+
+  // Download the viewed file over SFTP (short-lived channel) + record history.
+  const handleDownload = async (): Promise<void> => {
+    if (!sessionId || !path) return
+    const name = path.split('/').pop() || 'file.md'
+    try {
+      const localPath = await window.bifrost.window.showSaveDialog(name)
+      if (!localPath) return
+      const sftpId = await window.bifrost.sftp.open(sessionId)
+      try {
+        await window.bifrost.sftp.readFile(sftpId, path, localPath)
+      } finally {
+        await window.bifrost.sftp.close(sftpId).catch(() => {})
+      }
+      const size = new Blob([content]).size
+      useDownloadsStore.getState().addDownloads([{ name, remotePath: path, localPath, size, host: host ?? '' }])
+      showToast({ variant: 'success', message: `Downloaded ${name}` })
+    } catch (err) {
+      showToast({ variant: 'error', message: err instanceof Error ? err.message : String(err) })
+    }
+  }
+
   // Menu label state: must be React state (not just the ref) so the label
   // re-renders when the menu opens; the ref alone left it one render stale.
   const [menuHasSelection, setMenuHasSelection] = useState(false)
@@ -157,6 +183,17 @@ export function MarkdownViewer(): JSX.Element {
               {host ? `${host}:` : ''}{path ?? ''}
             </p>
           </div>
+          {status === 'ready' && (
+            <button
+              type="button"
+              onClick={handleDownload}
+              className="flex items-center gap-1 rounded-[var(--radius)] px-2 py-1 text-[10px] text-[var(--on-surface-variant)] hover:bg-[var(--surface-bright)] hover:text-[var(--on-surface)]"
+              title="Download this file over SFTP"
+            >
+              <Download className="h-3 w-3" />
+              Download
+            </button>
+          )}
           {status === 'ready' && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
