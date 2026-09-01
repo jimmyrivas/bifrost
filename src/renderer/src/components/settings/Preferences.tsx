@@ -208,6 +208,30 @@ export function Preferences(): JSX.Element {
                     Single click can interfere with text selection in the terminal.
                   </span>
                 </div>
+                <label className="flex items-center justify-between col-span-2 cursor-pointer">
+                  <span className="text-xs text-[var(--on-surface-variant)]">
+                    Web links (http/https)
+                    <span className="block text-[9px] text-[var(--on-surface-variant)]/70">
+                      Make URLs in terminal output clickable — open in your browser, hover to copy
+                    </span>
+                  </span>
+                  <Switch checked={terminal.urlLinksEnabled} onCheckedChange={(v) => setTermPref('urlLinksEnabled', v)} />
+                </label>
+                <div className="col-span-2">
+                  <label className={fieldLabel} htmlFor="pref-url-activation">WEB LINK ACTIVATION</label>
+                  <select
+                    id="pref-url-activation"
+                    className={selectClass}
+                    value={terminal.urlLinkActivation}
+                    onChange={(e) => setTermPref('urlLinkActivation', e.target.value as TerminalPreferences['urlLinkActivation'])}
+                  >
+                    <option value="ctrl-click">Ctrl+Click (recommended)</option>
+                    <option value="click">Single click</option>
+                  </select>
+                  <span className="text-[9px] text-[var(--on-surface-variant)] mt-0.5 block">
+                    Single click can interfere with text selection in the terminal.
+                  </span>
+                </div>
                 <div className="col-span-2">
                   <label className={fieldLabel} htmlFor="pref-md-maxkb">MARKDOWN VIEWER SIZE LIMIT (KB)</label>
                   <Input

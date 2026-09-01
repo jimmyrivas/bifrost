@@ -81,8 +81,17 @@ Press `Ctrl+Shift+F` (in the focused pane), or right-click → **Find in Termina
 - **Per-tab zoom**: `Ctrl+=` / `Ctrl+-` / `Ctrl+0` (reset). Zoom applies only to the active terminal — background tabs keep their size.
 - **~50 built-in color schemes**, selectable globally and per connection. A per-connection **background tint** color-codes environments at a glance — the convention: production red, staging green.
 - **Font ligatures**, **copy-on-select**, and **OSC 52** clipboard support (copying from tmux or vim inside the session reaches your system clipboard).
-- **Clickable web links** in output open in your browser.
 - **Dynamic tab titles**: shells that emit OSC 0/2 title sequences update the tab title live. **Session → Lock Title** freezes it; **Session → Rename Tab** sets your own name (renaming locks the title automatically).
+
+## Links in the terminal
+
+`http://` and `https://` URLs printed in the terminal are live:
+
+- **Ctrl+click** (or Cmd+click) opens the URL in your operating system's default handler. A plain click is left free for text selection.
+- **Hover** a URL to get a small **copy chip** — click it to copy the full URL to your clipboard.
+- Only `http`/`https` are ever opened; other schemes are ignored.
+
+Tune it under **Settings ▸ Preferences ▸ Terminal**: **Web links (http/https)** toggles the whole behavior, and **Web link activation** switches the open gesture between Ctrl+click (default) and single click.
 
 ## Markdown files in output
 

@@ -282,6 +282,7 @@ export interface BifrostApi {
     deleteSessionLog: (filePath: string) => Promise<boolean>
     openPath: (targetPath: string) => Promise<string>
     revealPath: (targetPath: string) => Promise<void>
+    openExternal: (url: string) => Promise<void>
     healthPing: (connectionId: string, host: string) => Promise<{ connectionId: string; host: string; reachable: boolean; latencyMs: number | null }>
   }
   import: {
@@ -789,6 +790,7 @@ const api: BifrostApi = {
     deleteSessionLog: (filePath) => ipcRenderer.invoke('system:deleteSessionLog', filePath),
     openPath: (targetPath) => ipcRenderer.invoke('system:openPath', targetPath),
     revealPath: (targetPath) => ipcRenderer.invoke('system:revealPath', targetPath),
+    openExternal: (url) => ipcRenderer.invoke('system:openExternal', url),
     healthPing: (connectionId, host) => ipcRenderer.invoke('health:ping', connectionId, host)
   },
   import: {

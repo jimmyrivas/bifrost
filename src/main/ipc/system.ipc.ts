@@ -6,6 +6,7 @@ import { keepassBridge, type KeePassConfig } from '../services/keepass-bridge'
 import { connectionHealthMonitor } from '../services/connection-health'
 import { auditLogger } from '../services/audit-log'
 import { trayManager, type TrayConnectionEntry } from '../services/tray-manager'
+import { isOpenableExternalUrl } from '../services/external-url'
 
 export function registerSystemIpc(): void {
   // Tray: the renderer owns favorites/recents (localStorage), so it pushes the
@@ -109,6 +110,15 @@ export function registerSystemIpc(): void {
   // Reveal a file in the OS file manager (highlights it inside its folder).
   ipcMain.handle('system:revealPath', (_event, targetPath: string) => {
     shell.showItemInFolder(targetPath)
+  })
+
+  // Open an http(s) URL from terminal output in the OS default handler. The
+  // scheme is validated on both sides so a crafted file:/javascript: link in
+  // hostile output can never be opened.
+  ipcMain.handle('system:openExternal', async (_event, url: string) => {
+    if (isOpenableExternalUrl(url)) {
+      await shell.openExternal(url)
+    }
   })
 
   // File dialogs for SFTP

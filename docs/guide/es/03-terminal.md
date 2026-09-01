@@ -83,8 +83,17 @@ Pulsa `Ctrl+Shift+F` (en el panel con foco), o clic derecho → **Find in Termin
 - **Zoom por pestaña**: `Ctrl+=` / `Ctrl+-` / `Ctrl+0` (restablecer). El zoom aplica solo al terminal activo — las pestañas en segundo plano conservan su tamaño.
 - **~50 esquemas de color integrados**, seleccionables globalmente y por conexión. Un **tinte de fondo** por conexión codifica los entornos de un vistazo — la convención: producción rojo, staging verde.
 - **Ligaduras tipográficas**, **copiar al seleccionar** y soporte de portapapeles **OSC 52** (copiar desde tmux o vim dentro de la sesión llega a tu portapapeles del sistema).
-- **Enlaces web clicables** en la salida se abren en tu navegador.
 - **Títulos de pestaña dinámicos**: los shells que emiten secuencias de título OSC 0/2 actualizan el título en vivo. **Session → Lock Title** lo congela; **Session → Rename Tab** pone tu propio nombre (renombrar bloquea el título automáticamente).
+
+## Enlaces en el terminal
+
+Las URLs `http://` y `https://` que aparecen en el terminal son interactivas:
+
+- **Ctrl+clic** (o Cmd+clic) abre la URL en el handler por defecto de tu sistema operativo. Un clic normal queda libre para seleccionar texto.
+- **Pasa el cursor** sobre una URL para obtener un pequeño **chip de copiar** — haz clic para copiar la URL completa al portapapeles.
+- Solo se abren `http`/`https`; cualquier otro esquema se ignora.
+
+Ajústalo en **Settings ▸ Preferences ▸ Terminal**: **Web links (http/https)** activa o desactiva todo el comportamiento, y **Web link activation** cambia el gesto de apertura entre Ctrl+clic (por defecto) y clic simple.
 
 ## Archivos Markdown en la salida
 

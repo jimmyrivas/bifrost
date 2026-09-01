@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon } from '@xterm/addon-search'
-import { WebLinksAddon } from '@xterm/addon-web-links'
+import { makeWebLinksAddon } from '@renderer/lib/terminal-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { usePreferencesStore } from '@renderer/stores/preferences.store'
 import { useSessionsStore, type TerminalStyle } from '@renderer/stores/sessions.store'
@@ -575,7 +575,13 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
     const searchAddon = new SearchAddon()
     terminal.loadAddon(searchAddon)
     searchAddonRef.current = searchAddon
-    terminal.loadAddon(new WebLinksAddon())
+    terminal.loadAddon(
+      makeWebLinksAddon({
+        openExternal: (url) => window.bifrost.system.openExternal(url),
+        isEnabled: () => usePreferencesStore.getState().terminal.urlLinksEnabled,
+        activation: () => usePreferencesStore.getState().terminal.urlLinkActivation
+      })
+    )
     terminal.open(containerRef.current)
 
     // ── Remote cwd capture via OSC 7 ──

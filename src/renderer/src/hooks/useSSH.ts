@@ -1,9 +1,9 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
-import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { usePreferencesStore } from '@renderer/stores/preferences.store'
+import { makeWebLinksAddon } from '@renderer/lib/terminal-web-links'
 
 interface UseSSHOptions {
   connectionId: string
@@ -58,7 +58,13 @@ export function useSSH({
 
     const fitAddon = new FitAddon()
     terminal.loadAddon(fitAddon)
-    terminal.loadAddon(new WebLinksAddon())
+    terminal.loadAddon(
+      makeWebLinksAddon({
+        openExternal: (url) => window.bifrost.system.openExternal(url),
+        isEnabled: () => usePreferencesStore.getState().terminal.urlLinksEnabled,
+        activation: () => usePreferencesStore.getState().terminal.urlLinkActivation
+      })
+    )
     terminal.open(containerRef.current)
 
     try {

@@ -2,9 +2,10 @@ import { useCallback, useMemo, useEffect, useRef } from 'react'
 import { ArrowLeftToLine } from 'lucide-react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
-import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
+import { usePreferencesStore } from '@renderer/stores/preferences.store'
+import { makeWebLinksAddon } from '@renderer/lib/terminal-web-links'
 
 interface DetachedTerminalProps {
   tabId: string
@@ -45,7 +46,13 @@ export function DetachedTerminal({ tabId }: DetachedTerminalProps): JSX.Element 
 
     const fitAddon = new FitAddon()
     terminal.loadAddon(fitAddon)
-    terminal.loadAddon(new WebLinksAddon())
+    terminal.loadAddon(
+      makeWebLinksAddon({
+        openExternal: (url) => window.bifrost.system.openExternal(url),
+        isEnabled: () => usePreferencesStore.getState().terminal.urlLinksEnabled,
+        activation: () => usePreferencesStore.getState().terminal.urlLinkActivation
+      })
+    )
     terminal.open(containerRef.current)
     try {
       const webgl = new WebglAddon()

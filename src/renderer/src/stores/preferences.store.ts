@@ -30,6 +30,10 @@ export interface TerminalPreferences {
   markdownLinkActivation: 'ctrl-click' | 'click'
   /** Max bytes fetched for the Markdown viewer (larger files are truncated). */
   markdownMaxBytes: number
+  /** Make `http(s)://` URLs in terminal output clickable (open in OS handler) with a hover copy chip. */
+  urlLinksEnabled: boolean
+  /** Gesture that opens a detected URL in the OS default handler. */
+  urlLinkActivation: 'ctrl-click' | 'click'
   /** Width of the docked AI Assistant side panel, in pixels (clamped 280–720). */
   aiPanelWidthPx: number
   /** Mask secrets (API keys, tokens, passwords) in terminal output. Persisted
@@ -78,6 +82,8 @@ const defaultTerminal: TerminalPreferences = {
   markdownLinksEnabled: true,
   markdownLinkActivation: 'ctrl-click',
   markdownMaxBytes: 2_000_000,
+  urlLinksEnabled: true,
+  urlLinkActivation: 'ctrl-click',
   aiPanelWidthPx: 320,
   secretRedactionEnabled: false
 }
@@ -140,6 +146,10 @@ export function migratePreferences(
   if (version < 8) {
     state.terminal = { ...defaultTerminal, ...(state.terminal ?? {}) }
   }
+  // v9: URL-link preferences (urlLinksEnabled/urlLinkActivation) added.
+  if (version < 9) {
+    state.terminal = { ...defaultTerminal, ...(state.terminal ?? {}) }
+  }
   return state as PreferencesState
 }
 
@@ -165,7 +175,7 @@ export const usePreferencesStore = create<PreferencesState>()(
     }),
     {
       name: 'bifrost-preferences',
-      version: 8,
+      version: 9,
       migrate: migratePreferences
     }
   )
