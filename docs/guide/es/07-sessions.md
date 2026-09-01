@@ -44,6 +44,17 @@ Qué hace la restauración:
 - **Los layouts divididos no se recrean**: cada pestaña vuelve solo con su panel raíz.
 - Las pestañas cuya conexión fue **eliminada se saltan en silencio**; el resto se restaura con normalidad.
 
+## Los nombres de pestaña viajan con la sesión
+
+Renombra una pestaña (doble clic en su título) para recordar para qué es un terminal — "deploy prod", "siguiendo logs" — y si esa pestaña corre dentro de una sesión de multiplexor, Bifrost guarda el nombre **en el host remoto, junto a la propia sesión**. No queda solo en esta máquina.
+
+Por qué importa:
+
+- **Reinicia Bifrost** y reincorpórate a la sesión — la pestaña vuelve con el último nombre que le diste.
+- **Abre Bifrost en otra computadora**, conéctate al mismo host, y el selector de attach muestra cada sesión con su nombre guardado (el nombre crudo de la sesión del multiplexor entre paréntesis). Reincorpórate y la pestaña se restaura a ese nombre — aunque esta máquina nunca lo haya visto.
+
+Cómo funciona: el alias vive en un pequeño archivo en el host (`~/.config/bifrost/session-aliases.json`), escrito al renombrar y leído de vuelta cuando Bifrost sondea las sesiones. Es el mismo mecanismo para los cuatro backends. Las entradas de sesiones que ya no existen se limpian automáticamente en el siguiente sondeo exitoso. Renombrar siempre es instantáneo en local — si la escritura remota no puede llegar al host, la pestaña se renombra igual y el nombre se sincroniza la próxima vez que pueda.
+
 ## Reconexión automática SSH
 
 Cuando una sesión SSH se cae inesperadamente, Bifrost reconecta por su cuenta con backoff exponencial: el primer reintento a los **3 segundos**, duplicándose cada vez hasta un tope de **60 segundos**, durante un máximo de **50 intentos**. Cada intento se anuncia en el terminal (`Reconnecting (attempt 3/50)... [retry in 12s]`).

@@ -42,6 +42,17 @@ What restore does:
 - **Split layouts are not recreated**: each tab comes back as its root pane only.
 - Tabs whose connection has since been **deleted are skipped silently**; the rest restore normally.
 
+## Tab names travel with the session
+
+Rename a tab (double-click its title) to remember what a terminal is for — "deploy prod", "tailing logs" — and if that tab is running inside a multiplexer session, Bifrost stores the name **on the remote host, next to the session itself**. It is not kept only on this machine.
+
+Why that matters:
+
+- **Restart Bifrost** and reattach the session — the tab comes back with the last name you gave it.
+- **Open Bifrost on another computer**, connect to the same host, and the attach picker shows each session with its stored name (the raw multiplexer session name in parentheses). Attach, and the tab is restored to that name — even though this machine has never seen it before.
+
+How it works: the alias lives in a small file on the host (`~/.config/bifrost/session-aliases.json`), written when you rename and read back when Bifrost probes for sessions. It is the same mechanism for all four backends. Entries for sessions that no longer exist are cleaned up automatically on the next successful probe. A rename is always instant locally — if the remote write can't reach the host, the tab still renames and the name syncs the next time it can.
+
 ## SSH auto-reconnect
 
 When an SSH session drops unexpectedly, Bifrost reconnects on its own with exponential backoff: the first retry after **3 seconds**, doubling each time up to a **60-second** cap, for up to **50 attempts**. Each attempt is announced in the terminal (`Reconnecting (attempt 3/50)... [retry in 12s]`).

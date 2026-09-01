@@ -130,11 +130,30 @@ export function TabBar(): JSX.Element {
 
   const commitEdit = useCallback(() => {
     if (editingTabId && editValue.trim()) {
-      renameTab(editingTabId, editValue.trim())
+      const alias = editValue.trim()
+      renameTab(editingTabId, alias)
       const { tabs: t } = useSessionsStore.getState()
       const tab = t.find((x) => x.id === editingTabId)
       if (tab && !tab.lockTitle) {
         useSessionsStore.getState().toggleLockTitle(editingTabId)
+      }
+      // Persist the alias remotely with the multiplexer session, so the name
+      // returns on reattach from any device. Fire-and-forget: a remote failure
+      // must never disrupt the local rename.
+      if (tab?.muxBinding) {
+        const termId = tab.rootPane?.terminalId
+        const transport = termId?.startsWith('ssh:')
+          ? ({ type: 'ssh', sessionId: termId.slice(4) } as const)
+          : termId
+            ? ({ type: 'local' } as const)
+            : null
+        if (transport) {
+          void window.bifrost.multiplexer
+            .setAlias(transport, tab.muxBinding.kind, tab.muxBinding.target, alias)
+            .catch((err: unknown) => {
+              console.warn('[mux-alias] remote write failed:', err)
+            })
+        }
       }
     }
     setEditingTabId(null)

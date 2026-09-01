@@ -5,6 +5,7 @@ import { dtach } from './dtach'
 import { tmux } from './tmux'
 import { zellij } from './zellij'
 import { rmux } from './rmux'
+import { writeAlias, enrichWithAliases } from './alias-store'
 import type {
   AttachOptions,
   Multiplexer,
@@ -102,7 +103,25 @@ export async function probe(transport: Transport, req: ProbeRequest): Promise<Pr
   if (req.fallback && req.fallback !== req.preferred && !primary.installed) {
     fallback = await IMPL[req.fallback].probe(exec, { socketDir: req.socketDir })
   }
+
+  await enrichWithAliases(exec, primary)
+  if (fallback) await enrichWithAliases(exec, fallback)
+
   return { primary, fallback }
+}
+
+/**
+ * Persist a tab alias for one `{kind, target}` in the remote alias store.
+ * Returns false on any failure (host unreachable, permission denied) so the
+ * caller can log without disrupting the local rename.
+ */
+export async function setAlias(
+  transport: Transport,
+  kind: MultiplexerKind,
+  target: string,
+  alias: string
+): Promise<boolean> {
+  return writeAlias(executorFor(transport), kind, target, alias)
 }
 
 export function buildAttachCmd(

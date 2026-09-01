@@ -19,6 +19,15 @@ export interface TerminalPane {
   }
 }
 
+/** The multiplexer session a tab's terminal is attached to. Recorded at connect
+ *  time so a later tab rename can be written to the correct remote alias entry
+ *  (see remote-session-aliases). `target` is the session name (tmux/zellij/rmux)
+ *  or the socket path (dtach). */
+export interface MuxBinding {
+  kind: 'dtach' | 'tmux' | 'zellij' | 'rmux'
+  target: string
+}
+
 export interface TerminalStyle {
   colorScheme?: string
   fontFamily?: string
@@ -39,6 +48,7 @@ export interface Tab {
   shellArgs?: string[] // extra args for the shell (e.g. for gsudo elevation)
   aiDetected?: string // AI tool name detected in session (e.g. "claude", "ollama")
   aiCwd?: string // Working directory name detected from AI agent output
+  muxBinding?: MuxBinding // multiplexer session this tab is attached to, for remote alias sync
 }
 
 export type BroadcastMode = 'hidden' | 'off' | 'panes' | 'all-tabs'
@@ -71,6 +81,7 @@ interface SessionsState {
   cycleBroadcastMode: () => void
   setAiDetected: (tabId: string, tool: string) => void
   setAiCwd: (tabId: string, cwd: string) => void
+  setTabMux: (tabId: string, binding: MuxBinding) => void
   toggleLockTitle: (tabId: string) => void
   toggleMaximizePane: (paneId: string) => void
   getReconnectAttempts: (sessionId: string) => number
@@ -250,6 +261,17 @@ export const useSessionsStore = create<SessionsState>((set, get) => ({
   renameTab: (tabId: string, title: string) => {
     set((state) => ({
       tabs: state.tabs.map((t) => (t.id === tabId ? { ...t, title } : t))
+    }))
+  },
+
+  setTabMux: (tabId: string, binding: MuxBinding) => {
+    set((state) => ({
+      tabs: state.tabs.map((t) =>
+        t.id === tabId &&
+        (t.muxBinding?.kind !== binding.kind || t.muxBinding?.target !== binding.target)
+          ? { ...t, muxBinding: binding }
+          : t
+      )
     }))
   },
 

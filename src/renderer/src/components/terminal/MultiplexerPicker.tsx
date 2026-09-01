@@ -22,6 +22,8 @@ export interface MultiplexerProbeSession {
   /** dtach=stale (orphan socket), zellij=exited (resurrectable from cache). */
   state?: 'alive' | 'exited' | 'stale'
   createdAt?: number
+  /** User-assigned tab alias from the remote alias store, when present. */
+  alias?: string
 }
 
 export interface MultiplexerProbeResult {
@@ -224,16 +226,25 @@ export function MultiplexerPicker({
                   className="flex-1 flex items-center gap-2 text-left min-w-0"
                   disabled={busy}
                 >
-                  <span className="text-xs font-[family-name:var(--font-mono)] text-[var(--on-surface)] truncate">
-                    {s.name}
-                  </span>
-                  {s.attached && (
-                    <span className="text-[9px] text-[#facc15] shrink-0">(attached)</span>
-                  )}
-                  <span className="text-[9px] text-[var(--on-surface-variant)] truncate">
-                    {s.target}
-                  </span>
-                  <ArrowRight size={12} className="text-[var(--on-surface-variant)] ml-auto shrink-0" />
+                  <div className="flex flex-col min-w-0 flex-1">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-xs font-[family-name:var(--font-mono)] text-[var(--on-surface)] truncate">
+                        {s.alias ? `[${s.alias}]` : s.name}
+                      </span>
+                      {s.attached && (
+                        <span className="text-[9px] text-[#facc15] shrink-0">(attached)</span>
+                      )}
+                    </div>
+                    {(s.alias || s.target !== s.name) && (
+                      <span
+                        className="text-[9px] text-[var(--on-surface-variant)] truncate"
+                        title="Multiplexer session / socket"
+                      >
+                        {s.target}
+                      </span>
+                    )}
+                  </div>
+                  <ArrowRight size={12} className="text-[var(--on-surface-variant)] shrink-0" />
                 </button>
                 {onKillSession && (
                   <button
@@ -289,9 +300,19 @@ export function MultiplexerPicker({
                 >
                   <div className="flex items-center gap-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-[var(--on-surface-variant)]/40 shrink-0" />
-                    <span className="text-xs font-[family-name:var(--font-mono)] text-[var(--on-surface)] truncate flex-1">
-                      {s.name}
-                    </span>
+                    <div className="flex flex-col min-w-0 flex-1">
+                      <span className="text-xs font-[family-name:var(--font-mono)] text-[var(--on-surface)] truncate">
+                        {s.alias ? `[${s.alias}]` : s.name}
+                      </span>
+                      {(s.alias || s.target !== s.name) && (
+                        <span
+                          className="text-[9px] text-[var(--on-surface-variant)] truncate"
+                          title="Multiplexer session / socket"
+                        >
+                          {s.target}
+                        </span>
+                      )}
+                    </div>
                     <span className="text-[9px] text-[var(--on-surface-variant)] uppercase tracking-wider shrink-0">
                       {badge}
                     </span>

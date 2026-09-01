@@ -512,6 +512,12 @@ export interface BifrostApi {
       kind: 'dtach' | 'tmux' | 'zellij',
       socketDir?: string
     ) => Promise<number>
+    setAlias: (
+      transport: { type: 'ssh'; sessionId: string } | { type: 'local' },
+      kind: 'dtach' | 'tmux' | 'zellij' | 'rmux',
+      target: string,
+      alias: string
+    ) => Promise<boolean>
   }
   window: {
     toggleFullscreen: () => Promise<void>
@@ -697,7 +703,9 @@ const api: BifrostApi = {
     killSession: (transport, kind, target) =>
       ipcRenderer.invoke('multiplexer:killSession', transport, kind, target),
     cleanStale: (transport, kind, socketDir) =>
-      ipcRenderer.invoke('multiplexer:cleanStale', transport, kind, socketDir)
+      ipcRenderer.invoke('multiplexer:cleanStale', transport, kind, socketDir),
+    setAlias: (transport, kind, target, alias) =>
+      ipcRenderer.invoke('multiplexer:setAlias', transport, kind, target, alias)
   },
   sftp: {
     open: (sshSessionId) => ipcRenderer.invoke('sftp:open', sshSessionId),

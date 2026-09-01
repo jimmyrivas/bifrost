@@ -277,6 +277,21 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
     ): Promise<string | undefined> => {
       if (cfg.preferred === 'none') return undefined
 
+      // Record which multiplexer session this tab is attached to (so a later
+      // rename can be written to the remote alias store) and, when the session
+      // carries a stored alias, restore the tab title from it — this is how a
+      // renamed session comes back with its name on ANY device.
+      const bindMux = (kind: MultiplexerKind, target: string, alias?: string): void => {
+        if (!tabId) return
+        const store = useSessionsStore.getState()
+        store.setTabMux(tabId, { kind, target })
+        if (alias) {
+          store.renameTab(tabId, alias)
+          const tab = useSessionsStore.getState().tabs.find((t) => t.id === tabId)
+          if (tab && !tab.lockTitle) store.toggleLockTitle(tabId)
+        }
+      }
+
       let preferred: MultiplexerKind
       let fallback: MultiplexerKind | undefined
       if (cfg.preferred === 'auto') {
@@ -320,6 +335,7 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
         const fallbackLive =
           probe.fallback?.sessions.filter((s) => s.alive).length ?? 0
         if (primaryLive.length === 1 && fallbackLive === 0) {
+          bindMux(probe.primary.kind, primaryLive[0].target, primaryLive[0].alias)
           return window.bifrost.multiplexer.buildAttachCmd(
             probe.primary.kind,
             primaryLive[0].target,
@@ -358,6 +374,12 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
           : undefined
 
       if (pick.type === 'attach') {
+        const sessions =
+          pick.kind === probe.primary.kind
+            ? probe.primary.sessions
+            : probe.fallback?.sessions ?? []
+        const picked = sessions.find((s) => s.target === pick.target)
+        bindMux(pick.kind, pick.target, picked?.alias)
         return window.bifrost.multiplexer.buildAttachCmd(pick.kind, pick.target, {
           createIfMissing: false,
           forceRunCommands: pick.forceRunCommands,
@@ -378,6 +400,7 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
         else if (dir.startsWith('~/')) dir = '$HOME/' + dir.slice(2)
         target = `${dir}/${pick.name}.sock`
       }
+      bindMux(pick.kind, target)
       return window.bifrost.multiplexer.buildAttachCmd(pick.kind, target, {
         createIfMissing: true,
         binaryPath,
@@ -387,7 +410,7 @@ export function useTerminal({ paneId, tabId, connectionId, terminalStyle, shell,
         extraArgs: cfg.extraArgs
       })
     },
-    []
+    [tabId]
   )
 
   // Update theme when colorScheme preference changes

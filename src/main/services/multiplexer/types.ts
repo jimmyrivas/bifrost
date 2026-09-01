@@ -14,6 +14,9 @@ export interface MultiplexerSession {
   state?: 'alive' | 'exited' | 'stale'
   /** tmux only: creation timestamp in unix seconds. */
   createdAt?: number
+  /** User-assigned tab alias, read from the remote alias store (see
+   *  `alias-store.ts`). Undefined when the session has no stored alias. */
+  alias?: string
 }
 
 export interface ProbeResult {

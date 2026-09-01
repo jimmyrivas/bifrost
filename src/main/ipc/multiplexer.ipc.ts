@@ -4,6 +4,7 @@ import {
   buildAttachCmd,
   killSession,
   cleanStale,
+  setAlias,
   type Transport,
   type MultiplexerKind,
   type AttachOptions,
@@ -47,6 +48,19 @@ export function registerMultiplexerIpc(): void {
       socketDir?: string
     ): Promise<number> => {
       return cleanStale(transport, kind, socketDir)
+    }
+  )
+
+  ipcMain.handle(
+    'multiplexer:setAlias',
+    async (
+      _event,
+      transport: Transport,
+      kind: MultiplexerKind,
+      target: string,
+      alias: string
+    ): Promise<boolean> => {
+      return setAlias(transport, kind, target, alias)
     }
   )
 }
