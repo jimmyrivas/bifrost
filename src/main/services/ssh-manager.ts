@@ -343,6 +343,11 @@ export class SshManager extends EventEmitter {
         port: config.port,
         username: config.username,
         readyTimeout: 30000,
+        // Keep the session alive so idle connections (and multi-hop tunnels
+        // riding on top of a jump chain) aren't dropped by NAT/firewall or
+        // sshd ClientAlive timeouts.
+        keepaliveInterval: 15000,
+        keepaliveCountMax: 3,
         hostVerifier: (key: Buffer) => {
           const fingerprint = this.computeFingerprint(key)
           const hostKey = this.hostKey(config.host, config.port)

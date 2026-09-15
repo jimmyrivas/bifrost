@@ -297,7 +297,7 @@ describe('establishJumpChain — failure cleanup', () => {
     const c1 = makeMockClient({ failForward: 'connection refused' })
     const factory = () => c1
     await expect(establishJumpChain([hopA], target, { factory })).rejects.toThrow(
-      /forward via hop 1 to target.example:22 failed: connection refused/
+      /forward via hop 1 \(bastion-a\) to the target target\.example:22 failed: connection refused/
     )
     expect(c1.__ended).toBe(true)
   })

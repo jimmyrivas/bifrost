@@ -54,7 +54,13 @@ export function buildHopConnectConfig(
     host: hop.host,
     port: hop.port,
     username: hop.username,
-    readyTimeout: 30000
+    readyTimeout: 30000,
+    // Keep every hop's SSH connection alive. Without this, a multi-hop chain
+    // can be silently torn down by NAT/firewall idle timeouts (or the bastion's
+    // own ClientAliveInterval) while deeper hops are still being established or
+    // while the tunnel sits idle — the deeper the chain, the more fragile it is.
+    keepaliveInterval: 15000,
+    keepaliveCountMax: 3
   }
 
   if (opts.hostKeyHooks) {
@@ -171,12 +177,16 @@ export async function establishJumpChain(
         : finalTarget
 
     upstreamSock = await new Promise<Socket>((resolve, reject) => {
-      hopClient.forwardOut('localhost', 0, nextDest.host, nextDest.port, (err, stream) => {
+      hopClient.forwardOut('127.0.0.1', 0, nextDest.host, nextDest.port, (err, stream) => {
         if (err) {
           cleanup()
+          const isLast = i === chain.length - 1
+          const legDesc = isLast ? 'the target' : `jump hop ${i + 2}`
           return reject(
             new Error(
-              `forward via hop ${i + 1} to ${nextDest.host}:${nextDest.port} failed: ${err.message}`
+              `forward via hop ${i + 1} (${hop.host}) to ${legDesc} ${nextDest.host}:${nextDest.port} failed: ${err.message}. ` +
+                `This means hop ${i + 1} could not open a connection to ${nextDest.host}:${nextDest.port} — ` +
+                `check that ${hop.host} can reach it, that the host/port are correct, and that the bastion allows TCP forwarding (AllowTcpForwarding).`
             )
           )
         }
