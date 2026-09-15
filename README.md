@@ -22,7 +22,7 @@ Bifrost is a desktop connection manager for sysadmins, DevOps, and DevSecOps tea
 managing dozens to hundreds of remote servers — SSH-first, with a modern terminal
 experience.
 
-> **Status: alpha (v0.3.0), Linux only.** This README is honest by design: the
+> **Status: alpha (v0.3.7), Linux only.** This README is honest by design: the
 > **Features** section lists only what works end-to-end in the UI today, verified
 > against the code. Things that are built in the backend but not yet reachable
 > from the UI live in [their own section](#built-in-the-backend-ui-pending), and
@@ -59,7 +59,7 @@ derived from the project's OpenSpec capability specs and verified against the co
 - Error detection badges on failed commands, AI "Explain Command" on any selection, idle-session AI summary you can save as a note
 
 ### Sessions that survive
-- Local session persistence via real multiplexer integration: **dtach, tmux, zellij, rmux** — probe, attach picker, and per-connection custom args (config file, zellij layout, extra flags)
+- Local session persistence via real multiplexer integration: **dtach, tmux, zellij, rmux, GNU screen** — probe, attach picker (flags sessions already open in another tab), and per-connection custom args (config file, zellij layout, extra flags)
 - Session restore: on relaunch, Bifrost offers to reopen your previous tabs and reconnect them
 - SSH auto-reconnect with exponential backoff (3s → 60s)
 
