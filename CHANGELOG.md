@@ -5,6 +5,30 @@ All notable changes to Bifrost will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.7] - 2026-09-15
+
+### Added
+- **GNU screen** as a fifth multiplexer backend, alongside dtach/tmux/zellij/rmux
+  — probe, attach-or-create, reattach, kill, and clean, selectable per connection
+  and for local tabs. Ubiquitous on older/enterprise hosts where tmux isn't
+  installed.
+- **"Already open" indicator** in the session picker: a live session that is
+  already attached in another Bifrost tab is flagged with a blue dot and an
+  **open** badge, so you don't reattach the same session into two tabs.
+
+### Fixed
+- **SFTP upload grabbed the parent folder instead of a single file** — Linux/GTK
+  (and Windows) can't offer files and folders in one dialog. Upload is now a
+  files-only button, with a separate **Upload folder** button for recursive
+  directory uploads.
+- **SFTP New folder and Rename did nothing** — they relied on `window.prompt()`,
+  which Electron doesn't support. Both now use an in-panel input.
+- **Multi-hop SSH tunnels dropped** — no keepalive was set on any hop or on the
+  target connection, so NAT/firewall idle timeouts tore down the deeper legs.
+  Keepalive (15s) is now enabled on every hop and the target. A failed hop
+  forward also reports the exact leg and likely cause (reachability, host/port,
+  `AllowTcpForwarding`).
+
 ## [0.3.6] - 2026-08-31
 
 Three GUI-verified features land on top of v0.3.5.
