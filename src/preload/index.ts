@@ -526,7 +526,8 @@ export interface BifrostApi {
     showSaveDialog: (defaultName: string) => Promise<string | null>
     showOpenDialog: () => Promise<string[]>
     pickDirectory: () => Promise<string | null>
-    showOpenFilesOrDirs: () => Promise<string[]>
+    showOpenFiles: () => Promise<string[]>
+    showOpenDirs: () => Promise<string[]>
     detachTab: (tabId: string, title: string, connectionId?: string, sessionId?: string) => Promise<void>
     reattachTab: (tabId: string) => Promise<void>
     onTabReattached: (callback: (tabId: string) => void) => () => void
@@ -981,7 +982,8 @@ const api: BifrostApi = {
     showSaveDialog: (defaultName: string) => ipcRenderer.invoke('system:showSaveDialog', defaultName),
     showOpenDialog: () => ipcRenderer.invoke('system:showOpenDialog'),
     pickDirectory: () => ipcRenderer.invoke('system:pickDirectory'),
-    showOpenFilesOrDirs: () => ipcRenderer.invoke('system:showOpenFilesOrDirs'),
+    showOpenFiles: () => ipcRenderer.invoke('system:showOpenFiles'),
+    showOpenDirs: () => ipcRenderer.invoke('system:showOpenDirs'),
     detachTab: (tabId: string, title: string, connectionId?: string, sessionId?: string) => ipcRenderer.invoke('window:detachTab', tabId, title, connectionId, sessionId),
     reattachTab: (tabId: string) => ipcRenderer.invoke('window:reattachTab', tabId),
     onTabReattached: (callback: (tabId: string) => void) => {

@@ -29,7 +29,8 @@ it (falling back to the remote home). It gives you:
 
 | Operation | How | Notes |
 |---|---|---|
-| Upload | Toolbar **Upload** button | Pick **files and/or folders**; folders upload recursively into the current directory |
+| Upload files | Toolbar **Upload** button | Pick one or more files |
+| Upload a folder | Toolbar **Upload folder** button | Pick one or more folders; they upload recursively into the current directory |
 | Download (one) | **Download** icon on a file row | Save As dialog; recorded in the download history |
 | Download (many) | Tick the **checkboxes**, then **Download to folder…** | Select any mix of files and folders; pick a destination folder and everything transfers, folders recursively, preserving structure |
 | Rename | **Pencil** icon on a row | Prompts for the new name; files and directories |

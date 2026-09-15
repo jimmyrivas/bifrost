@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Folder, File, ArrowUp, Download, Upload, RefreshCw, Trash2, X, FolderPlus, Pencil, FolderTree, FolderDown, Eye } from 'lucide-react'
+import { Folder, File, ArrowUp, Download, Upload, RefreshCw, Trash2, X, FolderPlus, Pencil, FolderTree, FolderDown, FolderUp, Eye } from 'lucide-react'
 import { useMarkdownViewerStore } from '@renderer/stores/markdownViewer.store'
 import { Input } from '@renderer/components/ui/input'
 import { cn } from '@renderer/lib/utils'
@@ -68,6 +68,12 @@ export function SftpPanel({ sshSessionId, onClose, shellCwd, host }: SftpPanelPr
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState<string | null>(null)
   const [showHistory, setShowHistory] = useState(false)
+  // In-panel name prompt (Electron does not support window.prompt()).
+  const [namePrompt, setNamePrompt] = useState<{
+    title: string
+    onSubmit: (value: string) => void
+  } | null>(null)
+  const [promptValue, setPromptValue] = useState('')
   const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc'; foldersFirst: boolean }>({
     key: 'name',
     dir: 'asc',
@@ -199,10 +205,15 @@ export function SftpPanel({ sshSessionId, onClose, shellCwd, host }: SftpPanelPr
     }
   }, [sftpId, selected, currentPath, addDownloads, host])
 
-  // Upload files and/or directories (recursive) into the current remote dir.
-  const handleUpload = useCallback(async () => {
+  // Upload files OR directories (recursive) into the current remote dir. Files
+  // and directories use separate OS dialogs — Linux/GTK and Windows can't offer
+  // both in one picker (directory mode wins, so a single file can't be chosen).
+  const handleUpload = useCallback(async (mode: 'files' | 'dirs') => {
     if (!sftpId) return
-    const localPaths = await window.bifrost.window.showOpenFilesOrDirs()
+    const localPaths =
+      mode === 'files'
+        ? await window.bifrost.window.showOpenFiles()
+        : await window.bifrost.window.showOpenDirs()
     if (!localPaths || localPaths.length === 0) return
     setBusy('upload')
     try {
@@ -239,33 +250,45 @@ export function SftpPanel({ sshSessionId, onClose, shellCwd, host }: SftpPanelPr
     }
   }, [sftpId, currentPath, loadDirectory])
 
-  const handleRename = useCallback(async (name: string) => {
+  const handleRename = useCallback((name: string) => {
     if (!sftpId) return
-    const newName = window.prompt(`Rename "${name}" to:`, name)
-    if (!newName || newName === name) return
     const dir = currentPath === '.' ? '' : currentPath
     const join = (n: string): string => (dir ? `${dir}/${n}` : n).replace(/\/\//g, '/')
-    try {
-      await window.bifrost.sftp.rename(sftpId, join(name), join(newName))
-      await loadDirectory(currentPath)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Rename failed')
-    }
+    setPromptValue(name)
+    setNamePrompt({
+      title: `Rename "" to`,
+      onSubmit: async (raw) => {
+        const newName = raw.trim()
+        if (!newName || newName === name) return
+        try {
+          await window.bifrost.sftp.rename(sftpId, join(name), join(newName))
+          await loadDirectory(currentPath)
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Rename failed')
+        }
+      }
+    })
   }, [sftpId, currentPath, loadDirectory])
 
-  const handleMkdir = useCallback(async () => {
+  const handleMkdir = useCallback(() => {
     if (!sftpId) return
-    const name = window.prompt('New directory name:')
-    if (!name) return
-    const remotePath = currentPath === '.'
-      ? name
-      : `${currentPath}/${name}`.replace(/\/\//g, '/')
-    try {
-      await window.bifrost.sftp.mkdir(sftpId, remotePath)
-      await loadDirectory(currentPath)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create directory')
-    }
+    setPromptValue('')
+    setNamePrompt({
+      title: 'New folder name',
+      onSubmit: async (raw) => {
+        const name = raw.trim()
+        if (!name) return
+        const remotePath = currentPath === '.'
+          ? name
+          : `${currentPath}/${name}`.replace(/\/\//g, '/')
+        try {
+          await window.bifrost.sftp.mkdir(sftpId, remotePath)
+          await loadDirectory(currentPath)
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Failed to create directory')
+        }
+      }
+    })
   }, [sftpId, currentPath, loadDirectory])
 
   const formatSize = (bytes: number): string => {
@@ -313,6 +336,24 @@ export function SftpPanel({ sshSessionId, onClose, shellCwd, host }: SftpPanelPr
         </div>
       )}
 
+      {namePrompt && (
+        <div className="flex items-center gap-1 px-2 py-1.5 surface-1 shrink-0 border-b border-[#1b1b1e]">
+          <span className="text-[10px] text-[var(--on-surface-variant)] shrink-0">{namePrompt.title}:</span>
+          <Input
+            autoFocus
+            value={promptValue}
+            onChange={(e) => setPromptValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { const cb = namePrompt.onSubmit; setNamePrompt(null); cb(promptValue) }
+              else if (e.key === 'Escape') setNamePrompt(null)
+            }}
+            className="h-7 text-xs flex-1"
+          />
+          <button onClick={() => { const cb = namePrompt.onSubmit; setNamePrompt(null); cb(promptValue) }} className="text-[10px] px-2 py-1 rounded-[var(--radius)] bg-[#6bd5ff] text-[#0a0a0c] font-semibold shrink-0">OK</button>
+          <button onClick={() => setNamePrompt(null)} className="text-[10px] px-2 py-1 rounded-[var(--radius)] text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] shrink-0">Cancel</button>
+        </div>
+      )}
+
       {/* Toolbar */}
       <div className="flex items-center gap-1 px-1.5 py-1 surface-1 shrink-0">
         <button onClick={goUp} className="p-1 rounded-[var(--radius)] text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] hover:bg-[var(--surface-container-highest)]/50 shrink-0" aria-label="Go up" title="Go up">
@@ -338,8 +379,11 @@ export function SftpPanel({ sshSessionId, onClose, shellCwd, host }: SftpPanelPr
         <button onClick={handleMkdir} className="p-1 rounded-[var(--radius)] text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] hover:bg-[var(--surface-container-highest)]/50 shrink-0" aria-label="New folder" title="New folder">
           <FolderPlus className="w-3.5 h-3.5" />
         </button>
-        <button onClick={handleUpload} disabled={busy === 'upload'} className="p-1 rounded-[var(--radius)] text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] hover:bg-[var(--surface-container-highest)]/50 shrink-0 disabled:opacity-40" aria-label="Upload files or folder" title="Upload files or folder">
+        <button onClick={() => handleUpload('files')} disabled={busy === 'upload'} className="p-1 rounded-[var(--radius)] text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] hover:bg-[var(--surface-container-highest)]/50 shrink-0 disabled:opacity-40" aria-label="Upload files" title="Upload files">
           <Upload className="w-3.5 h-3.5" />
+        </button>
+        <button onClick={() => handleUpload('dirs')} disabled={busy === 'upload'} className="p-1 rounded-[var(--radius)] text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] hover:bg-[var(--surface-container-highest)]/50 shrink-0 disabled:opacity-40" aria-label="Upload folder" title="Upload folder">
+          <FolderUp className="w-3.5 h-3.5" />
         </button>
       </div>
 

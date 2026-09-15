@@ -29,7 +29,8 @@ El panel abre en el **directorio de trabajo del shell** cuando puede detectarlo
 
 | Operación | Cómo | Notas |
 |---|---|---|
-| Subir | Botón **Upload** de la barra | Elige **archivos y/o carpetas**; las carpetas suben recursivamente al directorio actual |
+| Subir archivos | Botón **Upload** de la barra | Elige uno o más archivos |
+| Subir una carpeta | Botón **Upload folder** de la barra | Elige una o más carpetas; suben recursivamente al directorio actual |
 | Descargar (uno) | Icono **Download** en la fila | Diálogo "Guardar como"; queda en el historial |
 | Descargar (varios) | Marca las **casillas** y **Download to folder…** | Cualquier mezcla de archivos y carpetas; elige una carpeta destino y todo se transfiere, carpetas recursivamente, preservando estructura |
 | Renombrar | Icono de **lápiz** en la fila | Pide el nuevo nombre; archivos y directorios |

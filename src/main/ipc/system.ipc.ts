@@ -148,11 +148,23 @@ export function registerSystemIpc(): void {
     return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0]
   })
 
-  // Pick files and/or directories (for SFTP upload). Returns paths[].
-  ipcMain.handle('system:showOpenFilesOrDirs', async () => {
+  // Pick one or more FILES (for SFTP upload). Kept separate from the directory
+  // picker because Linux/GTK and Windows cannot combine 'openFile' with
+  // 'openDirectory' in one dialog — 'openDirectory' wins and a single file can't
+  // be selected (it returns the containing folder instead).
+  ipcMain.handle('system:showOpenFiles', async () => {
     const win = BrowserWindow.getFocusedWindow()
     const result = await dialog.showOpenDialog(win!, {
-      properties: ['openFile', 'openDirectory', 'multiSelections']
+      properties: ['openFile', 'multiSelections']
+    })
+    return result.canceled ? [] : result.filePaths
+  })
+
+  // Pick one or more DIRECTORIES (for SFTP folder upload). Returns paths[].
+  ipcMain.handle('system:showOpenDirs', async () => {
+    const win = BrowserWindow.getFocusedWindow()
+    const result = await dialog.showOpenDialog(win!, {
+      properties: ['openDirectory', 'multiSelections']
     })
     return result.canceled ? [] : result.filePaths
   })
