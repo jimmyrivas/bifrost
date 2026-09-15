@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Layers, Plus, Trash2, ArrowRight, AlertTriangle, Power } from 'lucide-react'
+import { Layers, Plus, Trash2, ArrowRight, AlertTriangle, Power, MonitorCheck } from 'lucide-react'
+import { useSessionsStore } from '@renderer/stores/sessions.store'
 import {
   Dialog,
   DialogContent,
@@ -12,7 +13,7 @@ import { Input } from '@renderer/components/ui/input'
 import { cn } from '@renderer/lib/utils'
 import { uniqueSessionName } from '@renderer/lib/multiplexer-naming'
 
-export type MultiplexerKind = 'dtach' | 'tmux' | 'zellij' | 'rmux'
+export type MultiplexerKind = 'dtach' | 'tmux' | 'zellij' | 'rmux' | 'screen'
 
 export interface MultiplexerProbeSession {
   name: string
@@ -82,6 +83,20 @@ export function MultiplexerPicker({
   const liveSessions = activeProbe?.sessions.filter((s) => s.alive) ?? []
   const inactiveSessions = activeProbe?.sessions.filter((s) => !s.alive) ?? []
   const [forceRunBy, setForceRunBy] = useState<Record<string, boolean>>({})
+
+  // Sessions already attached in an open Bifrost tab (via Tab.muxBinding). Read
+  // once on mount with getState() — a plain snapshot, never an array
+  // subscription (which would trip the Zustand re-render landmine). Lets us flag
+  // "already open" so the user doesn't reattach the same session into two tabs.
+  const loadedTargets = useMemo(() => {
+    const set = new Set<string>()
+    for (const t of useSessionsStore.getState().tabs) {
+      if (t.muxBinding) set.add(`${t.muxBinding.kind}\t${t.muxBinding.target}`)
+    }
+    return set
+  }, [])
+  const isLoaded = (target: string): boolean =>
+    !!active && loadedTargets.has(`${active}\t${target}`)
 
   // Suggested name = defaultPrefix + first free 3-digit suffix vs the
   // currently-listed sessions. Recomputed when the active kind changes so
@@ -220,7 +235,7 @@ export function MultiplexerPicker({
                 key={s.target}
                 className="flex items-center gap-2 rounded-[var(--radius)] bg-[var(--surface-container-highest)] px-2 py-1.5"
               >
-                <span className="w-1.5 h-1.5 rounded-full bg-[var(--success,#34d399)] shrink-0" />
+                <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', isLoaded(s.target) ? 'bg-[#6bd5ff]' : 'bg-[var(--success,#34d399)]')} />
                 <button
                   onClick={() => handleAttach(s.target)}
                   className="flex-1 flex items-center gap-2 text-left min-w-0"
@@ -231,6 +246,11 @@ export function MultiplexerPicker({
                       <span className="text-xs font-[family-name:var(--font-mono)] text-[var(--on-surface)] truncate">
                         {s.alias ? `[${s.alias}]` : s.name}
                       </span>
+                      {isLoaded(s.target) && (
+                        <span className="flex items-center gap-0.5 text-[9px] text-[#6bd5ff] shrink-0" title="Already open in a Bifrost tab">
+                          <MonitorCheck size={11} /> open
+                        </span>
+                      )}
                       {s.attached && (
                         <span className="text-[9px] text-[#facc15] shrink-0">(attached)</span>
                       )}
@@ -279,7 +299,9 @@ export function MultiplexerPicker({
                       ? 'Remove orphan sockets'
                       : active === 'zellij'
                         ? 'Delete exited sessions from cache (no longer resurrectable)'
-                        : 'Clean inactive'
+                        : active === 'screen'
+                          ? 'Wipe dead sessions (screen -wipe)'
+                          : 'Clean inactive'
                   }
                 >
                   <Trash2 size={10} />

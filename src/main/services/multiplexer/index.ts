@@ -5,6 +5,7 @@ import { dtach } from './dtach'
 import { tmux } from './tmux'
 import { zellij } from './zellij'
 import { rmux } from './rmux'
+import { screen } from './screen'
 import { writeAlias, enrichWithAliases } from './alias-store'
 import type {
   AttachOptions,
@@ -24,7 +25,7 @@ export type {
 
 const cpExecP = promisify(cpExec)
 
-const IMPL: Record<MultiplexerKind, Multiplexer> = { dtach, tmux, zellij, rmux }
+const IMPL: Record<MultiplexerKind, Multiplexer> = { dtach, tmux, zellij, rmux, screen }
 
 export type Transport =
   | { type: 'ssh'; sessionId: string }

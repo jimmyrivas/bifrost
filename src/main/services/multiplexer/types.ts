@@ -1,4 +1,4 @@
-export type MultiplexerKind = 'dtach' | 'tmux' | 'zellij' | 'rmux'
+export type MultiplexerKind = 'dtach' | 'tmux' | 'zellij' | 'rmux' | 'screen'
 
 export interface MultiplexerSession {
   name: string

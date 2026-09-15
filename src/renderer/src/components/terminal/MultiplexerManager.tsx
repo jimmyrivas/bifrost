@@ -59,6 +59,7 @@ export function MultiplexerManager({
         else if (next.preferred === 'tmux') setActive('tmux')
         else if (next.preferred === 'zellij') setActive('zellij')
         else if (next.preferred === 'rmux') setActive('rmux')
+        else if (next.preferred === 'screen') setActive('screen')
       } catch {
         /* keep default */
       }
@@ -71,7 +72,7 @@ export function MultiplexerManager({
     setError(null)
     try {
       // Probe every supported tool so the user can switch between them.
-      const [tmuxR, dtachR, zellijR, rmuxR] = await Promise.all([
+      const [tmuxR, dtachR, zellijR, rmuxR, screenR] = await Promise.all([
         window.bifrost.multiplexer.probe(transport, {
           preferred: 'tmux',
           socketDir: config.socketDir
@@ -87,6 +88,10 @@ export function MultiplexerManager({
         window.bifrost.multiplexer.probe(transport, {
           preferred: 'rmux',
           socketDir: config.socketDir
+        }),
+        window.bifrost.multiplexer.probe(transport, {
+          preferred: 'screen',
+          socketDir: config.socketDir
         })
       ])
       // Stash every result in a single "extended" probe shape (panel-internal).
@@ -94,10 +99,12 @@ export function MultiplexerManager({
         primary: tmuxR.primary,
         fallback: dtachR.primary,
         zellij: zellijR.primary,
-        rmux: rmuxR.primary
+        rmux: rmuxR.primary,
+        screen: screenR.primary
       } as MultiplexerProbeResponse & {
         zellij?: MultiplexerProbeResult
         rmux?: MultiplexerProbeResult
+        screen?: MultiplexerProbeResult
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -118,9 +125,11 @@ export function MultiplexerManager({
     const ext = probe as MultiplexerProbeResponse & {
       zellij?: MultiplexerProbeResult
       rmux?: MultiplexerProbeResult
+      screen?: MultiplexerProbeResult
     }
     if (ext.zellij?.kind === active) return ext.zellij
     if (ext.rmux?.kind === active) return ext.rmux
+    if (ext.screen?.kind === active) return ext.screen
     return undefined
   })()
 
@@ -219,15 +228,17 @@ export function MultiplexerManager({
 
       {/* Kind tabs */}
       <div className="flex gap-1">
-        {(['tmux', 'dtach', 'zellij', 'rmux'] as const).map((kind) => {
+        {(['tmux', 'dtach', 'zellij', 'rmux', 'screen'] as const).map((kind) => {
           const ext = probe as (MultiplexerProbeResponse & {
             zellij?: MultiplexerProbeResult
             rmux?: MultiplexerProbeResult
+            screen?: MultiplexerProbeResult
           }) | null
           const r = probe?.primary.kind === kind ? probe.primary
                   : probe?.fallback?.kind === kind ? probe.fallback
                   : ext?.zellij?.kind === kind ? ext.zellij
                   : ext?.rmux?.kind === kind ? ext.rmux
+                  : ext?.screen?.kind === kind ? ext.screen
                   : undefined
           return (
             <button
@@ -295,7 +306,7 @@ export function MultiplexerManager({
         </div>
       )}
 
-      {(active === 'dtach' || active === 'zellij') && staleSessions.length > 0 && (
+      {(active === 'dtach' || active === 'zellij' || active === 'screen') && staleSessions.length > 0 && (
         <div className="flex items-center justify-between text-[10px] text-[var(--on-surface-variant)] px-1">
           <span>{staleSessions.length} inactive</span>
           <button

@@ -3,6 +3,7 @@ import { dtach, parseDtachListOutput } from '../../src/main/services/multiplexer
 import { tmux, parseTmuxListOutput } from '../../src/main/services/multiplexer/tmux'
 import { zellij, parseZellijListOutput } from '../../src/main/services/multiplexer/zellij'
 import { rmux } from '../../src/main/services/multiplexer/rmux'
+import { screen, parseScreenListOutput } from '../../src/main/services/multiplexer/screen'
 import { shellQuote, type RemoteExecutor } from '../../src/main/services/multiplexer/types'
 
 function fakeExecutor(
@@ -368,6 +369,79 @@ describe('tmux.probe', () => {
     expect(result.installed).toBe(true)
     expect(result.sessions).toHaveLength(1)
     expect(result.sessions[0].alive).toBe(true)
+  })
+})
+
+describe('screen.buildAttachCmd', () => {
+  it('uses -D -R -S with the session name on create (default)', () => {
+    const cmd = screen.buildAttachCmd('work', {})
+    expect(cmd).toBe(`screen -D -R -S 'work'`)
+  })
+  it('uses -x to attach an existing session', () => {
+    const cmd = screen.buildAttachCmd('work', { createIfMissing: false })
+    expect(cmd).toBe(`screen -x 'work'`)
+  })
+  it('honors an explicit shell on create', () => {
+    const cmd = screen.buildAttachCmd('work', { shell: '/bin/zsh' })
+    expect(cmd).toBe(`screen -D -R -S 'work' '/bin/zsh'`)
+  })
+  it('places the -c config file before the subcommand flags', () => {
+    const cmd = screen.buildAttachCmd('work', { configFile: '~/.screenrc' })
+    expect(cmd).toBe(`screen -c "~/.screenrc" -D -R -S 'work'`)
+  })
+  it('uses the resolved binary path when provided', () => {
+    const cmd = screen.buildAttachCmd('work', { binaryPath: '/usr/bin/screen' })
+    expect(cmd).toBe(`'/usr/bin/screen' -D -R -S 'work'`)
+  })
+})
+
+describe('parseScreenListOutput', () => {
+  it('parses attached/detached/dead sessions and keys by name', () => {
+    const stdout = [
+      'There are screens on:',
+      '\t12345.work\t(Detached)',
+      '\t12346.build\t(Attached)',
+      '\t12347.gone\t(Dead ???)',
+      '3 Sockets in /run/screen/S-user.'
+    ].join('\n')
+    const sessions = parseScreenListOutput(stdout)
+    expect(sessions.map((s) => s.name)).toEqual(['work', 'build', 'gone'])
+    expect(sessions.every((s) => s.target === s.name)).toBe(true)
+    expect(sessions[0]).toMatchObject({ alive: true, attached: false })
+    expect(sessions[1]).toMatchObject({ alive: true, attached: true })
+    expect(sessions[2]).toMatchObject({ alive: false, state: 'stale' })
+  })
+  it('returns nothing when there are no sockets', () => {
+    expect(parseScreenListOutput('No Sockets found in /run/screen/S-user.\n')).toEqual([])
+  })
+})
+
+describe('screen.probe', () => {
+  it('returns installed=false when missing', async () => {
+    const { exec } = fakeExecutor([{ match: /command -v screen/, code: 1 }])
+    const result = await screen.probe(exec, {})
+    expect(result.installed).toBe(false)
+  })
+  it('parses listed sessions (ignores non-zero -ls exit code)', async () => {
+    const { exec } = fakeExecutor([
+      { match: /command -v screen/, stdout: '/usr/bin/screen\n' },
+      { match: /screen -ls/, stdout: '\t9001.main\t(Detached)\n', code: 1 }
+    ])
+    const result = await screen.probe(exec, {})
+    expect(result.installed).toBe(true)
+    expect(result.sessions).toHaveLength(1)
+    expect(result.sessions[0]).toMatchObject({ name: 'main', target: 'main', alive: true })
+  })
+})
+
+describe('screen.cleanStale', () => {
+  it('returns the count parsed from screen -wipe output', async () => {
+    const { exec } = fakeExecutor([{ match: /screen -wipe/, stdout: '2 sockets wiped out.\n' }])
+    expect(await screen.cleanStale(exec, {})).toBe(2)
+  })
+  it('returns 0 when nothing was wiped', async () => {
+    const { exec } = fakeExecutor([{ match: /screen -wipe/, stdout: 'No dead screens.\n' }])
+    expect(await screen.cleanStale(exec, {})).toBe(0)
   })
 })
 

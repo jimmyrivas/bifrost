@@ -24,7 +24,7 @@ export interface TerminalPane {
  *  (see remote-session-aliases). `target` is the session name (tmux/zellij/rmux)
  *  or the socket path (dtach). */
 export interface MuxBinding {
-  kind: 'dtach' | 'tmux' | 'zellij' | 'rmux'
+  kind: 'dtach' | 'tmux' | 'zellij' | 'rmux' | 'screen'
   target: string
 }
 

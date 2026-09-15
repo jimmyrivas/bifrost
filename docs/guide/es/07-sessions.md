@@ -6,13 +6,14 @@ Cerrar una pestaña — o el propio Bifrost — no tiene por qué significar per
 
 > La interfaz de Bifrost está (por ahora) mayormente en inglés, así que los nombres de menús y opciones se citan en inglés tal como aparecen en pantalla.
 
-## Multiplexores: dtach, tmux, zellij, rmux
+## Multiplexores: dtach, tmux, zellij, rmux, screen
 
-Bifrost persiste las sesiones locales de terminal ejecutándolas dentro del multiplexor que elijas: **dtach**, **tmux**, **zellij** o **rmux** (un multiplexor compatible con tmux, manejado con los mismos comandos). El shell sigue ejecutándose dentro del multiplexor aunque la pestaña — o la aplicación entera — ya no esté.
+Bifrost persiste las sesiones locales de terminal ejecutándolas dentro del multiplexor que elijas: **dtach**, **tmux**, **zellij**, **rmux** (un multiplexor compatible con tmux, manejado con los mismos comandos) o **GNU screen** (omnipresente en hosts antiguos y corporativos donde tmux no está instalado). El shell sigue ejecutándose dentro del multiplexor aunque la pestaña — o la aplicación entera — ya no esté.
 
 Al conectar, Bifrost **sondea** el multiplexor configurado y las sesiones existentes:
 
 - Si existen sesiones, aparece un **selector de attach** que las lista — sesiones vivas para retomar (scrollback intacto, procesos aún en marcha) y sesiones obsoletas. Elige una para reincorporarte, o crea una sesión nueva. El selector también puede matar una sesión o limpiar las obsoletas.
+- Una sesión **ya abierta en otra pestaña de Bifrost** se marca con un punto azul y una insignia **open**, para que no reincorpores la misma sesión en dos pestañas por error.
 - Los nombres de sesión son **deterministas**, derivados del contexto de la conexión o la pestaña con el prefijo que configures (por defecto `bifrost-{conn}`, donde `{conn}` se expande al nombre de la conexión), de modo que la misma conexión siempre encuentra sus propias sesiones.
 - Con **Auto-attach if single session** activado, Bifrost se salta el selector y se reincorpora directamente cuando hay exactamente una sesión viva.
 
@@ -20,11 +21,11 @@ Al conectar, Bifrost **sondea** el multiplexor configurado y las sesiones existe
 
 Cada conexión tiene un panel de multiplexor en su editor: multiplexor preferido, un fallback para cuando el principal no está instalado en el host, y argumentos personalizados. El panel solo muestra los campos que el multiplexor seleccionado realmente soporta:
 
-| Campo | tmux / rmux | zellij | dtach |
-| --- | --- | --- | --- |
-| Config file | ✓ (`-f <archivo>`) | ✓ (`--config <archivo>`) | — |
-| Layout | — | ✓ (`--layout <valor>`) | — |
-| Extra arguments | ✓ | ✓ | ✓ |
+| Campo | tmux / rmux | zellij | screen | dtach |
+| --- | --- | --- | --- | --- |
+| Config file | ✓ (`-f <archivo>`) | ✓ (`--config <archivo>`) | ✓ (`-c <archivo>`) | — |
+| Layout | — | ✓ (`--layout <valor>`) | — | — |
+| Extra arguments | ✓ | ✓ | ✓ | ✓ |
 
 - **Config file** — un archivo de configuración del multiplexor que se pasa tanto al crear como al reincorporarse. `~` y las variables de shell como `$HOME` en la ruta se expanden en el host remoto, así que `~/.tmux.work.conf` funciona como esperas. dtach no lee archivo de configuración, por lo que el campo se oculta.
 - **Layout** (solo zellij) — un nombre de layout registrado (`dev`) o la ruta a un archivo `.kdl` (`~/layouts/dev.kdl`). Se aplica **solo al crear** una sesión nueva; reincorporarse a una sesión existente nunca vuelve a aplicar el layout.

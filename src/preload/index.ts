@@ -484,13 +484,13 @@ export interface BifrostApi {
   multiplexer: {
     probe: (
       transport: { type: 'ssh'; sessionId: string } | { type: 'local' },
-      req: { preferred: 'dtach' | 'tmux' | 'zellij'; fallback?: 'dtach' | 'tmux' | 'zellij'; socketDir?: string }
+      req: { preferred: 'dtach' | 'tmux' | 'zellij' | 'rmux' | 'screen'; fallback?: 'dtach' | 'tmux' | 'zellij' | 'rmux' | 'screen'; socketDir?: string }
     ) => Promise<{
       primary: MultiplexerProbeResult
       fallback?: MultiplexerProbeResult
     }>
     buildAttachCmd: (
-      kind: 'dtach' | 'tmux' | 'zellij',
+      kind: 'dtach' | 'tmux' | 'zellij' | 'rmux' | 'screen',
       target: string,
       opts?: {
         shell?: string
@@ -505,17 +505,17 @@ export interface BifrostApi {
     ) => Promise<string>
     killSession: (
       transport: { type: 'ssh'; sessionId: string } | { type: 'local' },
-      kind: 'dtach' | 'tmux' | 'zellij',
+      kind: 'dtach' | 'tmux' | 'zellij' | 'rmux' | 'screen',
       target: string
     ) => Promise<void>
     cleanStale: (
       transport: { type: 'ssh'; sessionId: string } | { type: 'local' },
-      kind: 'dtach' | 'tmux' | 'zellij',
+      kind: 'dtach' | 'tmux' | 'zellij' | 'rmux' | 'screen',
       socketDir?: string
     ) => Promise<number>
     setAlias: (
       transport: { type: 'ssh'; sessionId: string } | { type: 'local' },
-      kind: 'dtach' | 'tmux' | 'zellij' | 'rmux',
+      kind: 'dtach' | 'tmux' | 'zellij' | 'rmux' | 'screen',
       target: string,
       alias: string
     ) => Promise<boolean>

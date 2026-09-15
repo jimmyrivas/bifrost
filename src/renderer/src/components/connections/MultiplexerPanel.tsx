@@ -3,8 +3,8 @@ import { Switch } from '@renderer/components/ui/switch'
 import { Input } from '@renderer/components/ui/input'
 import { cn } from '@renderer/lib/utils'
 
-export type MultiplexerKind = 'none' | 'dtach' | 'tmux' | 'zellij' | 'rmux' | 'auto'
-export type MultiplexerFallback = 'none' | 'dtach' | 'tmux' | 'zellij' | 'rmux'
+export type MultiplexerKind = 'none' | 'dtach' | 'tmux' | 'zellij' | 'rmux' | 'screen' | 'auto'
+export type MultiplexerFallback = 'none' | 'dtach' | 'tmux' | 'zellij' | 'rmux' | 'screen'
 
 export interface MultiplexerConfig {
   preferred: MultiplexerKind
@@ -51,6 +51,7 @@ const KIND_OPTIONS: Array<{ id: MultiplexerKind; label: string; hint: string }> 
   { id: 'tmux', label: 'TMUX', hint: 'Multi-window/pane persistence with scrollback.' },
   { id: 'zellij', label: 'ZELLIJ', hint: 'Modern multiplexer with built-in scrollback, panes, and session resurrection.' },
   { id: 'rmux', label: 'RMUX', hint: 'Rust multiplexer with tmux-compatible CLI, daemon-backed and scriptable.' },
+  { id: 'screen', label: 'SCREEN', hint: 'GNU screen — ubiquitous on older/enterprise hosts where tmux is absent.' },
   { id: 'auto', label: 'AUTO', hint: 'Try dtach first, fall back to tmux.' }
 ]
 
@@ -59,7 +60,8 @@ const FALLBACK_OPTIONS: Array<{ id: MultiplexerFallback; label: string }> = [
   { id: 'dtach', label: 'dtach' },
   { id: 'tmux', label: 'tmux' },
   { id: 'zellij', label: 'zellij' },
-  { id: 'rmux', label: 'rmux' }
+  { id: 'rmux', label: 'rmux' },
+  { id: 'screen', label: 'screen' }
 ]
 
 export function MultiplexerPanel({
@@ -77,11 +79,12 @@ export function MultiplexerPanel({
 
   const enabled = value.preferred !== 'none'
   const showDtachOptions = value.preferred === 'dtach' || value.preferred === 'auto'
-  // Config file: tmux/rmux (`-f`) and zellij (`--config`). dtach has no config.
+  // Config file: tmux/rmux (`-f`), zellij (`--config`), screen (`-c`). dtach has none.
   const showConfigFile =
     value.preferred === 'tmux' ||
     value.preferred === 'rmux' ||
-    value.preferred === 'zellij'
+    value.preferred === 'zellij' ||
+    value.preferred === 'screen'
   // Layout is a zellij-only concept.
   const showLayout = value.preferred === 'zellij'
   // Fallback applies whenever we have a non-tmux primary that could be missing.
@@ -89,6 +92,7 @@ export function MultiplexerPanel({
     value.preferred === 'dtach' ||
     value.preferred === 'zellij' ||
     value.preferred === 'rmux' ||
+    value.preferred === 'screen' ||
     value.preferred === 'auto'
 
   return (
@@ -172,12 +176,20 @@ export function MultiplexerPanel({
               <Input
                 value={value.configFile}
                 onChange={(e) => update('configFile', e.target.value)}
-                placeholder={value.preferred === 'zellij' ? '~/.config/zellij/config.kdl' : '~/.tmux.conf'}
+                placeholder={
+                  value.preferred === 'zellij'
+                    ? '~/.config/zellij/config.kdl'
+                    : value.preferred === 'screen'
+                      ? '~/.screenrc'
+                      : '~/.tmux.conf'
+                }
                 className="h-8 text-xs"
               />
               <p className="text-[10px] text-[var(--on-surface-variant)] mt-1">
                 {value.preferred === 'zellij' ? (
                   <>Passed as <code>--config</code>. </>
+                ) : value.preferred === 'screen' ? (
+                  <>Passed as <code>-c</code>. </>
                 ) : (
                   <>Passed as <code>-f</code>. </>
                 )}

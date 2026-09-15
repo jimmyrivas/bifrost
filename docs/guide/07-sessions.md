@@ -4,13 +4,14 @@
 
 Closing a tab — or Bifrost itself — doesn't have to mean losing your work. Bifrost integrates real terminal multiplexers for local session persistence, restores your open tabs on relaunch, and reconnects dropped SSH sessions automatically.
 
-## Multiplexers: dtach, tmux, zellij, rmux
+## Multiplexers: dtach, tmux, zellij, rmux, screen
 
-Bifrost persists local terminal sessions by running them inside a multiplexer of your choice: **dtach**, **tmux**, **zellij**, or **rmux** (a tmux-compatible multiplexer driven with the same commands). The shell keeps running inside the multiplexer even when the tab — or the whole app — is gone.
+Bifrost persists local terminal sessions by running them inside a multiplexer of your choice: **dtach**, **tmux**, **zellij**, **rmux** (a tmux-compatible multiplexer driven with the same commands), or **GNU screen** (ubiquitous on older and enterprise hosts where tmux isn't installed). The shell keeps running inside the multiplexer even when the tab — or the whole app — is gone.
 
 When you connect, Bifrost **probes** for the configured multiplexer and for existing sessions:
 
 - If sessions exist, an **attach picker** appears listing them — live sessions to resume (scrollback intact, processes still running) and stale ones. Pick one to reattach, or create a new session. The picker can also kill a session or clean up stale ones.
+- A session **already open in another Bifrost tab** is flagged with a blue dot and an **open** badge, so you don't accidentally reattach the same session into two tabs.
 - Session names are **deterministic**, derived from the connection or tab context using your configured prefix (default `bifrost-{conn}`, where `{conn}` expands to the connection name), so the same connection always finds its own sessions.
 - With **Auto-attach if single session** enabled, Bifrost skips the picker and reattaches directly when there is exactly one live session.
 
@@ -18,11 +19,11 @@ When you connect, Bifrost **probes** for the configured multiplexer and for exis
 
 Each connection has a multiplexer panel in its editor: preferred multiplexer, a fallback when the primary isn't installed on the host, and custom arguments. The panel only shows the fields the selected multiplexer actually supports:
 
-| Field | tmux / rmux | zellij | dtach |
-| --- | --- | --- | --- |
-| Config file | ✓ (`-f <file>`) | ✓ (`--config <file>`) | — |
-| Layout | — | ✓ (`--layout <value>`) | — |
-| Extra arguments | ✓ | ✓ | ✓ |
+| Field | tmux / rmux | zellij | screen | dtach |
+| --- | --- | --- | --- | --- |
+| Config file | ✓ (`-f <file>`) | ✓ (`--config <file>`) | ✓ (`-c <file>`) | — |
+| Layout | — | ✓ (`--layout <value>`) | — | — |
+| Extra arguments | ✓ | ✓ | ✓ | ✓ |
 
 - **Config file** — a multiplexer config passed on both create and attach. `~` and shell variables like `$HOME` in the path are expanded on the remote host, so `~/.tmux.work.conf` works as expected. dtach has no config file, so the field is hidden.
 - **Layout** (zellij only) — a registered layout name (`dev`) or a path to a `.kdl` file (`~/layouts/dev.kdl`). Applied **only when creating** a new session; attaching to an existing session never re-applies a layout.
